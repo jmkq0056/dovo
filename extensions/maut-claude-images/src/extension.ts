@@ -1,95 +1,20 @@
 /*---------------------------------------------------------------------------------------------
- *  Maut: open a single terminal in the editor area running `clsp`, with EDITOR/VISUAL set so
- *  Claude Code's external-editor command opens files in this Maut code window. Also provides
- *  a terminal link handler for `[Image #N]` references coming out of Claude Code.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-import * as vscode from 'vscode';
+/*
+ *  Maut: open a single terminal in the editor area running `clsp`, with EDITOR/VISUAL set so
+ *  Claude Code's external-editor command opens files in this Maut code window. Also resolves
+ *  `[Image #N]` references for the workbench's terminal image previews.
+ */
 
-const IMAGE_CACHE_ROOT = path.join(os.homedir(), '.claude', 'image-cache');
-const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
+import * as vscode from 'vscode';
+import { ClaudeImageResolver } from './claudeImageResolver';
+
 // Use the full claude flag rather than the user's `clsp` alias so the app works on machines
 // where the alias isn't defined.
 const CLSP_COMMAND = 'claude --dangerously-skip-permissions';
-
-function getActiveSessionDir(): string | undefined {
-	try {
-		if (!fs.existsSync(IMAGE_CACHE_ROOT)) {
-			return undefined;
-		}
-		const entries = fs.readdirSync(IMAGE_CACHE_ROOT, { withFileTypes: true });
-		let best: { name: string; mtime: number } | undefined;
-		for (const e of entries) {
-			if (!e.isDirectory()) {
-				continue;
-			}
-			const full = path.join(IMAGE_CACHE_ROOT, e.name);
-			try {
-				const st = fs.statSync(full);
-				if (!best || st.mtimeMs > best.mtime) {
-					best = { name: e.name, mtime: st.mtimeMs };
-				}
-			} catch { /* skip */ }
-		}
-		return best ? path.join(IMAGE_CACHE_ROOT, best.name) : undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-function resolveImageByIndex(session: string | undefined, n: number): vscode.Uri | undefined {
-	if (!session) { return undefined; }
-	for (const ext of IMAGE_EXTS) {
-		const candidate = path.join(session, `${n}${ext}`);
-		if (fs.existsSync(candidate)) {
-			return vscode.Uri.file(candidate);
-		}
-	}
-	return undefined;
-}
-
-class ClaudeImageTerminalLinkProvider implements vscode.TerminalLinkProvider<vscode.TerminalLink & { imageIndex: number }> {
-
-	provideTerminalLinks(context: vscode.TerminalLinkContext): (vscode.TerminalLink & { imageIndex: number })[] {
-		const links: (vscode.TerminalLink & { imageIndex: number })[] = [];
-		const re = /\[Image #(\d+)\]/g;
-		let m: RegExpExecArray | null;
-		const session = getActiveSessionDir();
-		while ((m = re.exec(context.line)) !== null) {
-			const n = parseInt(m[1], 10);
-			const uri = resolveImageByIndex(session, n);
-			let tooltip: string;
-			if (uri) {
-				// vscode-file:// is VS Code's blessed scheme for local file access from trusted
-				// markdown — no base64 bloat, works for any image size.
-				const vscodeFileUri = `vscode-file://vscode-app${uri.fsPath.split('/').map(s => encodeURIComponent(s)).join('/')}`;
-				tooltip = `mautImg:![preview](${vscodeFileUri}|width=480)\n\n**Image #${n}** · ${path.basename(uri.fsPath)}\n\ncmd + click to open in editor`;
-			} else {
-				tooltip = `Image #${n} not found in current session`;
-			}
-			links.push({
-				startIndex: m.index,
-				length: m[0].length,
-				tooltip,
-				imageIndex: n,
-			});
-		}
-		return links;
-	}
-
-	async handleTerminalLink(link: vscode.TerminalLink & { imageIndex: number }): Promise<void> {
-		const session = getActiveSessionDir();
-		const uri = resolveImageByIndex(session, link.imageIndex);
-		if (!uri) {
-			vscode.window.showWarningMessage(`Image #${link.imageIndex} not found in active Claude session.`);
-			return;
-		}
-		await vscode.commands.executeCommand('vscode.open', uri);
-	}
-}
 
 let mautTerminal: vscode.Terminal | undefined;
 
@@ -234,8 +159,8 @@ async function switchMautTerminal(): Promise<void> {
 }
 
 function bindShellExecutionTracking(context: vscode.ExtensionContext): void {
-	const onStart = (vscode.window as any).onDidStartTerminalShellExecution as vscode.Event<{ terminal: vscode.Terminal; execution: { commandLine: { value: string } } }> | undefined;
-	const onEnd = (vscode.window as any).onDidEndTerminalShellExecution as vscode.Event<{ terminal: vscode.Terminal; execution: { commandLine: { value: string } } }> | undefined;
+	const onStart: vscode.Event<vscode.TerminalShellExecutionStartEvent> | undefined = vscode.window.onDidStartTerminalShellExecution;
+	const onEnd: vscode.Event<vscode.TerminalShellExecutionEndEvent> | undefined = vscode.window.onDidEndTerminalShellExecution;
 	if (onStart) {
 		context.subscriptions.push(onStart(async (e) => {
 			const cmd = e.execution?.commandLine?.value ?? '';
@@ -312,8 +237,13 @@ async function markRestoredTerminalsClosed(): Promise<void> {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	// The workbench (terminalContrib/maut) draws the previews and handles cmd+click; it asks us
+	// for the file behind `[Image #N]` because only the extension host can read ~/.claude.
+	const imageResolver = new ClaudeImageResolver(vscode.Uri.joinPath(context.globalStorageUri, 'claude-images').fsPath);
+	imageResolver.pruneCache();
 	context.subscriptions.push(
-		vscode.window.registerTerminalLinkProvider(new ClaudeImageTerminalLinkProvider()),
+		vscode.commands.registerCommand('_maut.claudeImages.resolve', (shellPid: number | undefined, index: number) => imageResolver.resolve(shellPid, index)),
+		vscode.commands.registerCommand('_maut.claudeImages.captureClipboard', (shellPid: number | undefined, index: number) => imageResolver.captureClipboard(shellPid, index)),
 	);
 
 	context.subscriptions.push(

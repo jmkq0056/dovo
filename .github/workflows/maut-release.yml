@@ -7,51 +7,95 @@ on:
 permissions:
   contents: write
 
+env:
+  # serialize postinstall's sub-installs — extensions/ and
+  # extensions/mermaid-chat-features race over extensions/node_modules
+  VSCODE_INSTALL_CONCURRENCY: "1"
+  # builtin-extension downloads hit api.github.com — anonymous calls get
+  # rate-limited (403) on shared runner IPs
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 jobs:
-  mac-arm64:
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22.22.1 }
-      - run: npm install
-      - run: npm run gulp vscode-darwin-arm64
-      - name: Build DMG
-        run: |
-          cd "${GITHUB_WORKSPACE}/../VSCode-darwin-arm64"
-          hdiutil create -volname "Maut code" -srcfolder "Maut code.app" -ov -format UDZO "${GITHUB_WORKSPACE}/Maut-code-arm64.dmg"
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: Maut-code-arm64.dmg
-
-  mac-x64:
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22.22.1 }
-      - run: npm install
-      - run: npm run gulp vscode-darwin-x64
-      - name: Build DMG
-        run: |
-          cd "${GITHUB_WORKSPACE}/../VSCode-darwin-x64"
-          hdiutil create -volname "Maut code" -srcfolder "Maut code.app" -ov -format UDZO "${GITHUB_WORKSPACE}/Maut-code-x64.dmg"
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: Maut-code-x64.dmg
-
   windows-x64:
     runs-on: windows-latest
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
-        with: { node-version: 22.22.1 }
-      - run: npm install
-      - run: npm run gulp vscode-win32-x64
-      - name: Zip Windows build
+        with:
+          node-version-file: .nvmrc
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install npm dependencies
+        shell: bash
+        run: npm ci || npm ci
+
+      # Packaging copies each built-in extension's out/ as-is, so compile them first.
+      - name: Compile built-in extensions
+        run: npm run gulp compile-extensions
+
+      - name: Build win32-x64
+        run: npm run gulp vscode-win32-x64
+
+      - name: Build installer
+        run: |
+          npm run gulp vscode-win32-x64-inno-updater
+          npm run gulp vscode-win32-x64-user-setup
+
+      - name: Collect installer and portable zip
         shell: pwsh
         run: |
-          Compress-Archive -Path "..\VSCode-win32-x64\*" -DestinationPath "Maut-code-win-x64.zip"
-      - uses: softprops/action-gh-release@v2
+          $setup = Get-ChildItem .build/win32-x64/user-setup -Filter *.exe | Select-Object -First 1
+          if (-not $setup) { throw "no installer in .build/win32-x64/user-setup" }
+          Copy-Item $setup.FullName Maut-code-Setup-x64.exe
+          Compress-Archive -Path "..\VSCode-win32-x64\*" -DestinationPath Maut-code-win-x64.zip
+          Get-Item Maut-code-Setup-x64.exe, Maut-code-win-x64.zip | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v4
         with:
-          files: Maut-code-win-x64.zip
+          name: maut-code-windows-x64
+          path: |
+            Maut-code-Setup-x64.exe
+            Maut-code-win-x64.zip
+
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Maut-code-Setup-x64.exe
+            Maut-code-win-x64.zip
+
+  mac-arm64:
+    runs-on: macos-14
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install npm dependencies
+        run: npm ci || npm ci
+
+      - name: Compile built-in extensions
+        run: npm run gulp compile-extensions
+
+      - name: Build darwin-arm64
+        run: npm run gulp vscode-darwin-arm64
+
+      # Unsigned bundles are reported as "damaged" by macOS; ad-hoc signing lets them open.
+      - name: Sign and build DMG
+        run: |
+          cd "${GITHUB_WORKSPACE}/../VSCode-darwin-arm64"
+          codesign --force --deep --sign - "Maut code.app"
+          hdiutil create -volname "Maut code" -srcfolder "Maut code.app" -ov -format UDZO "${GITHUB_WORKSPACE}/Maut-code-arm64.dmg"
+
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Maut-code-arm64.dmg

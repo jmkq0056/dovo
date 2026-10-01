@@ -17,8 +17,11 @@ env:
 
 jobs:
   windows-x64:
-    runs-on: windows-latest
+    # windows-latest ships Visual Studio 2026, which node-gyp 11 can't find yet.
+    runs-on: windows-2022
     timeout-minutes: 240
+    env:
+      npm_config_msvs_version: '2022'
     steps:
       - uses: actions/checkout@v4
 

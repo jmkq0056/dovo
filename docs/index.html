@@ -185,6 +185,16 @@
   }
 
   /* ----- Install -----*/
+  .quick-install { max-width: 720px; margin: 28px auto 0; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+  .qi-row { display: flex; align-items: center; gap: 12px; background: var(--bg-deep); border: 1px solid var(--bg-card); border-radius: 10px; padding: 10px 10px 10px 14px; min-width: 0; }
+  .qi-row.detected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  .qi-os { flex: 0 0 72px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--subtle); }
+  .qi-cmd { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: var(--fg); }
+  .qi-copy { flex: 0 0 auto; font: inherit; font-size: 13px; font-weight: 600; color: var(--fg); background: var(--bg-card); border: 0; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  .qi-copy:hover { background: var(--accent); }
+  .qi-copy:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
+  .qi-note { margin: 4px 2px 0; font-size: 13px; color: var(--subtle); }
+  @media (max-width: 560px) { .qi-row { flex-wrap: wrap; } .qi-os { flex-basis: 100%; } }
   .install {
     background: var(--bg-deep);
     border-radius: 14px;
@@ -265,16 +275,25 @@
   <div class="download-row">
     <a class="btn" id="dl-mac-arm" href="https://github.com/jmkq0056/maut-code/releases/latest/download/Maut-code-arm64.dmg">
       <svg viewBox="0 0 384 512" fill="currentColor"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
-      Download for macOS <span class="arch">Apple Silicon · 360 MB</span>
-    </a>
-    <a class="btn secondary" id="dl-mac-x64" href="https://github.com/jmkq0056/maut-code/releases/latest">
-      <svg viewBox="0 0 384 512" fill="currentColor"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
-      Mac · Intel
+      Download for macOS <span class="arch">Apple Silicon</span>
     </a>
     <a class="btn secondary" id="dl-win" href="https://github.com/jmkq0056/maut-code/releases/latest/download/Maut-code-Setup-x64.exe">
       <svg viewBox="0 0 448 512" fill="currentColor"><path d="M0 93.7l183.6-25.3v177.4H0V93.7zm0 324.6l183.6 25.3V268.4H0v149.9zm203.8 28L448 480V268.4H203.8v178zm0-380.6v180.1H448V32L203.8 65.7z"/></svg>
       Windows · x64 installer
     </a>
+  </div>
+  <div class="quick-install" id="quick-install">
+    <div class="qi-row" data-os="mac">
+      <span class="qi-os">macOS</span>
+      <code class="qi-cmd">curl -fsSL https://jmkq0056.github.io/maut-code/install.sh | bash</code>
+      <button class="qi-copy" type="button">Copy</button>
+    </div>
+    <div class="qi-row" data-os="win">
+      <span class="qi-os">Windows</span>
+      <code class="qi-cmd">irm https://jmkq0056.github.io/maut-code/install.ps1 | iex</code>
+      <button class="qi-copy" type="button">Copy</button>
+    </div>
+    <p class="qi-note">Paste into Terminal (macOS) or PowerShell (Windows). Installs or updates Maut code in one step, no security prompts, and offers to set up Claude Code if you don't have it.</p>
   </div>
   <div class="hero-version">
     <span id="ver">v1.0.9</span>  ·  ad-hoc signed  ·  <a href="https://github.com/jmkq0056/maut-code/releases">all releases</a>
@@ -309,7 +328,7 @@
     <div class="feature fade-up">
       <span class="icon">🖼</span>
       <h3>Image previews on hover</h3>
-      <p><code>[Image #N]</code> in the terminal is cmd-clickable and shows a 480 px hover preview pulled live from <code>~/.claude/image-cache/</code>.</p>
+      <p>Every <code>[Image #N]</code> Claude prints gets a numbered thumbnail right next to it, a 480 px hover preview and cmd-click to open, even before you send the prompt, and even in Claude's fullscreen mode.</p>
     </div>
     <div class="feature fade-up">
       <span class="icon">📄</span>
@@ -355,30 +374,26 @@
 </section>
 
 <section id="install" class="wrap">
-  <h2 class="fade-up">Install on macOS</h2>
-  <p class="sub fade-up">Maut is ad-hoc signed, not notarized — so macOS will scare-warn the first time. Right-click the app, hit Open. Once.</p>
+  <h2 class="fade-up">Install</h2>
+  <p class="sub fade-up">One command on either platform. Run it again any time to update.</p>
 
   <div class="install fade-up">
-    <h3>1. Get Claude Code</h3>
-    <p>Maut wraps Anthropic's <a style="color:var(--accent)" href="https://docs.anthropic.com/en/docs/claude-code/setup">Claude Code CLI</a>. Install it first:</p>
-    <pre class="shell"><span class="prompt">$</span> npm install -g @anthropic-ai/claude-code
-<span class="cm"># or: brew install claude</span>
-<span class="prompt">$</span> claude login</pre>
+    <h3>macOS (Apple Silicon)</h3>
+    <p>Open Terminal and run:</p>
+    <pre class="shell"><span class="prompt">$</span> curl -fsSL https://jmkq0056.github.io/maut-code/install.sh | bash</pre>
+    <p>It installs the latest Maut code into <code>/Applications</code> (an older copy goes to the Trash), clears the quarantine flag so macOS opens it without the right-click dance, offers to install Claude Code if it's missing, and opens Maut.</p>
   </div>
 
   <div class="install fade-up" style="margin-top: 16px">
-    <h3>2. Install Maut code</h3>
-    <ol>
-      <li>Download the <code>.dmg</code> from the button above.</li>
-      <li>Open the DMG, drag <code>Maut code.app</code> to <code>/Applications</code>.</li>
-      <li>Right-click <code>Maut code.app</code> → <strong>Open</strong> → confirm.</li>
-      <li>That's it — open Maut, your last Claude session auto-resumes.</li>
-    </ol>
+    <h3>Windows (x64)</h3>
+    <p>Open PowerShell and run:</p>
+    <pre class="shell"><span class="prompt">&gt;</span> irm https://jmkq0056.github.io/maut-code/install.ps1 | iex</pre>
+    <p>It installs Maut code for your user (no admin rights, no wizard), adds it to the Start menu, the desktop, Explorer's right-click menu and <code>PATH</code> as <code>maut-code</code>, offers to install Claude Code if it's missing, and opens Maut.</p>
   </div>
 
   <div class="install fade-up" style="margin-top: 16px">
-    <h3>Windows</h3>
-    <p>Download <code>Maut-code-Setup-x64.exe</code> and run it. It installs for your user only, so no admin rights are needed, and adds Maut code to the Start menu. The installer isn't code-signed yet, so SmartScreen may warn on first run: click <strong>More info → Run anyway</strong>. Prefer no installer? Each release also has a portable <code>Maut-code-win-x64.zip</code>: unzip it and run <code>Maut code.exe</code>.</p>
+    <h3>Prefer a download?</h3>
+    <p>The buttons above get the same builds. macOS: open the <code>.dmg</code>, drag Maut code to Applications, then right-click it → <strong>Open</strong> the first time (the app is ad-hoc signed, not notarized). Windows: run <code>Maut-code-Setup-x64.exe</code>; it isn't code-signed yet, so SmartScreen may ask: <strong>More info → Run anyway</strong>. A portable <code>Maut-code-win-x64.zip</code> is on every <a style="color:var(--accent)" href="https://github.com/jmkq0056/maut-code/releases/latest">release</a> too.</p>
   </div>
 </section>
 
@@ -399,6 +414,29 @@
   }, { rootMargin: '-40px' });
   document.querySelectorAll('.fade-up').forEach(el => io.observe(el));
 
+  // Quick install: put the visitor's OS first and wire the copy buttons.
+  const isWindows = /Windows/i.test(navigator.userAgent);
+  const rows = [...document.querySelectorAll('.qi-row')];
+  const detected = rows.find(r => r.dataset.os === (isWindows ? 'win' : 'mac'));
+  if (detected && /Windows|Macintosh|Mac OS/i.test(navigator.userAgent)) {
+    detected.classList.add('detected');
+    detected.parentElement.prepend(detected);
+  }
+  rows.forEach(row => {
+    const button = row.querySelector('.qi-copy');
+    const command = row.querySelector('.qi-cmd');
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(command.textContent);
+        button.textContent = 'Copied';
+      } catch {
+        getSelection().selectAllChildren(command);
+        button.textContent = 'Press Ctrl+C';
+      }
+      setTimeout(() => { button.textContent = 'Copy'; }, 1800);
+    });
+  });
+
   // Pull latest version from the GitHub API; fallback to v1.0.0
   fetch('https://api.github.com/repos/jmkq0056/maut-code/releases/latest')
     .then(r => r.ok ? r.json() : null)
@@ -407,10 +445,8 @@
       const tag = d.tag_name || 'v1.0.0';
       document.getElementById('ver').textContent = tag;
       const macArmAsset = d.assets?.find(a => /arm64.*\.dmg$/i.test(a.name));
-      const macX64Asset = d.assets?.find(a => /x64.*\.dmg$/i.test(a.name));
       const winAsset = d.assets?.find(a => /setup.*x64.*\.exe$/i.test(a.name)) ?? d.assets?.find(a => /win.*x64.*\.zip$/i.test(a.name));
       if (macArmAsset) document.getElementById('dl-mac-arm').href = macArmAsset.browser_download_url;
-      if (macX64Asset) document.getElementById('dl-mac-x64').href = macX64Asset.browser_download_url;
       if (winAsset) document.getElementById('dl-win').href = winAsset.browser_download_url;
     })
     .catch(() => {});

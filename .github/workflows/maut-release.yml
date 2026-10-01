@@ -55,6 +55,22 @@ jobs:
           Compress-Archive -Path "..\VSCode-win32-x64\*" -DestinationPath Maut-code-win-x64.zip
           Get-Item Maut-code-Setup-x64.exe, Maut-code-win-x64.zip | Format-Table Name, Length
 
+      # Install exactly the way users do (docs/install.ps1), then check the app and CLI landed.
+      - name: Test the one-line installer
+        shell: pwsh
+        env:
+          MAUT_INSTALLER: Maut-code-Setup-x64.exe
+          MAUT_NO_OPEN: "1"
+        run: |
+          ./docs/install.ps1
+          $app = Join-Path $env:LOCALAPPDATA 'Programs\Maut code'
+          if (-not (Test-Path "$app\Maut code.exe")) { throw "Maut code.exe not installed" }
+          if (-not (Test-Path "$app\bin\maut-code.cmd")) { throw "maut-code CLI not installed" }
+          $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          if ($userPath -notlike "*Maut code\bin*") { throw "maut-code is not on PATH" }
+          & "$app\bin\maut-code.cmd" --version
+          if ($LASTEXITCODE -ne 0) { throw "maut-code --version failed" }
+
       - uses: actions/upload-artifact@v4
         with:
           name: maut-code-windows-x64

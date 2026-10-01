@@ -4,450 +4,523 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Maut code · Claude-Code-CLI-aware fork of VS Code</title>
-<meta name="description" content="A personal fork of VS Code, branded Maut, with first-class Claude Code CLI integration. Built for vibecoders.">
+<meta name="description" content="A fork of VS Code, branded Maut, with first-class Claude Code CLI integration. One-line install on macOS and Windows.">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-  /* ----- Maut palette ----- */
+  /* Layout: centered column; hero with product mock, icon-tile feature grid, two-up install cards. */
   :root {
-    --bg: #2a181c;
-    --bg-deep: #1f1216;
-    --bg-card: #3a2026;
-    --fg: #f0f0f8;
-    --muted: #c0b8c0;
-    --subtle: #88808a;
-    --accent: #c62a47;
-    --accent-hover: #e8465f;
-    --accent-glow: rgba(198, 42, 71, 0.35);
+    --bg: #241519;
+    --bg-deep: #1a0f12;
+    --bg-card: #2f1b20;
+    --bg-raised: #3a2228;
+    --line: rgba(255, 220, 228, 0.08);
+    --line-strong: rgba(255, 220, 228, 0.16);
+    --fg: #f4eef0;
+    --muted: #c3b6ba;
+    --subtle: #8c7d82;
+    --accent: #d23a57;
+    --accent-hover: #ec5873;
+    --accent-soft: rgba(210, 58, 87, 0.14);
+    --accent-glow: rgba(210, 58, 87, 0.32);
+    --display: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
+    --body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    color-scheme: dark;
   }
 
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   html, body { margin: 0; padding: 0; }
   body {
     background: var(--bg);
     color: var(--fg);
-    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'SF Pro Text', system-ui, sans-serif;
+    font-family: var(--body);
+    font-size: 15px;
     line-height: 1.6;
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
   }
-  ::selection { background: var(--accent); color: white; }
-
-  /* ----- Layout ----- */
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
-
-  /* ----- Top nav ----- */
-  nav {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 20px 24px; max-width: 1100px; margin: 0 auto;
-  }
-  nav .brand { display: flex; align-items: center; gap: 12px; }
-  nav .brand img { width: 30px; height: 30px; }
-  nav .brand-text { font-weight: 800; font-size: 17px; letter-spacing: -0.3px; }
-  nav .brand-tag {
-    font-family: ui-monospace, 'JetBrains Mono', SFMono-Regular, Menlo, monospace;
-    font-size: 9px; color: var(--accent); letter-spacing: 2px;
-    text-transform: uppercase; margin-left: 4px;
-  }
-  nav .right { display: flex; gap: 14px; align-items: center; font-size: 13.5px; }
-  nav .right a { color: var(--muted); text-decoration: none; transition: color .15s; }
-  nav .right a:hover { color: var(--fg); }
-
-  /* ----- Hero ----- */
-  .hero {
-    text-align: center;
-    padding: 80px 24px 60px;
-    position: relative;
-  }
-  .hero::before {
+  /* Faint grid behind the hero, fading out downward */
+  body::before {
     content: '';
-    position: absolute; inset: -40px 0 0 0;
-    background: radial-gradient(ellipse 60% 40% at 50% 0%, var(--accent-glow), transparent);
+    position: absolute; inset: 0 0 auto 0; height: 900px;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
     pointer-events: none; z-index: 0;
   }
-  .hero > * { position: relative; z-index: 1; }
-  .reaper-wrap {
-    width: 120px; height: 120px; margin: 0 auto 24px;
-    display: flex; align-items: center; justify-content: center;
-    border-radius: 24px;
-    background: var(--bg-card);
-    border: 1px solid rgba(198, 42, 71, 0.3);
-    box-shadow: 0 16px 50px -10px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(198, 42, 71, 0.1) inset;
-    transition: transform .3s ease;
-  }
-  .reaper-wrap:hover { transform: scale(1.04) rotate(-2deg); }
-  .reaper-wrap img { width: 76px; height: 76px; }
+  ::selection { background: var(--accent); color: #fff; }
+  a { color: inherit; }
+  code, kbd, pre { font-family: var(--mono); }
+  :focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 2px; border-radius: 6px; }
 
-  h1.hero-title {
-    font-size: clamp(38px, 6vw, 64px);
-    font-weight: 900;
-    letter-spacing: -1.5px;
-    margin: 0 0 16px 0;
-    line-height: 1.05;
+  .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 24px; position: relative; z-index: 1; }
+
+  /* ----- Nav ----- */
+  nav {
+    position: sticky; top: 0; z-index: 20;
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    background: rgba(36, 21, 25, 0.72);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .brand img { width: 28px; height: 28px; border-radius: 7px; }
+  .brand-text { font-family: var(--display); font-weight: 800; font-size: 18px; letter-spacing: -0.3px; }
+  .brand-tag { font-family: var(--mono); font-size: 9.5px; color: var(--accent); letter-spacing: 0.18em; text-transform: uppercase; margin-left: 6px; }
+  .nav-links { display: flex; gap: 6px; align-items: center; font-size: 14px; }
+  .nav-links a { color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: 8px; transition: color .15s, background .15s; }
+  .nav-links a:hover { color: var(--fg); background: rgba(255, 255, 255, 0.05); }
+  .nav-links .gh { display: inline-flex; align-items: center; gap: 7px; color: var(--fg); border: 1px solid var(--line-strong); }
+  .nav-links .gh svg { width: 16px; height: 16px; }
+
+  /* ----- Hero ----- */
+  .hero { position: relative; text-align: center; padding-block: 88px 64px; }
+  .hero::before {
+    content: '';
+    position: absolute; inset: -60px 0 auto 0; height: 520px;
+    background: radial-gradient(ellipse 55% 50% at 50% 0%, var(--accent-glow), transparent 70%);
+    pointer-events: none;
+  }
+  .hero > * { position: relative; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600; color: var(--muted);
+    padding: 6px 14px 6px 8px; border-radius: 999px;
+    border: 1px solid var(--line-strong); background: rgba(26, 15, 18, 0.6);
+    margin-bottom: 28px; text-decoration: none;
+  }
+  .eyebrow .pill { font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); padding: 2px 8px; border-radius: 999px; }
+  .eyebrow:hover { border-color: var(--accent); color: var(--fg); }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(42px, 7vw, 76px);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.02;
+    margin: 0 0 20px;
+    text-wrap: balance;
   }
   h1 .accent { color: var(--accent); }
+  .hero-sub { font-size: clamp(16px, 1.9vw, 19px); color: var(--muted); margin: 0 auto 36px; max-width: 640px; text-wrap: balance; }
 
-  .hero-sub {
-    font-size: clamp(15px, 1.8vw, 19px);
-    color: var(--muted);
-    margin: 0 auto 40px;
-    max-width: 660px;
-    line-height: 1.55;
-  }
-
-  /* ----- Download buttons ----- */
-  .download-row {
-    display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;
-    margin-bottom: 28px;
-  }
+  .download-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 18px; }
   .btn {
     display: inline-flex; align-items: center; gap: 10px;
-    background: var(--accent); color: white;
-    border: none; border-radius: 10px;
-    padding: 16px 26px;
-    font-size: 14.5px; font-weight: 700;
+    background: var(--accent); color: #fff;
+    border: 1px solid transparent; border-radius: 12px;
+    padding: 14px 22px;
+    font: 600 15px/1 var(--body);
     cursor: pointer; text-decoration: none;
-    box-shadow: 0 4px 18px -2px var(--accent-glow), 0 0 0 1px rgba(232, 70, 95, 0.2);
-    transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+    box-shadow: 0 10px 30px -10px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
   }
-  .btn:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 8px 26px -2px var(--accent-glow); }
-  .btn:active { transform: translateY(0); }
-  .btn .arch { font-size: 10.5px; font-weight: 500; opacity: 0.75; margin-left: 4px; }
-  .btn.secondary {
-    background: transparent;
-    color: var(--fg);
-    border: 1px solid rgba(255,255,255,0.12);
-    box-shadow: none;
-  }
-  .btn.secondary:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.2); }
-  .btn svg { width: 18px; height: 18px; }
+  .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn .arch { font-size: 12px; font-weight: 500; opacity: 0.72; }
+  .btn.secondary { background: rgba(255, 255, 255, 0.04); color: var(--fg); border-color: var(--line-strong); box-shadow: none; }
+  .btn.secondary:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.28); }
 
-  .hero-version {
-    font-family: ui-monospace, 'JetBrains Mono', SFMono-Regular, Menlo, monospace;
-    font-size: 11px; color: var(--subtle);
-    letter-spacing: 0.5px;
+  /* Quick install */
+  .quick-install { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+  .qi-row {
+    display: flex; align-items: center; gap: 12px;
+    background: rgba(26, 15, 18, 0.75); border: 1px solid var(--line-strong);
+    border-radius: 12px; padding: 8px 8px 8px 14px; min-width: 0;
+    transition: border-color .2s, box-shadow .2s;
   }
+  .qi-row.detected { border-color: rgba(210, 58, 87, 0.7); box-shadow: 0 0 0 4px var(--accent-soft); }
+  .qi-os { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; width: 96px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--subtle); }
+  .qi-os svg { width: 15px; height: 15px; color: var(--muted); }
+  .qi-cmd { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 13px; color: var(--fg); scrollbar-width: none; }
+  .qi-cmd .p { color: var(--accent); user-select: none; margin-right: 8px; }
+  .qi-copy {
+    flex: none; display: inline-flex; align-items: center; gap: 6px;
+    font: 600 13px/1 var(--body); color: var(--fg);
+    background: var(--bg-raised); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 12px; cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  .qi-copy svg { width: 14px; height: 14px; }
+  .qi-copy:hover { background: var(--accent); border-color: var(--accent); }
+  .qi-note { margin: 6px 2px 0; font-size: 13px; color: var(--subtle); text-align: center; }
+  .hero-version { margin-top: 18px; font-family: var(--mono); font-size: 11.5px; color: var(--subtle); letter-spacing: 0.04em; }
   .hero-version a { color: var(--muted); text-decoration: underline dotted; text-underline-offset: 3px; }
   .hero-version a:hover { color: var(--accent); }
 
+  /* Product mock: a Claude prompt in Maut's terminal with an image thumbnail */
+  .mock {
+    max-width: 760px; margin: 56px auto 0; text-align: left;
+    border-radius: 14px; overflow: hidden;
+    background: var(--bg-deep);
+    border: 1px solid var(--line-strong);
+    box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(210, 58, 87, 0.08);
+  }
+  .mock-bar { display: flex; align-items: center; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--line); background: rgba(255, 255, 255, 0.02); }
+  .mock-bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--bg-raised); }
+  .mock-bar span { margin-left: 12px; font: 600 12px var(--mono); color: var(--muted); }
+  .mock-body { padding: 18px 20px 20px; font: 13px/1.75 var(--mono); color: var(--muted); overflow-x: auto; }
+  .mock-body .row { white-space: pre; }
+  .mock-body .ok { color: #7fc48a; }
+  .mock-body .dim { color: var(--subtle); }
+  .mock-body .you { color: var(--fg); background: rgba(255, 255, 255, 0.06); display: inline-block; padding-right: 10px; border-radius: 3px; }
+  .mock-body .tok { color: #fff; text-decoration: underline dashed rgba(255, 255, 255, 0.4); text-underline-offset: 4px; }
+  .thumb-wrap { position: relative; display: inline-block; height: 44px; margin: 4px 0 2px 2ch; }
+  .thumb {
+    height: 44px; width: 70px; border-radius: 5px; border: 1px solid var(--accent);
+    background:
+      linear-gradient(#e8e2dc 0 0) 8px 10px / 26px 14px no-repeat,
+      linear-gradient(#d9a96b 0 0) 38px 10px / 24px 14px no-repeat,
+      linear-gradient(#9cc5a1 0 0) 8px 28px / 54px 6px no-repeat,
+      linear-gradient(#2f6f5e 0 0) 0 0 / 100% 6px no-repeat,
+      #f5f2ef;
+    box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.6);
+  }
+  .thumb-badge { position: absolute; top: -7px; left: -9px; font: 700 10px/16px var(--body); color: #fff; background: var(--accent); padding: 0 6px; border-radius: 8px; }
+
   /* ----- Sections ----- */
-  section { padding: 60px 24px; }
-  section h2 {
-    font-size: 28px;
-    font-weight: 800;
-    margin: 0 0 12px 0;
-    letter-spacing: -0.5px;
-  }
-  section .sub {
-    color: var(--muted);
-    margin: 0 0 36px 0;
-    font-size: 15px;
-    max-width: 680px;
-  }
+  section { padding-block: 72px; }
+  .section-head { max-width: 640px; margin-bottom: 36px; }
+  .kicker { font: 600 12px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
+  h2 { font-family: var(--display); font-size: clamp(30px, 4vw, 40px); font-weight: 800; letter-spacing: -0.025em; line-height: 1.1; margin: 0 0 12px; text-wrap: balance; }
+  .section-sub { color: var(--muted); margin: 0; font-size: 16px; }
 
-  /* ----- Feature grid ----- */
-  .feature-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 16px;
-  }
+  /* Features */
+  .feature-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
   .feature {
-    background: var(--bg-card);
-    border: 1px solid rgba(198, 42, 71, 0.15);
-    border-radius: 12px;
-    padding: 22px 22px 24px;
-    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
-  }
-  .feature:hover {
-    transform: translateY(-2px);
-    border-color: rgba(198, 42, 71, 0.4);
-    box-shadow: 0 8px 30px -10px var(--accent-glow);
-  }
-  .feature .icon { font-size: 24px; margin-bottom: 12px; display: block; }
-  .feature h3 { margin: 0 0 8px 0; font-size: 16px; font-weight: 700; }
-  .feature p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
-  .feature kbd {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 11px;
-    background: var(--bg-deep);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-bottom-width: 2px;
-    border-radius: 4px;
-    padding: 1px 6px;
-    color: var(--fg);
-  }
-  .feature code {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 12px;
-    background: var(--bg-deep);
-    border: 1px solid rgba(255,255,255,0.06);
-    padding: 1px 6px;
-    border-radius: 4px;
-    color: var(--accent);
-  }
-
-  /* ----- Install -----*/
-  .quick-install { max-width: 720px; margin: 28px auto 0; display: flex; flex-direction: column; gap: 8px; text-align: left; }
-  .qi-row { display: flex; align-items: center; gap: 12px; background: var(--bg-deep); border: 1px solid var(--bg-card); border-radius: 10px; padding: 10px 10px 10px 14px; min-width: 0; }
-  .qi-row.detected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
-  .qi-os { flex: 0 0 72px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--subtle); }
-  .qi-cmd { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: var(--fg); }
-  .qi-copy { flex: 0 0 auto; font: inherit; font-size: 13px; font-weight: 600; color: var(--fg); background: var(--bg-card); border: 0; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
-  .qi-copy:hover { background: var(--accent); }
-  .qi-copy:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
-  .qi-note { margin: 4px 2px 0; font-size: 13px; color: var(--subtle); }
-  @media (max-width: 560px) { .qi-row { flex-wrap: wrap; } .qi-os { flex-basis: 100%; } }
-  .install {
-    background: var(--bg-deep);
+    position: relative;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 60%), var(--bg-card);
+    border: 1px solid var(--line);
     border-radius: 14px;
-    padding: 32px;
-    margin-top: 8px;
-    border: 1px solid rgba(198, 42, 71, 0.15);
+    padding: 22px;
+    transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
   }
-  .install h3 { margin: 0 0 6px 0; font-size: 17px; font-weight: 700; }
-  .install p { color: var(--muted); margin: 0 0 18px 0; font-size: 14px; }
-  .install ol { margin: 0 0 8px 0; padding-left: 22px; color: var(--muted); font-size: 14px; }
-  .install ol li { margin: 6px 0; }
-  .install ol li code { font-family: 'JetBrains Mono', ui-monospace, monospace; background: var(--bg); color: var(--accent); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  .feature:hover { transform: translateY(-2px); border-color: rgba(210, 58, 87, 0.45); box-shadow: 0 18px 40px -22px var(--accent-glow); }
+  .icon-tile {
+    width: 40px; height: 40px; border-radius: 10px; margin-bottom: 16px;
+    display: grid; place-items: center;
+    color: var(--accent-hover);
+    background: var(--accent-soft);
+    border: 1px solid rgba(210, 58, 87, 0.25);
+  }
+  .icon-tile svg { width: 20px; height: 20px; }
+  .feature h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .feature h3 .tag { font: 600 10.5px var(--mono); color: var(--subtle); border: 1px solid var(--line-strong); border-radius: 6px; padding: 1px 6px; }
+  .feature h3 .tag.new { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .feature p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .feature kbd, .feature code, .install code {
+    font-size: 12px; padding: 1px 6px; border-radius: 5px;
+    background: var(--bg-deep); border: 1px solid var(--line-strong);
+  }
+  .feature kbd { color: var(--fg); border-bottom-width: 2px; }
+  .feature code, .install code { color: var(--accent-hover); }
 
-  pre.shell {
-    background: var(--bg);
-    border: 1px solid rgba(198, 42, 71, 0.12);
-    border-radius: 8px;
-    padding: 14px 16px;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 12.5px;
-    overflow-x: auto;
-    margin: 12px 0 0 0;
-    color: var(--fg);
+  /* Install */
+  .install-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  .install {
+    background: var(--bg-deep); border: 1px solid var(--line); border-radius: 16px; padding: 26px;
+    display: flex; flex-direction: column; gap: 14px; min-width: 0;
   }
-  pre.shell .prompt { color: var(--accent); user-select: none; }
-  pre.shell .cm { color: var(--subtle); }
+  .install-head { display: flex; align-items: center; gap: 12px; }
+  .install-head .icon-tile { margin: 0; }
+  .install h3 { margin: 0; font-size: 18px; font-weight: 700; }
+  .install h3 small { display: block; font-size: 13px; font-weight: 500; color: var(--subtle); }
+  .install p { color: var(--muted); margin: 0; font-size: 14px; }
+  .install .qi-row { background: var(--bg); }
+  .install.wide { grid-column: 1 / -1; }
 
-  /* ----- Footer ----- */
-  footer {
-    border-top: 1px solid rgba(198,42,71,0.1);
-    padding: 30px 24px;
-    margin-top: 40px;
-    color: var(--subtle);
-    font-size: 12.5px;
-    text-align: center;
-  }
+  /* Footer */
+  footer { border-top: 1px solid var(--line); margin-top: 24px; }
+  footer .wrap { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-block: 28px; color: var(--subtle); font-size: 13px; }
+  footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
   footer a { color: var(--muted); text-decoration: none; }
-  footer a:hover { color: var(--accent); }
-  footer .links { margin-top: 8px; display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; }
+  footer a:hover { color: var(--accent-hover); }
 
-  /* ----- Subtle entrance ----- */
-  .fade-up { opacity: 0; transform: translateY(20px); transition: opacity .55s ease, transform .55s ease; }
-  .fade-up.in { opacity: 1; transform: translateY(0); }
+  /* Entrance: visible at rest; only animates once JS marks the page ready */
+  .js .fade-up { opacity: 0; transform: translateY(16px); transition: opacity .55s ease, transform .55s ease; }
+  .js .fade-up.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .js .fade-up { opacity: 1; transform: none; transition: none; }
+    .btn, .feature { transition: none; }
+  }
 
-  /* ----- Mobile ----- */
-  @media (max-width: 600px) {
-    nav .right a:not(.gh) { display: none; }
-    .reaper-wrap { width: 96px; height: 96px; }
-    .reaper-wrap img { width: 60px; height: 60px; }
-    .hero { padding: 60px 20px 40px; }
-    section { padding: 40px 20px; }
+  @media (max-width: 640px) {
+    .nav-links a:not(.gh) { display: none; }
+    .brand-tag { display: none; }
+    .hero { padding-block: 56px 40px; }
+    section { padding-block: 48px; }
+    .qi-row { flex-wrap: wrap; }
+    .qi-os { width: 100%; }
+    .qi-cmd { flex-basis: calc(100% - 90px); }
+    .mock-body { font-size: 12px; }
   }
 </style>
 </head>
 <body>
 
+<!-- Icon set: single-stroke 24px glyphs, referenced with <use> -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M10 13h4M7 16h10"/></symbol>
+    <symbol id="i-at" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.9 7.9"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/></symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/><circle cx="12" cy="12" r="2.5"/></symbol>
+    <symbol id="i-commit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.5"/><path d="M3 12h5.5M15.5 12H21"/></symbol>
+    <symbol id="i-pull" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-1.8a2 2 0 0 0-1.5 3.3A1.9 1.9 0 0 1 12 22z"/><circle cx="7.5" cy="10.5" r=".8" fill="currentColor"/><circle cx="10.5" cy="6.8" r=".8" fill="currentColor"/><circle cx="15" cy="7" r=".8" fill="currentColor"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+    <symbol id="i-apple" viewBox="0 0 384 512" fill="currentColor"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></symbol>
+    <symbol id="i-windows" viewBox="0 0 448 512" fill="currentColor"><path d="M0 93.7l183.6-25.3v177.4H0V93.7zm0 324.6l183.6 25.3V268.4H0v149.9zm203.8 28L448 480V268.4H203.8v178zm0-380.6v180.1H448V32L203.8 65.7z"/></symbol>
+    <symbol id="i-github" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 0 0-3.6 22.4c.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A11.5 11.5 0 0 0 12 .5z"/></symbol>
+  </defs>
+</svg>
+
 <nav>
-  <div class="brand">
-    <img src="icon.svg" alt="Maut">
-    <div><span class="brand-text">Maut code</span><span class="brand-tag">manden med leen</span></div>
-  </div>
-  <div class="right">
-    <a href="#features">Features</a>
-    <a href="#install">Install</a>
-    <a class="gh" href="https://github.com/jmkq0056/maut-code">GitHub →</a>
+  <div class="wrap">
+    <a class="brand" href="#">
+      <img src="icon.svg" alt="">
+      <span class="brand-text">Maut code</span><span class="brand-tag">manden med leen</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a class="gh" href="https://github.com/jmkq0056/maut-code"><svg><use href="#i-github"/></svg>GitHub</a>
+    </div>
   </div>
 </nav>
 
-<header class="hero">
-  <div class="reaper-wrap">
-    <img src="icon.svg" alt="Reaper">
-  </div>
-  <h1 class="hero-title">Code with <span class="accent">Claude</span>,<br>not around it.</h1>
-  <p class="hero-sub">
-    Maut code is a fork of VS Code with Claude Code CLI baked into the IDE. Auto-resume your last session on launch, drag files into the terminal as <code style="font-family:ui-monospace,monospace;color:#c62a47">@-mentions</code>, undo Claude's edits per file, render markdown beautifully — and more.
-  </p>
+<header class="hero wrap">
+  <a class="eyebrow" href="#features"><span class="pill">New</span> Image previews in Claude's terminal, one-line Windows install</a>
+  <h1>Code with <span class="accent">Claude</span>,<br>not around it.</h1>
+  <p class="hero-sub">A fork of VS Code with the Claude Code CLI built into the IDE. Your last session resumes on launch, files drag in as <code>@-mentions</code>, Claude's edits undo per file, and pasted images preview right in the terminal.</p>
 
   <div class="download-row">
     <a class="btn" id="dl-mac-arm" href="https://github.com/jmkq0056/maut-code/releases/latest/download/Maut-code-arm64.dmg">
-      <svg viewBox="0 0 384 512" fill="currentColor"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
-      Download for macOS <span class="arch">Apple Silicon</span>
+      <svg><use href="#i-apple"/></svg>Download for macOS <span class="arch">Apple Silicon</span>
     </a>
     <a class="btn secondary" id="dl-win" href="https://github.com/jmkq0056/maut-code/releases/latest/download/Maut-code-Setup-x64.exe">
-      <svg viewBox="0 0 448 512" fill="currentColor"><path d="M0 93.7l183.6-25.3v177.4H0V93.7zm0 324.6l183.6 25.3V268.4H0v149.9zm203.8 28L448 480V268.4H203.8v178zm0-380.6v180.1H448V32L203.8 65.7z"/></svg>
-      Windows · x64 installer
+      <svg><use href="#i-windows"/></svg>Download for Windows <span class="arch">x64</span>
     </a>
   </div>
-  <div class="quick-install" id="quick-install">
+
+  <div class="quick-install">
     <div class="qi-row" data-os="mac">
-      <span class="qi-os">macOS</span>
-      <code class="qi-cmd">curl -fsSL https://jmkq0056.github.io/maut-code/install.sh | bash</code>
-      <button class="qi-copy" type="button">Copy</button>
+      <span class="qi-os"><svg><use href="#i-apple"/></svg>macOS</span>
+      <code class="qi-cmd"><span class="p">$</span><span class="c">curl -fsSL https://jmkq0056.github.io/maut-code/install.sh | bash</span></code>
+      <button class="qi-copy" type="button" aria-label="Copy the macOS install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
     </div>
     <div class="qi-row" data-os="win">
-      <span class="qi-os">Windows</span>
-      <code class="qi-cmd">irm https://jmkq0056.github.io/maut-code/install.ps1 | iex</code>
-      <button class="qi-copy" type="button">Copy</button>
+      <span class="qi-os"><svg><use href="#i-windows"/></svg>Windows</span>
+      <code class="qi-cmd"><span class="p">&gt;</span><span class="c">irm https://jmkq0056.github.io/maut-code/install.ps1 | iex</span></code>
+      <button class="qi-copy" type="button" aria-label="Copy the Windows install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
     </div>
-    <p class="qi-note">Paste into Terminal (macOS) or PowerShell (Windows). Installs or updates Maut code in one step, no security prompts, and offers to set up Claude Code if you don't have it.</p>
+    <p class="qi-note">Paste into Terminal or PowerShell. One step, no security prompts, and it offers to set up Claude Code if you don't have it.</p>
   </div>
-  <div class="hero-version">
-    <span id="ver">v1.0.9</span>  ·  ad-hoc signed  ·  <a href="https://github.com/jmkq0056/maut-code/releases">all releases</a>
+  <div class="hero-version"><span id="ver">v1.1.0</span> · <a href="https://github.com/jmkq0056/maut-code/releases">all releases</a></div>
+
+  <div class="mock" aria-hidden="true">
+    <div class="mock-bar"><i></i><i></i><i></i><span>1 -- MAUT</span></div>
+    <div class="mock-body">
+      <div class="row"><span class="ok">●</span> The editor only writes drafts, so live items never change.</div>
+      <div class="row">  Adding a publish step and inline editing.</div>
+      <div class="row"> </div>
+      <div class="thumb-wrap"><div class="thumb"></div><span class="thumb-badge">#3</span></div>
+      <div class="row"><span class="you">› <span class="tok">[Image #3]</span> the cards overflow on my phone</span></div>
+      <div class="row dim">  ▸▸ auto mode on (shift+tab to cycle)</div>
+    </div>
   </div>
 </header>
 
 <section id="features" class="wrap">
-  <h2 class="fade-up">Built for vibecoders.</h2>
-  <p class="sub fade-up">Every feature exists because clicking through menus for Claude Code workflows got annoying. None of it pretends to be AI; it just makes the CLI feel like part of the IDE.</p>
+  <div class="section-head fade-up">
+    <p class="kicker">Features</p>
+    <h2>Built for vibecoders.</h2>
+    <p class="section-sub">Every feature exists because clicking through menus for Claude Code workflows got annoying. None of it pretends to be AI; it makes the CLI feel like part of the IDE.</p>
+  </div>
 
   <div class="feature-grid">
     <div class="feature fade-up">
-      <span class="icon">⚡</span>
+      <div class="icon-tile"><svg><use href="#i-image"/></svg></div>
+      <h3>Image previews <span class="tag new">v1.1</span></h3>
+      <p>Every <code>[Image #N]</code> gets a numbered thumbnail right at it, a large hover preview and cmd-click to open. Works before you send the prompt, and in Claude's fullscreen mode.</p>
+    </div>
+    <div class="feature fade-up">
+      <div class="icon-tile"><svg><use href="#i-zap"/></svg></div>
       <h3>Smart auto-launch</h3>
-      <p>Open Maut and your last Claude session resumes in a fresh terminal automatically. Numbered <code>1 -- MAUT</code> with a unique icon and color per session.</p>
+      <p>Open Maut and your last Claude session resumes in a fresh terminal. Numbered <code>1 -- MAUT</code> with its own icon and color per session.</p>
     </div>
     <div class="feature fade-up">
-      <span class="icon">⌨️</span>
+      <div class="icon-tile"><svg><use href="#i-keyboard"/></svg></div>
       <h3>Type <kbd>maut</kbd> anywhere</h3>
-      <p>Type those four letters in sequence anywhere in the window — your keystrokes are removed and a fresh Claude terminal spawns. Works in the editor, search, palette, even another terminal.</p>
+      <p>Type those four letters anywhere in the window: the keystrokes are removed and a fresh Claude terminal spawns. Works in the editor, search, palette, even another terminal.</p>
     </div>
     <div class="feature fade-up">
-      <span class="icon">@</span>
-      <h3>Drag-as-@-mention</h3>
-      <p>Drag any file from the explorer into a Maut terminal → it becomes <code>@workspace/path</code>. Drag an editor text selection → <code>@path:start-end</code>. Inline ⌀ button on every row for one-click adds.</p>
+      <div class="icon-tile"><svg><use href="#i-at"/></svg></div>
+      <h3>Drag as @-mention</h3>
+      <p>Drag a file from the explorer into a Maut terminal and it becomes <code>@workspace/path</code>. Drag an editor selection for <code>@path:start-end</code>.</p>
     </div>
     <div class="feature fade-up">
-      <span class="icon">↶</span>
+      <div class="icon-tile"><svg><use href="#i-undo"/></svg></div>
       <h3>Undo Claude's edits</h3>
-      <p>The Maut Activity sidebar lists every file Claude touched this session. Click → diff. Right-click → undo, per file or per edit. Even per-action redo.</p>
+      <p>The Maut Activity sidebar lists every file Claude touched this session. Click for the diff; right-click to undo per file or per edit, with redo.</p>
     </div>
     <div class="feature fade-up">
-      <span class="icon">🖼</span>
-      <h3>Image previews on hover</h3>
-      <p>Every <code>[Image #N]</code> Claude prints gets a numbered thumbnail right next to it, a 480 px hover preview and cmd-click to open, even before you send the prompt, and even in Claude's fullscreen mode.</p>
-    </div>
-    <div class="feature fade-up">
-      <span class="icon">📄</span>
+      <div class="icon-tile"><svg><use href="#i-file"/></svg></div>
       <h3>PDF page picker</h3>
-      <p>Right-click any PDF → pick pages visually or type a range like <code>3-15, 20, 22-25</code>. Extracted PDF lands in <code>~/.maut-tmp/</code> and gets <code>@-mention</code>'d into the CLI.</p>
+      <p>Right-click a PDF and pick pages visually or type a range like <code>3-15, 20</code>. The extract lands in <code>~/.maut-tmp/</code> and is @-mentioned into the CLI.</p>
     </div>
     <div class="feature fade-up">
-      <span class="icon">🌒</span>
-      <h3>Custom markdown render</h3>
-      <p><code>.md</code> opens as a real HTML preview with sticky TOC, code syntax via highlight.js, JetBrains Mono. <kbd>⇧⌘V</kbd> toggles to source.</p>
+      <div class="icon-tile"><svg><use href="#i-book"/></svg></div>
+      <h3>Markdown that reads well</h3>
+      <p><code>.md</code> opens as a real preview with a sticky table of contents and highlighted code. <kbd>⇧⌘V</kbd> toggles to source.</p>
     </div>
     <div class="feature fade-up">
-      <span class="icon">🚀</span>
+      <div class="icon-tile"><svg><use href="#i-server"/></svg></div>
       <h3>Right-click servers</h3>
-      <p>Right-click any folder → detects Node / Python / Rust / Go / Make / Docker setups and starts the right command in a Maut terminal.</p>
+      <p>Right-click a folder: Maut detects Node, Python, Rust, Go, Make or Docker and starts the right command in a terminal.</p>
     </div>
     <div class="feature fade-up">
-      <span class="icon">📎</span>
-      <h3>Docx / Xlsx / Pptx</h3>
-      <p>Click an Office file → auto-handoff to Word / Excel / PowerPoint. Right-click → convert to TXT / JSON / PDF. No more "file is binary" warnings.</p>
+      <div class="icon-tile"><svg><use href="#i-clip"/></svg></div>
+      <h3>Word, Excel, PowerPoint</h3>
+      <p>Click an Office file to hand it to its app. Right-click to convert to TXT, JSON or PDF. No more "file is binary" warnings.</p>
     </div>
     <div class="feature fade-up">
-      <span class="icon">🎯</span>
+      <div class="icon-tile"><svg><use href="#i-focus"/></svg></div>
       <h3>Focus mode</h3>
-      <p><kbd>⌘K ⌘M</kbd> zens the active file or terminal full-width; second press restores your layout exactly.</p>
+      <p><kbd>⌘K ⌘M</kbd> takes the active file or terminal full width; press again to restore your layout exactly.</p>
     </div>
     <div class="feature fade-up">
-      <span class="icon">🗳</span>
+      <div class="icon-tile"><svg><use href="#i-commit"/></svg></div>
       <h3>One-click commit</h3>
-      <p>Bottom-right status-bar button stages everything, commits with a typed message, optionally pushes to origin — all VS Code quick-pick UI, no macOS dialogs.</p>
+      <p>A status-bar button stages everything, commits with your message and optionally pushes, all in quick-pick UI.</p>
     </div>
     <div class="feature fade-up">
-      <span class="icon">⬇️</span>
-      <h3>One-click fetch + pull <small style="opacity:.65;font-size:11px;font-weight:600;margin-left:6px;">v1.0.5</small></h3>
-      <p>Companion to the commit button. Pick remote → branch → fetch+pull. If it conflicts, a quick-pick offers <em>stash &amp; pull</em>, <em>reset --hard</em>, or cancel.</p>
+      <div class="icon-tile"><svg><use href="#i-pull"/></svg></div>
+      <h3>One-click fetch and pull</h3>
+      <p>Pick a remote and branch to fetch and pull. On a conflict, choose stash and pull, reset, or cancel.</p>
     </div>
     <div class="feature fade-up">
-      <span class="icon">🎨</span>
-      <h3>Theme Studio <small style="opacity:.65;font-size:11px;font-weight:600;margin-left:6px;">v1.0.6</small></h3>
-      <p>Opens as a sidebar view next to Maut Activity. Configure Light <em>and</em> Dark independently — accent, surface tone, font family, font size — and <kbd>⇧⌘L</kbd> swaps between your two saved configs. Font choice cascades to the whole workbench UI (sidebar, tabs, menus), not just the editor.</p>
+      <div class="icon-tile"><svg><use href="#i-palette"/></svg></div>
+      <h3>Theme Studio</h3>
+      <p>Set accent, surface tone, font and size for light and dark separately; <kbd>⇧⌘L</kbd> swaps between them. The font applies to the whole workbench, not just the editor.</p>
     </div>
   </div>
 </section>
 
 <section id="install" class="wrap">
-  <h2 class="fade-up">Install</h2>
-  <p class="sub fade-up">One command on either platform. Run it again any time to update.</p>
-
-  <div class="install fade-up">
-    <h3>macOS (Apple Silicon)</h3>
-    <p>Open Terminal and run:</p>
-    <pre class="shell"><span class="prompt">$</span> curl -fsSL https://jmkq0056.github.io/maut-code/install.sh | bash</pre>
-    <p>It installs the latest Maut code into <code>/Applications</code> (an older copy goes to the Trash), clears the quarantine flag so macOS opens it without the right-click dance, offers to install Claude Code if it's missing, and opens Maut.</p>
+  <div class="section-head fade-up">
+    <p class="kicker">Install</p>
+    <h2>One command. Run it again to update.</h2>
+    <p class="section-sub">Each installer fetches the latest release, puts Maut where your system expects apps, and opens it.</p>
   </div>
 
-  <div class="install fade-up" style="margin-top: 16px">
-    <h3>Windows (x64)</h3>
-    <p>Open PowerShell and run:</p>
-    <pre class="shell"><span class="prompt">&gt;</span> irm https://jmkq0056.github.io/maut-code/install.ps1 | iex</pre>
-    <p>It installs Maut code for your user (no admin rights, no wizard), adds it to the Start menu, the desktop, Explorer's right-click menu and <code>PATH</code> as <code>maut-code</code>, offers to install Claude Code if it's missing, and opens Maut.</p>
-  </div>
+  <div class="install-grid">
+    <div class="install fade-up">
+      <div class="install-head">
+        <div class="icon-tile"><svg><use href="#i-apple"/></svg></div>
+        <h3>macOS <small>Apple Silicon</small></h3>
+      </div>
+      <div class="qi-row">
+        <code class="qi-cmd"><span class="p">$</span><span class="c">curl -fsSL https://jmkq0056.github.io/maut-code/install.sh | bash</span></code>
+        <button class="qi-copy" type="button" aria-label="Copy the macOS install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
+      </div>
+      <p>Installs into <code>/Applications</code> (an older copy goes to the Trash), clears the quarantine flag so macOS opens it without the right-click dance, and offers to install Claude Code.</p>
+    </div>
 
-  <div class="install fade-up" style="margin-top: 16px">
-    <h3>Prefer a download?</h3>
-    <p>The buttons above get the same builds. macOS: open the <code>.dmg</code>, drag Maut code to Applications, then right-click it → <strong>Open</strong> the first time (the app is ad-hoc signed, not notarized). Windows: run <code>Maut-code-Setup-x64.exe</code>; it isn't code-signed yet, so SmartScreen may ask: <strong>More info → Run anyway</strong>. A portable <code>Maut-code-win-x64.zip</code> is on every <a style="color:var(--accent)" href="https://github.com/jmkq0056/maut-code/releases/latest">release</a> too.</p>
+    <div class="install fade-up">
+      <div class="install-head">
+        <div class="icon-tile"><svg><use href="#i-windows"/></svg></div>
+        <h3>Windows <small>x64 · PowerShell</small></h3>
+      </div>
+      <div class="qi-row">
+        <code class="qi-cmd"><span class="p">&gt;</span><span class="c">irm https://jmkq0056.github.io/maut-code/install.ps1 | iex</span></code>
+        <button class="qi-copy" type="button" aria-label="Copy the Windows install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
+      </div>
+      <p>Installs for your user with no admin rights and no wizard; adds Start menu and desktop shortcuts, Explorer's right-click menu and <code>maut-code</code> on your <code>PATH</code>; offers to install Claude Code.</p>
+    </div>
+
+    <div class="install wide fade-up">
+      <div class="install-head">
+        <div class="icon-tile"><svg><use href="#i-download"/></svg></div>
+        <h3>Prefer a download?</h3>
+      </div>
+      <p>The buttons at the top get the same builds. On macOS, open the <code>.dmg</code>, drag Maut code to Applications, then right-click it and choose Open the first time (it's ad-hoc signed, not notarized). On Windows, run <code>Maut-code-Setup-x64.exe</code>; it isn't code-signed yet, so SmartScreen may ask you to choose More info, then Run anyway. A portable <code>Maut-code-win-x64.zip</code> is on every <a href="https://github.com/jmkq0056/maut-code/releases/latest" style="color:var(--accent-hover)">release</a> too.</p>
+    </div>
   </div>
 </section>
 
 <footer>
-  Maut code · MIT · Built on top of <a href="https://github.com/microsoft/vscode">microsoft/vscode</a>.
-  <div class="links">
-    <a href="https://github.com/jmkq0056/maut-code">Source</a>
-    <a href="https://github.com/jmkq0056/maut-code/releases">Releases</a>
-    <a href="https://github.com/jmkq0056/maut-code/blob/main/CONTINUATION.md">Continuation prompt</a>
-    <a href="https://github.com/jmkq0056/maut-code/tree/main/dpcs">Feature docs</a>
+  <div class="wrap">
+    <span>Maut code · MIT · Built on <a href="https://github.com/microsoft/vscode">microsoft/vscode</a></span>
+    <div class="links">
+      <a href="https://github.com/jmkq0056/maut-code">Source</a>
+      <a href="https://github.com/jmkq0056/maut-code/releases">Releases</a>
+      <a href="https://github.com/jmkq0056/maut-code/tree/main/dpcs">Feature docs</a>
+      <a href="https://github.com/jmkq0056/maut-code/blob/main/CONTINUATION.md">Continuation prompt</a>
+    </div>
   </div>
 </footer>
 
 <script>
-  // Fade-in on scroll
-  const io = new IntersectionObserver((entries) => {
+  // Fade sections in as they scroll into view; content stays visible if this never runs.
+  document.documentElement.classList.add('js');
+  const io = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
-  }, { rootMargin: '-40px' });
+  }, { rootMargin: '0px 0px -40px 0px' });
   document.querySelectorAll('.fade-up').forEach(el => io.observe(el));
 
-  // Quick install: put the visitor's OS first and wire the copy buttons.
-  const isWindows = /Windows/i.test(navigator.userAgent);
-  const rows = [...document.querySelectorAll('.qi-row')];
-  const detected = rows.find(r => r.dataset.os === (isWindows ? 'win' : 'mac'));
-  if (detected && /Windows|Macintosh|Mac OS/i.test(navigator.userAgent)) {
-    detected.classList.add('detected');
-    detected.parentElement.prepend(detected);
+  // Put the visitor's OS first in the hero and highlight it.
+  const ua = navigator.userAgent;
+  if (/Windows|Macintosh|Mac OS/i.test(ua)) {
+    const os = /Windows/i.test(ua) ? 'win' : 'mac';
+    const row = document.querySelector(`.quick-install .qi-row[data-os="${os}"]`);
+    row.classList.add('detected');
+    row.parentElement.prepend(row);
   }
-  rows.forEach(row => {
-    const button = row.querySelector('.qi-copy');
-    const command = row.querySelector('.qi-cmd');
+
+  // Copy buttons
+  document.querySelectorAll('.qi-copy').forEach(button => {
+    const command = button.parentElement.querySelector('.qi-cmd .c');
+    const label = button.querySelector('span');
+    const icon = button.querySelector('use');
     button.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(command.textContent);
-        button.textContent = 'Copied';
+        label.textContent = 'Copied';
+        icon.setAttribute('href', '#i-check');
       } catch {
         getSelection().selectAllChildren(command);
-        button.textContent = 'Press Ctrl+C';
+        label.textContent = 'Press Ctrl+C';
       }
-      setTimeout(() => { button.textContent = 'Copy'; }, 1800);
+      setTimeout(() => { label.textContent = 'Copy'; icon.setAttribute('href', '#i-copy'); }, 1800);
     });
   });
 
-  // Pull latest version from the GitHub API; fallback to v1.0.0
+  // Point the download buttons and version at the latest release.
   fetch('https://api.github.com/repos/jmkq0056/maut-code/releases/latest')
     .then(r => r.ok ? r.json() : null)
     .then(d => {
-      if (!d) return;
-      const tag = d.tag_name || 'v1.0.0';
-      document.getElementById('ver').textContent = tag;
-      const macArmAsset = d.assets?.find(a => /arm64.*\.dmg$/i.test(a.name));
-      const winAsset = d.assets?.find(a => /setup.*x64.*\.exe$/i.test(a.name)) ?? d.assets?.find(a => /win.*x64.*\.zip$/i.test(a.name));
-      if (macArmAsset) document.getElementById('dl-mac-arm').href = macArmAsset.browser_download_url;
-      if (winAsset) document.getElementById('dl-win').href = winAsset.browser_download_url;
+      if (!d) { return; }
+      document.getElementById('ver').textContent = d.tag_name;
+      const mac = d.assets?.find(a => /arm64.*\.dmg$/i.test(a.name));
+      const win = d.assets?.find(a => /setup.*x64.*\.exe$/i.test(a.name)) ?? d.assets?.find(a => /win.*x64.*\.zip$/i.test(a.name));
+      if (mac) { document.getElementById('dl-mac-arm').href = mac.browser_download_url; }
+      if (win) { document.getElementById('dl-win').href = win.browser_download_url; }
     })
     .catch(() => {});
 </script>

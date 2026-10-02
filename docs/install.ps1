@@ -49,7 +49,34 @@ Get-Process 'Maut code' -ErrorAction SilentlyContinue | Stop-Process -Force -Err
 
 Write-Step 'Installing'
 $tasks = 'desktopicon,addcontextmenufiles,addcontextmenufolders,associatewithfiles,addtopath,!runcode'
-$process = Start-Process $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/MERGETASKS=$tasks" -Wait -PassThru
+try {
+	$process = Start-Process $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/MERGETASKS=$tasks" -Wait -PassThru
+} catch {
+	if (-not $keepInstaller) {
+		Remove-Item $installer -Force -ErrorAction SilentlyContinue
+	}
+	# Windows refuses to start the installer: Smart App Control or a company app-control policy
+	# (the message is in the system language, so recognise it by its error code too).
+	# 4551 is ERROR_SYSTEM_INTEGRITY_POLICY_VIOLATION: "An Application Control policy has blocked this file".
+	$native = $_.Exception.NativeErrorCode, $_.Exception.InnerException.NativeErrorCode
+	$blocked = $native -contains 4551 -or $_.Exception.Message -match 'Application Control|policy|politik|Richtlinie'
+	if ($blocked) {
+		Write-Host ''
+		Write-Host '  Windows blocked the Maut code installer.' -ForegroundColor Yellow
+		Write-Host '  Maut code is not code-signed yet, and Smart App Control (Windows 11) or an'
+		Write-Host '  app-control policy from your organisation only lets signed apps start.'
+		Write-Host ''
+		Write-Host '  What you can do:'
+		Write-Host '   - On a work PC: ask your IT department to allow Maut code.'
+		Write-Host '   - On your own PC: Windows Security > App & browser control > Smart App Control.'
+		Write-Host '     Turning it off lets unsigned apps run; on some Windows versions it cannot be'
+		Write-Host '     turned back on without resetting Windows, so decide with that in mind.'
+		Write-Host "   - Or wait for a signed release: https://github.com/$repo/releases"
+		Write-Host ''
+		throw 'Windows blocked the installer (it is not code-signed yet).'
+	}
+	throw
+}
 if (-not $keepInstaller) {
 	Remove-Item $installer -Force -ErrorAction SilentlyContinue
 }

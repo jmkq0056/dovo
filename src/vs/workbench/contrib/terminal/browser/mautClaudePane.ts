@@ -8,9 +8,10 @@ import * as dom from '../../../../base/browser/dom.js';
 import { renderMarkdown } from '../../../../base/browser/markdownRenderer.js';
 import { IntervalTimer, RunOnceScheduler } from '../../../../base/common/async.js';
 import { MarkdownString } from '../../../../base/common/htmlContent.js';
-import { Disposable, DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { FileAccess } from '../../../../base/common/network.js';
-import { isAbsolute } from '../../../../base/common/path.js';
+import { matchesFuzzy } from '../../../../base/common/filters.js';
+import { basename, isAbsolute } from '../../../../base/common/path.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
@@ -110,8 +111,11 @@ export class MautClaudePane extends Disposable {
 	private readonly _rail: HTMLElement;
 	/** Elements of the current render, for the rail. */
 	private _promptElements: HTMLElement[] = [];
-	private _editElements: HTMLElement[] = [];
+	/** The rail mark for each prompt; close prompts share one mark. */
 	private _railMarks: HTMLElement[] = [];
+	/** Every prompt in a list, shown while you hover the rail: the way to jump when there are many. */
+	private readonly _promptNav: HTMLElement;
+	private readonly _promptNavHide = this._register(new MutableDisposable());
 	private readonly _column: HTMLElement;
 	private readonly _instanceDisposables = this._register(new DisposableStore());
 	private readonly _renderDisposables = this._register(new DisposableStore());
@@ -124,6 +128,10 @@ export class MautClaudePane extends Disposable {
 	private readonly _live = dom.$('.mcp-live');
 	private _liveText = '';
 	private _liveStructure = '';
+	/** Claude's live state as last read from its screen, for the header's "Now" line. */
+	private _lastLive: ILiveState | undefined;
+	private _now: HTMLElement | undefined;
+	private _nowFile: string | undefined;
 	private _liveBlock: HTMLElement | undefined;
 	private _liveStatus: HTMLElement | undefined;
 	private _wasReader = false;
@@ -182,6 +190,18 @@ export class MautClaudePane extends Disposable {
 		this._root.appendChild(this._liveNote);
 		this._activity = dom.append(this._root, dom.$('.mcp-activity'));
 		this._rail = dom.append(this._root, dom.$('.mcp-rail'));
+		this._promptNav = dom.append(this._root, dom.$('.mcp-prompt-nav'));
+		for (const element of [this._rail, this._promptNav]) {
+			this._register(dom.addDisposableListener(element, dom.EventType.MOUSE_ENTER, () => this._showPromptNav()));
+			this._register(dom.addDisposableListener(element, dom.EventType.MOUSE_LEAVE, () => {
+				const search = this._promptNavSearch();
+				if (search && (search.value || dom.getActiveElement() === search)) {
+					return; // you're searching: it stays until you pick, press Escape or click away
+				}
+				const handle = dom.getWindow(this._root).setTimeout(() => this._promptNav.classList.remove('open'), 220);
+				this._promptNavHide.value = toDisposable(() => dom.getWindow(this._root).clearTimeout(handle));
+			}));
+		}
 		this._register(dom.addDisposableListener(this._reader, 'scroll', () => {
 			if (!this._autoScrolling) {
 				this._followBottom = this._isAtBottom();
@@ -196,7 +216,17 @@ export class MautClaudePane extends Disposable {
 		const resizeObserver = this._register(new dom.DisposableResizeObserver('mautClaudeReader', () => this._scrollToEnd(), dom.getWindow(this._root)));
 		this._register(resizeObserver.observe(this._column));
 		this._register(resizeObserver.observe(this._reader));
+		this._register(dom.addDisposableListener(this._promptNav, 'focusout', e => {
+			if (!dom.isAncestor(e.relatedTarget as Node | null, this._promptNav)) {
+				this._promptNav.classList.remove('open');
+			}
+		}));
 		this._register(dom.addDisposableListener(this._reader, dom.EventType.KEY_DOWN, e => {
+			if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+				e.preventDefault();
+				this._searchPrompts();
+				return;
+			}
 			if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
 				e.preventDefault();
 				this._jumpPrompt(e.key === 'ArrowUp' ? -1 : 1);
@@ -370,6 +400,8 @@ export class MautClaudePane extends Disposable {
 
 	private _updateLive(promptTop: number): void {
 		const live = this._readLive(promptTop);
+		this._lastLive = live;
+		this._updateNow();
 		const key = live ? JSON.stringify(live) : '';
 		if (key === this._liveText) {
 			return;
@@ -485,6 +517,8 @@ export class MautClaudePane extends Disposable {
 			host.height = host.width = host.margin = host.padding = '';
 			return dimension;
 		}
+		this._header.classList.toggle('mcp-compact', dimension.width < 900);
+		this._header.classList.toggle('mcp-narrow', dimension.width < 700);
 		const body = Math.max(0, dimension.height - headerHeight);
 		// A centered reading column instead of edge-to-edge text.
 		const width = Math.max(0, Math.min(dimension.width - sidePadding * 2, maxColumnWidth));
@@ -512,6 +546,8 @@ export class MautClaudePane extends Disposable {
 		this._activity.style.bottom = `${composer + composerMarginTop + liveNoteHeight}px`;
 		this._rail.style.top = `${headerHeight + 8}px`;
 		this._rail.style.height = `${Math.max(0, readerHeight - 16)}px`;
+		this._promptNav.style.top = `${headerHeight + 8}px`;
+		this._promptNav.style.maxHeight = `${Math.max(0, readerHeight - 16)}px`;
 		dom.getWindow(this._root).requestAnimationFrame(() => this._renderRail());
 		host.width = `${composerWidth}px`;
 		host.height = `${composer}px`;
@@ -656,6 +692,70 @@ export class MautClaudePane extends Disposable {
 	}
 
 	// ---------- Header ----------
+
+	// ---------- Now: what Claude is doing right now ----------
+
+	/**
+	 * The header's "Now" line while Claude works: "Editing mautProjectDock.ts · 14s". From Claude's
+	 * screen first (the block it's on and its spinner's timer), else its latest step in the transcript.
+	 */
+	private _updateNow(): void {
+		const now = this._now;
+		if (!now) {
+			return;
+		}
+		const activity = this.active && this._isWorking() ? this._currentActivity() : undefined;
+		now.classList.toggle('visible', !!activity);
+		this._nowFile = activity?.file;
+		if (!activity) {
+			return;
+		}
+		const text = activity.elapsed ? `${activity.label} \u00b7 ${activity.elapsed}` : activity.label;
+		if (now.textContent !== text) {
+			dom.clearNode(now);
+			dom.append(now, dom.$('i'));
+			dom.append(now, dom.$('span', undefined, text));
+			now.title = activity.file
+				? localize('maut.claude.nowOpen', "{0}. Click to open the file.", activity.label)
+				: localize('maut.claude.nowJump', "{0}. Click to see the latest.", activity.label);
+		}
+	}
+
+	private _currentActivity(): { label: string; file?: string; elapsed?: string } {
+		const live = this._lastLive;
+		// The spinner reads "Catapulting... (2m 14s \u00b7 ...)": its first figure is how long this has run.
+		const elapsed = /\((?<time>(?:\d+h\s*)?(?:\d+m\s*)?\d+s)/.exec(live?.status ?? '')?.groups?.time;
+		const first = live?.block.split('\n')[0].trim() ?? '';
+		const call = /^(?<tool>[A-Z][A-Za-z]+)\((?<arg>.*?)\)?$/.exec(first)?.groups;
+		if (call) {
+			return { ...describeActivity(call.tool, call.arg), elapsed };
+		}
+		// A command Claude described shows as its description, then "\u23bf $ command".
+		const second = live?.block.split('\n')[1] ?? '';
+		if (first && /^\s*\u23bf\s+\$\s/.test(second)) {
+			return { label: first, elapsed };
+		}
+		if (first) {
+			return { label: localize('maut.claude.nowWriting', "Writing a reply"), elapsed };
+		}
+		const last = this._session?.turns.at(-1)?.items.at(-1);
+		if (last?.kind === 'step') {
+			return { ...describeActivity(last.verb, last.target, last.file), elapsed };
+		}
+		if (last?.kind === 'edit') {
+			return { label: localize('maut.claude.nowEditing', "Editing {0}", basename(last.file)), file: last.file, elapsed };
+		}
+		return { label: localize('maut.claude.nowThinking', "Thinking"), elapsed };
+	}
+
+	private _onNowClick(): void {
+		const file = this._nowFile;
+		if (file) {
+			this._openFile(file);
+		} else {
+			this._scrollToEnd(true);
+		}
+	}
 
 	private _renderExpandButton(): void {
 		this._expandButton.textContent = this._composerExpanded ? localize('maut.claude.collapseInput', "Smaller Input") : localize('maut.claude.expandInput', "Larger Input");
@@ -825,6 +925,9 @@ export class MautClaudePane extends Disposable {
 		dom.append(this._header, dom.$('span.mcp-avatar'));
 		dom.append(this._header, dom.$('span.mcp-name', undefined, project));
 		dom.append(this._header, dom.$('span.mcp-meta', undefined, meta));
+		this._now = dom.append(this._header, dom.$<HTMLButtonElement>('button.mcp-now', { type: 'button' }));
+		this._now.addEventListener('click', () => this._onNowClick());
+		this._updateNow();
 		dom.append(this._header, dom.$('span.mcp-grow'));
 		this._header.appendChild(this._activityButton(session));
 		this._header.appendChild(this._contextButton(session));
@@ -882,7 +985,6 @@ export class MautClaudePane extends Disposable {
 		this._renderDisposables.clear();
 		dom.clearNode(this._column);
 		this._promptElements = [];
-		this._editElements = [];
 		if (!session.turns.length) {
 			dom.append(this._column, dom.$('.mcp-empty', undefined, localize('maut.claude.empty', "Your conversation with Claude shows up here. Type below to start.")));
 		}
@@ -902,33 +1004,140 @@ export class MautClaudePane extends Disposable {
 		dom.clearNode(this._rail);
 		this._railMarks = [];
 		const total = this._reader.scrollHeight;
-		if (!total || !this._reader.clientHeight) {
+		const height = this._rail.clientHeight;
+		if (!total || !this._reader.clientHeight || !height) {
 			return;
 		}
-		const place = (element: HTMLElement, mark: HTMLElement) => {
-			mark.style.top = `${Math.min(100, (element.offsetTop / total) * 100)}%`;
-			this._rail.appendChild(mark);
-		};
-		for (const edit of this._editElements) {
-			place(edit, dom.$('i.mcp-rail-edit'));
-		}
+		// A thin tick per prompt; prompts closer than a few pixels share a tick, so a long
+		// conversation stays a calm line instead of a pile of dots. The hover list has them all.
+		let last: { mark: HTMLElement; y: number } | undefined;
 		this._promptElements.forEach((prompt, index) => {
-			const mark = dom.$<HTMLButtonElement>('button.mcp-rail-prompt', { type: 'button' });
-			const text = prompt.textContent?.trim() ?? '';
-			mark.title = localize('maut.claude.jumpTo', "Prompt {0}: {1}", index + 1, text.length > 80 ? text.slice(0, 77) + '…' : text);
+			const y = Math.min(height, (prompt.offsetTop / total) * height);
+			if (last && y - last.y < 6) {
+				this._railMarks.push(last.mark);
+				return;
+			}
+			const mark = dom.append(this._rail, dom.$<HTMLButtonElement>('button.mcp-rail-prompt', { type: 'button' }));
+			mark.style.top = `${y}px`;
+			mark.setAttribute('aria-label', localize('maut.claude.jumpToPrompt', "Prompt {0}", index + 1));
 			mark.addEventListener('click', () => this._scrollToPrompt(prompt));
-			place(prompt, mark);
 			this._railMarks.push(mark);
+			last = { mark, y };
 		});
 		this._highlightRail();
 	}
 
-	/** The prompt you're reading gets the strong mark. */
-	private _highlightRail(): void {
+	private _showPromptNav(): void {
+		this._promptNavHide.clear();
+		if (this._promptNav.classList.contains('open') || !this._promptElements.length) {
+			return;
+		}
+		dom.clearNode(this._promptNav);
+		const head = dom.append(this._promptNav, dom.$('.mcp-prompt-nav-head'));
+		const search = dom.append(head, dom.$<HTMLInputElement>('input.mcp-prompt-nav-search', {
+			type: 'text',
+			spellcheck: 'false',
+			placeholder: localize('maut.claude.searchPrompts', "Search your {0} prompts", this._promptElements.length),
+		}));
+		const list = dom.append(this._promptNav, dom.$('.mcp-prompt-nav-list'));
+		const prompts = this._promptElements.map((element, index) => ({ element, index, text: (element.textContent ?? '').trim() || localize('maut.claude.imageOnly', "(image)") }));
+		const current = this._currentPrompt();
+		let rows: { row: HTMLElement; element: HTMLElement }[] = [];
+		let selected = -1;
+		const select = (index: number) => {
+			rows[selected]?.row.classList.remove('selected');
+			selected = Math.max(0, Math.min(rows.length - 1, index));
+			rows[selected]?.row.classList.add('selected');
+			rows[selected]?.row.scrollIntoView({ block: 'nearest' });
+		};
+		const jump = (element: HTMLElement) => {
+			this._scrollToPrompt(element);
+			this._promptNav.classList.remove('open');
+		};
+		const render = () => {
+			dom.clearNode(list);
+			rows = [];
+			const query = search.value.trim();
+			let currentRow: HTMLElement | undefined;
+			for (const prompt of prompts) {
+				// Fuzzy, like Quick Open: "dck str" finds "dock ... star".
+				const matches = query ? matchesFuzzy(query, prompt.text, true) : [];
+				if (!matches) {
+					continue;
+				}
+				const row = dom.append(list, dom.$<HTMLButtonElement>('button.mcp-prompt-nav-row', { type: 'button' }));
+				dom.append(row, dom.$('span.mcp-prompt-nav-n', undefined, String(prompt.index + 1)));
+				const text = dom.append(row, dom.$('span.mcp-prompt-nav-text'));
+				let at = 0;
+				for (const match of matches) {
+					text.append(prompt.text.slice(at, match.start));
+					dom.append(text, dom.$('mark', undefined, prompt.text.slice(match.start, match.end)));
+					at = match.end;
+				}
+				text.append(prompt.text.slice(at));
+				row.classList.toggle('current', prompt.index === current);
+				if (prompt.index === current) {
+					currentRow = row;
+				}
+				row.addEventListener('click', () => jump(prompt.element));
+				rows.push({ row, element: prompt.element });
+			}
+			if (!rows.length) {
+				dom.append(list, dom.$('.mcp-prompt-nav-empty', undefined, localize('maut.claude.noPromptMatch', "No prompt matches")));
+			}
+			selected = -1;
+			if (query) {
+				select(0);
+			} else {
+				currentRow?.scrollIntoView({ block: 'center' });
+			}
+		};
+		search.addEventListener('input', render);
+		search.addEventListener('keydown', e => {
+			if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+				e.preventDefault();
+				select(selected + (e.key === 'ArrowDown' ? 1 : -1));
+			} else if (e.key === 'Enter' && rows[Math.max(0, selected)]) {
+				e.preventDefault();
+				jump(rows[Math.max(0, selected)].element);
+			} else if (e.key === 'Escape') {
+				e.preventDefault();
+				this._promptNav.classList.remove('open');
+				this._reader.focus();
+			}
+		});
+		render();
+		this._promptNav.classList.add('open');
+	}
+
+	/** Search your prompts: from the keyboard (Cmd/Ctrl+Shift+F in the Reader) or the rail. */
+	private _searchPrompts(): void {
+		this._promptNav.classList.remove('open');
+		this._showPromptNav();
+		this._promptNavSearch()?.focus();
+	}
+
+	private _promptNavSearch(): HTMLInputElement | undefined {
+		const head = this._promptNav.firstElementChild?.firstElementChild;
+		return dom.isHTMLInputElement(head) ? head : undefined;
+	}
+
+	private _currentPrompt(): number {
 		const top = this._reader.scrollTop + 60;
 		let current = -1;
-		this._promptElements.forEach((prompt, index) => { if (prompt.offsetTop <= top) { current = index; } });
-		this._railMarks.forEach((mark, index) => mark.classList.toggle('current', index === current));
+		this._promptElements.forEach((prompt, index) => {
+			if (prompt.offsetTop <= top) {
+				current = index;
+			}
+		});
+		return current;
+	}
+
+	private _highlightRail(): void {
+		const current = this._railMarks[this._currentPrompt()];
+		for (const mark of new Set(this._railMarks)) {
+			mark.classList.toggle('current', mark === current);
+		}
 	}
 
 	private _jumpPrompt(direction: 1 | -1): void {
@@ -1097,7 +1306,6 @@ export class MautClaudePane extends Disposable {
 
 	private _renderEdit(edit: Extract<ClaudeItem, { kind: 'edit' }>): HTMLElement {
 		const card = dom.$('.mcp-edit');
-		this._editElements.push(card);
 		const head = dom.append(card, dom.$('.mcp-edit-head'));
 		dom.append(head, dom.$('span.mcp-edit-file', undefined, edit.file));
 		dom.append(head, dom.$('span.mcp-add', undefined, `+${edit.added}`));
@@ -1151,6 +1359,11 @@ export class MautClaudePane extends Disposable {
 			return;
 		}
 		e.preventDefault();
+		this._openFile(file);
+	}
+
+	/** Opens a file Claude named: absolute, or relative to Claude's folder. */
+	private async _openFile(file: string): Promise<void> {
 		let resource: URI;
 		if (isAbsolute(file)) {
 			resource = URI.file(file);
@@ -1163,6 +1376,40 @@ export class MautClaudePane extends Disposable {
 			resource = URI.joinPath(base, file);
 		}
 		this._editorService.openEditor({ resource, options: { pinned: false } });
+	}
+}
+
+/**
+ * "Editing x.ts", "Running npm test": what a tool call is doing, from Claude's screen (`Bash(npm
+ * test)`, `Update(src/x.ts)`) or a transcript step (`Ran`, `Read`).
+ */
+function describeActivity(tool: string, target: string, file?: string): { label: string; file?: string } {
+	const short = target.length > 60 ? `${target.slice(0, 57)}...` : target;
+	const isPath = /[\\/]|\.\w{1,6}$/.test(target) && !/\s/.test(target);
+	const path = file ?? (isPath ? target : undefined);
+	const name = path ? basename(path) : short;
+	switch (tool) {
+		case 'Bash':
+		case 'Ran': return { label: localize('maut.claude.nowRunning', "Running {0}", short) };
+		case 'Read': return { label: localize('maut.claude.nowReading', "Reading {0}", name), file: path };
+		case 'Update':
+		case 'Edit':
+		case 'MultiEdit': return { label: localize('maut.claude.nowEditingFile', "Editing {0}", name), file: path };
+		case 'Write':
+		case 'Create': return { label: localize('maut.claude.nowWritingFile', "Writing {0}", name), file: path };
+		case 'Search':
+		case 'Grep':
+		case 'Glob':
+		case 'Searched':
+		case 'Listed': return { label: localize('maut.claude.nowSearching', "Searching {0}", short) };
+		case 'Fetch':
+		case 'WebFetch':
+		case 'Fetched': return { label: localize('maut.claude.nowFetching', "Fetching {0}", short) };
+		case 'WebSearch':
+		case 'Searched the web': return { label: localize('maut.claude.nowSearchingWeb', "Searching the web for {0}", short) };
+		case 'Agent':
+		case 'Task': return { label: localize('maut.claude.nowAgent', "Agent: {0}", short) };
+		default: return { label: short ? `${tool}: ${short}` : tool };
 	}
 }
 

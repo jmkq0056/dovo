@@ -272,7 +272,8 @@ export class ClaudeSessionReader {
 				return task;
 			}
 			// A shell is only still running if its process is: a restarted Claude leaves none behind.
-			const alive = !!task.command && processes.some(p => p.command.includes(quotedForEval(task.command!)));
+			// (Windows has no process list to check, so there Claude's own notifications decide.)
+			const alive = process.platform === 'win32' || (!!task.command && processes.some(p => p.command.includes(quotedForEval(task.command!))));
 			return alive ? { ...task, tail: await tailOf(task.outputFile) } : { ...task, status: 'completed' as const };
 		}));
 	}

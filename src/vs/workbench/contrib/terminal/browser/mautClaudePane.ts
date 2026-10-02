@@ -130,8 +130,23 @@ export class MautClaudePane extends Disposable {
 	private _liveStructure = '';
 	/** Claude's live state as last read from its screen, for the header's "Now" line. */
 	private _lastLive: ILiveState | undefined;
-	private _now: HTMLElement | undefined;
+	/** The "Now" line: one element for the pane's life, so hovering it holds and it never jumps. */
+	private readonly _now: HTMLButtonElement;
+	private readonly _nowLabel: HTMLElement;
+	private readonly _nowElapsed: HTMLElement;
 	private _nowFile: string | undefined;
+	private _nowFull = '';
+	/** A new activity shows once it has held for a moment, so quick switches don't flicker. */
+	private _nowPending: { label: string; since: number } | undefined;
+	private _headerKey = '';
+	/** Redraws the terminal from scratch: its GPU glyph cache can go blank after a resize or font change. */
+	private readonly _repaint = this._register(new RunOnceScheduler(() => {
+		const xterm = this._instance?.xterm;
+		if (xterm && this.active) {
+			xterm.forceRedraw();
+			xterm.raw.refresh(0, xterm.raw.rows - 1);
+		}
+	}, 120));
 	private _liveBlock: HTMLElement | undefined;
 	private _liveStatus: HTMLElement | undefined;
 	private _wasReader = false;
@@ -189,6 +204,12 @@ export class MautClaudePane extends Disposable {
 		this._renderExpandButton();
 		this._root.appendChild(this._liveNote);
 		this._activity = dom.append(this._root, dom.$('.mcp-activity'));
+		this._now = dom.$<HTMLButtonElement>('button.mcp-now', { type: 'button' });
+		dom.append(this._now, dom.$('i'));
+		this._nowLabel = dom.append(this._now, dom.$('span.mcp-now-label'));
+		this._nowElapsed = dom.append(this._now, dom.$('span.mcp-now-time'));
+		this._register(dom.addDisposableListener(this._now, dom.EventType.CLICK, () => this._onNowClick()));
+		this._register(this._hoverService.setupDelayedHover(this._now, () => ({ content: this._nowFull })));
 		this._rail = dom.append(this._root, dom.$('.mcp-rail'));
 		this._promptNav = dom.append(this._root, dom.$('.mcp-prompt-nav'));
 		for (const element of [this._rail, this._promptNav]) {
@@ -244,6 +265,9 @@ export class MautClaudePane extends Disposable {
 		this._register(dom.addDisposableListener(this._reader, dom.EventType.CLICK, e => this._onReaderClick(e)));
 		this._registerFileDrop();
 		this._register(dom.addDisposableListener(this._terminalHost, dom.EventType.KEY_DOWN, e => this._onComposerKey(e), true));
+		// Coming back to the input, or to the window, draws it fresh.
+		this._register(dom.addDisposableListener(this._terminalHost, dom.EventType.FOCUS_IN, () => this._repaint.schedule()));
+		this._register(dom.addDisposableListener(dom.getWindow(this._root), dom.EventType.FOCUS, () => this._repaint.schedule()));
 		this._update();
 	}
 
@@ -505,6 +529,9 @@ export class MautClaudePane extends Disposable {
 
 	setVisible(visible: boolean): void {
 		this._visible = visible;
+		if (visible) {
+			this._repaint.schedule();
+		}
 		this._updatePolling();
 	}
 
@@ -562,6 +589,9 @@ export class MautClaudePane extends Disposable {
 		this._updateFont();
 		const active = this.active;
 		const reader = active && this._claudeService.view === 'reader';
+		if (reader !== this._wasReader) {
+			this._repaint.schedule();
+		}
 		if (reader && !this._wasReader) {
 			// Back to the Reader (from Terminal, or a new Claude): show the latest once laid out.
 			dom.getWindow(this._root).requestAnimationFrame(() => this._scrollToEnd(true));
@@ -602,6 +632,7 @@ export class MautClaudePane extends Disposable {
 		if (capped !== this._composerRows) {
 			this._composerRows = capped;
 			this._relayout();
+			this._repaint.schedule();
 		}
 	}
 
@@ -641,6 +672,7 @@ export class MautClaudePane extends Disposable {
 		dom.getWindow(this._root).setTimeout(() => {
 			if (!instance.isDisposed) {
 				instance.refreshFont();
+				this._repaint.schedule();
 			}
 		}, 150);
 	}
@@ -700,25 +732,31 @@ export class MautClaudePane extends Disposable {
 	 * screen first (the block it's on and its spinner's timer), else its latest step in the transcript.
 	 */
 	private _updateNow(): void {
-		const now = this._now;
-		if (!now) {
-			return;
-		}
 		const activity = this.active && this._isWorking() ? this._currentActivity() : undefined;
-		now.classList.toggle('visible', !!activity);
-		this._nowFile = activity?.file;
+		this._now.classList.toggle('visible', !!activity);
 		if (!activity) {
+			this._nowPending = undefined;
+			this._nowLabel.textContent = '';
 			return;
 		}
-		const text = activity.elapsed ? `${activity.label} \u00b7 ${activity.elapsed}` : activity.label;
-		if (now.textContent !== text) {
-			dom.clearNode(now);
-			dom.append(now, dom.$('i'));
-			dom.append(now, dom.$('span', undefined, text));
-			now.title = activity.file
+		// The time ticks in place; the activity itself changes only once it has held for 600ms.
+		this._nowElapsed.textContent = activity.elapsed ? `\u00b7 ${activity.elapsed}` : '';
+		const shown = this._nowLabel.textContent;
+		if (activity.label !== shown) {
+			const now = Date.now();
+			if (this._nowPending?.label !== activity.label) {
+				this._nowPending = { label: activity.label, since: now };
+			}
+			if (shown && now - this._nowPending.since < 600) {
+				return;
+			}
+			this._nowLabel.textContent = activity.label;
+			this._nowFile = activity.file;
+			this._nowFull = activity.file
 				? localize('maut.claude.nowOpen', "{0}. Click to open the file.", activity.label)
 				: localize('maut.claude.nowJump', "{0}. Click to see the latest.", activity.label);
 		}
+		this._nowPending = undefined;
 	}
 
 	private _currentActivity(): { label: string; file?: string; elapsed?: string } {
@@ -921,13 +959,19 @@ export class MautClaudePane extends Disposable {
 		const status = !session ? 'starting' : this._isWorking() ? 'working' : session.status;
 		const statusText = status === 'working' ? localize('maut.claude.working', "Working") : status === 'idle' ? localize('maut.claude.ready', "Ready") : localize('maut.claude.starting', "Starting");
 
+		// Rebuild only when something shown changed: a rebuild drops hovers and focus.
+		const running = session?.tasks?.filter(task => task.status === 'running').length ?? 0;
+		const key = JSON.stringify([project, meta, status, session?.contextTokens, session?.contextWindow, running, this._activityOpen, this._claudeService.view, this._claudeService.layoutMode]);
+		this._updateNow();
+		if (key === this._headerKey && this._header.childElementCount) {
+			return;
+		}
+		this._headerKey = key;
 		dom.clearNode(this._header);
 		dom.append(this._header, dom.$('span.mcp-avatar'));
 		dom.append(this._header, dom.$('span.mcp-name', undefined, project));
 		dom.append(this._header, dom.$('span.mcp-meta', undefined, meta));
-		this._now = dom.append(this._header, dom.$<HTMLButtonElement>('button.mcp-now', { type: 'button' }));
-		this._now.addEventListener('click', () => this._onNowClick());
-		this._updateNow();
+		this._header.appendChild(this._now);
 		dom.append(this._header, dom.$('span.mcp-grow'));
 		this._header.appendChild(this._activityButton(session));
 		this._header.appendChild(this._contextButton(session));

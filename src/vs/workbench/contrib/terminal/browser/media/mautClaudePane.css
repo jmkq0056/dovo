@@ -560,11 +560,11 @@
 /* Now: what Claude is doing right now, in the header while it works. */
 .monaco-workbench .mcp-header > .mcp-now {
 	display: none;
-	flex: 0 1 auto;
-	min-width: 0;
+	/* A steady width: the text changes, the pill doesn't jump. */
+	flex: 0 1 380px;
+	min-width: 150px;
 	align-items: center;
 	gap: 7px;
-	max-width: 420px;
 	height: 28px;
 	padding: 0 10px;
 	border: 1px solid var(--mcp-line);
@@ -577,7 +577,8 @@
 .monaco-workbench .mcp-header > .mcp-now.visible { display: inline-flex; }
 .monaco-workbench .mcp-header > .mcp-now:hover { border-color: var(--mcp-line-strong); }
 .monaco-workbench .mcp-now > i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--mcp-live); animation: mcp-pulse 1.4s ease-in-out infinite; }
-.monaco-workbench .mcp-now > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.monaco-workbench .mcp-now > .mcp-now-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.monaco-workbench .mcp-now > .mcp-now-time { flex: none; color: var(--mcp-muted); font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) {
 	.monaco-workbench .mcp-now > i { animation: none; }
 }

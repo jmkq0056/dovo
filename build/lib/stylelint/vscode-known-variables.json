@@ -1072,7 +1072,19 @@
 		"--vscode-inline-chat-affordance-height",
 		"--collapse-from-width",
 		"--slide-from-x",
-		"--slide-from-y"
+		"--slide-from-y",
+		"--mcp-accent",
+		"--mcp-line",
+		"--mcp-line-strong",
+		"--mcp-live",
+		"--mcp-mono",
+		"--mcp-muted",
+		"--mcp-ok",
+		"--mcp-sans",
+		"--mcp-subtle",
+		"--mcp-surface",
+		"--mcp-surface-2",
+		"--vscode-editor-font-family"
 	],
 	"sizes": [
 		"--vscode-agents-fontWeight-medium",

@@ -13,8 +13,11 @@ import { URI } from '../../../../../base/common/uri.js';
 import { localize } from '../../../../../nls.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
+import { IFileService } from '../../../../../platform/files/common/files.js';
 import { IHoverService } from '../../../../../platform/hover/browser/hover.js';
+import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
+import { IPathService } from '../../../../services/path/common/pathService.js';
 import { ITerminalContribution, IXtermTerminal } from '../../../terminal/browser/terminal.js';
 import { registerTerminalContribution, type ITerminalContributionContext } from '../../../terminal/browser/terminalExtensions.js';
 import type { IXtermCore } from '../../../terminal/browser/xterm-private.js';
@@ -28,6 +31,11 @@ const resolveImageCommandId = '_maut.claudeImages.resolve';
 /** Same extension: snapshots the clipboard as image N of the terminal's session. */
 const captureClipboardCommandId = '_maut.claudeImages.captureClipboard';
 const imageReferenceRegex = /\[Image #(?<index>\d+)\]/g;
+/** An image file path Claude printed, e.g. `Read(/Users/me/site/img/burger.jpg)` or `img/logo.png`. */
+// Not preceded by a slash rule, so `file:///…/shot.png` links match too; web addresses yield
+// paths that don't exist on disk and so never get a preview.
+const imagePathRegex = /(?<![\w@.~-])(?<path>(?:~\/|\/|\.{1,2}\/)?(?:[\w@.+-]+\/)*[\w@+-][\w@.+-]*\.(?:png|jpe?g|gif|webp|bmp))(?![\w.])/gi;
+const imageExtensionRegex = /\.(?:png|jpe?g|gif|webp|bmp)\b/i;
 /** How long a lookup result is trusted; a miss is retried sooner as the prompt may get sent. */
 const resolvedTtl = 30_000;
 const unresolvedTtl = 2_000;
@@ -38,7 +46,12 @@ const thumbnailMaxAspect = 3;
 const freeCellsRegex = /^[\s\u2500-\u257f]*$/;
 
 interface IImageReference {
-	readonly index: number;
+	/** `#N` for a pasted image, `file:<path as printed>` for an image file path. */
+	readonly key: string;
+	/** Set for `[Image #N]`. */
+	readonly index?: number;
+	/** Set for an image file path, exactly as printed. */
+	readonly path?: string;
 	/** Absolute buffer line. */
 	readonly line: number;
 	readonly startColumn: number;
@@ -69,7 +82,8 @@ interface IThumbnailPlacement {
 }
 
 /**
- * Previews for the `[Image #N]` references Claude Code prints. Claude's fullscreen TUI tracks the
+ * Previews for the images Claude Code shows: `[Image #N]` references and image file paths (for
+ * example a `Read(…/burger.jpg)` line). Claude's fullscreen TUI tracks the
  * mouse and repaints constantly, which tears down xterm's link hovers and swallows clicks, so this
  * draws its own layer above the terminal: a hit box over each reference (hover shows the image,
  * cmd/ctrl+click opens it) and one numbered thumbnail per image right above or below its
@@ -82,10 +96,10 @@ class TerminalClaudeImagesContribution extends Disposable implements ITerminalCo
 	/** Keyed by image number and occurrence, so a box follows its text as the transcript moves. */
 	private readonly _hitBoxStores = this._register(new DisposableMap<string, DisposableStore>());
 	private readonly _hitBoxes = new Map<string, IHitBox>();
-	private readonly _thumbnailStores = this._register(new DisposableMap<number, DisposableStore>());
-	private readonly _thumbnails = new Map<number, IThumbnail>();
-	private readonly _resolved = new Map<number, IResolvedImage>();
-	private readonly _pending = new Set<number>();
+	private readonly _thumbnailStores = this._register(new DisposableMap<string, DisposableStore>());
+	private readonly _thumbnails = new Map<string, IThumbnail>();
+	private readonly _resolved = new Map<string, IResolvedImage>();
+	private readonly _pending = new Set<string>();
 	private readonly _scheduledUpdate = this._register(new MutableDisposable());
 	private _overlay: HTMLElement | undefined;
 	private _xterm: RawXtermTerminal | undefined;
@@ -99,6 +113,9 @@ class TerminalClaudeImagesContribution extends Disposable implements ITerminalCo
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IEditorService private readonly _editorService: IEditorService,
 		@IHoverService private readonly _hoverService: IHoverService,
+		@IFileService private readonly _fileService: IFileService,
+		@IPathService private readonly _pathService: IPathService,
+		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
 	) {
 		super();
 	}
@@ -142,12 +159,12 @@ class TerminalClaudeImagesContribution extends Disposable implements ITerminalCo
 		const references = this._findReferences(xterm);
 		this._captureNewPastes(xterm, references);
 
-		const occurrences = new Map<number, number>();
+		const occurrences = new Map<string, number>();
 		const liveHitBoxes = new Set<string>();
 		for (const reference of references) {
-			const occurrence = occurrences.get(reference.index) ?? 0;
-			occurrences.set(reference.index, occurrence + 1);
-			const key = `${reference.index}:${occurrence}`;
+			const occurrence = occurrences.get(reference.key) ?? 0;
+			occurrences.set(reference.key, occurrence + 1);
+			const key = `${reference.key}:${occurrence}`;
 			liveHitBoxes.add(key);
 			const hitBox = this._hitBoxes.get(key) ?? this._createHitBox(key, reference);
 			hitBox.reference = reference;
@@ -167,16 +184,16 @@ class TerminalClaudeImagesContribution extends Disposable implements ITerminalCo
 		// One thumbnail per image, on free cells right above or below its first reference so it is
 		// clear which image it shows even when references sit side by side.
 		const occupied: IThumbnailPlacement[] = [];
-		const liveThumbnails = new Set<number>();
+		const liveThumbnails = new Set<string>();
 		for (const reference of references) {
-			if (liveThumbnails.has(reference.index)) {
+			if (liveThumbnails.has(reference.key)) {
 				continue;
 			}
-			const path = this._getImagePath(reference.index);
+			const path = this._getImagePath(reference);
 			if (!path) {
 				continue;
 			}
-			const thumbnail = this._thumbnails.get(reference.index) ?? this._createThumbnail(reference.index);
+			const thumbnail = this._thumbnails.get(reference.key) ?? this._createThumbnail(reference);
 			const { image, badge } = thumbnail;
 			const src = FileAccess.uriToBrowserUri(URI.file(path)).toString(true);
 			if (image.getAttribute('src') !== src) {
@@ -188,7 +205,7 @@ class TerminalClaudeImagesContribution extends Disposable implements ITerminalCo
 				image.style.display = badge.style.display = 'none';
 				continue;
 			}
-			liveThumbnails.add(reference.index);
+			liveThumbnails.add(reference.key);
 			occupied.push(placement);
 			image.style.left = `${placement.column * cell.width}px`;
 			image.style.top = `${placement.row * cell.height}px`;
@@ -196,12 +213,13 @@ class TerminalClaudeImagesContribution extends Disposable implements ITerminalCo
 			image.style.width = `${placement.columns * cell.width}px`;
 			badge.style.left = image.style.left;
 			badge.style.top = image.style.top;
-			image.style.display = badge.style.display = '';
+			image.style.display = '';
+			badge.style.display = reference.index === undefined ? 'none' : '';
 		}
-		for (const index of [...this._thumbnails.keys()]) {
-			if (!liveThumbnails.has(index) && !references.some(r => r.index === index)) {
-				this._thumbnails.delete(index);
-				this._thumbnailStores.deleteAndDispose(index);
+		for (const key of [...this._thumbnails.keys()]) {
+			if (!liveThumbnails.has(key) && !references.some(r => r.key === key)) {
+				this._thumbnails.delete(key);
+				this._thumbnailStores.deleteAndDispose(key);
 			}
 		}
 	}
@@ -250,32 +268,33 @@ class TerminalClaudeImagesContribution extends Disposable implements ITerminalCo
 	 * holds it only in memory; snapshot the clipboard now so the unsent image can be previewed.
 	 */
 	private _captureNewPastes(xterm: RawXtermTerminal, references: IImageReference[]): void {
-		const highest = Math.max(this._highestIndex ?? 0, ...references.map(r => r.index));
+		const pasted = references.filter(r => r.index !== undefined);
+		const highest = Math.max(this._highestIndex ?? 0, ...pasted.map(r => r.index!));
 		if (this._highestIndex === undefined) {
 			// What's on screen when we start watching was pasted earlier, maybe in another session.
 			this._highestIndex = highest;
 			return;
 		}
 		const cursorLine = xterm.buffer.active.baseY + xterm.buffer.active.cursorY;
-		for (const reference of references) {
-			if (reference.index > this._highestIndex && Math.abs(reference.line - cursorLine) <= 4) {
-				this._capture(reference.index);
+		for (const reference of pasted) {
+			if (reference.index! > this._highestIndex && Math.abs(reference.line - cursorLine) <= 4) {
+				this._capture(reference);
 			}
 		}
 		this._highestIndex = highest;
 	}
 
-	private async _capture(index: number): Promise<void> {
-		this._pending.add(index);
+	private async _capture(reference: IImageReference): Promise<void> {
+		this._pending.add(reference.key);
 		let path: string | undefined;
 		try {
-			path = await this._commandService.executeCommand<string | undefined>(captureClipboardCommandId, this._ctx.instance.processId, index);
+			path = await this._commandService.executeCommand<string | undefined>(captureClipboardCommandId, this._ctx.instance.processId, reference.index);
 		} catch {
 			// The extension isn't running (yet); the normal lookup takes over after sending.
 		} finally {
-			this._pending.delete(index);
+			this._pending.delete(reference.key);
 		}
-		this._resolved.set(index, { path, time: Date.now() });
+		this._resolved.set(reference.key, { path, time: Date.now() });
 		this._scheduleUpdate();
 	}
 
@@ -286,7 +305,8 @@ class TerminalClaudeImagesContribution extends Disposable implements ITerminalCo
 			const lineIndex = buffer.viewportY + row;
 			const line = buffer.getLine(lineIndex);
 			// Cheap check first; mapping string offsets to columns walks every cell.
-			if (!line || !line.translateToString(true).includes('[Image #')) {
+			const plain = line?.translateToString(true);
+			if (!line || !plain || (!plain.includes('[Image #') && !imageExtensionRegex.test(plain))) {
 				continue;
 			}
 			let text = '';
@@ -305,12 +325,14 @@ class TerminalClaudeImagesContribution extends Disposable implements ITerminalCo
 			for (const match of text.matchAll(imageReferenceRegex)) {
 				const start = match.index;
 				const end = start + match[0].length - 1;
-				references.push({
-					index: Number(match.groups?.index),
-					line: lineIndex,
-					startColumn: columns[start],
-					endColumn: columns[end] + 1,
-				});
+				const index = Number(match.groups?.index);
+				references.push({ key: `#${index}`, index, line: lineIndex, startColumn: columns[start], endColumn: columns[end] + 1 });
+			}
+			for (const match of text.matchAll(imagePathRegex)) {
+				const path = match.groups!.path;
+				const start = match.index + match[0].indexOf(path);
+				const end = start + path.length - 1;
+				references.push({ key: `file:${path}`, path, line: lineIndex, startColumn: columns[start], endColumn: columns[end] + 1 });
 			}
 		}
 		return references;
@@ -321,33 +343,33 @@ class TerminalClaudeImagesContribution extends Disposable implements ITerminalCo
 		const element = dom.append(this._overlay!, dom.$('.maut-claude-image-hit'));
 		store.add(toDisposable(() => element.remove()));
 		const hitBox: IHitBox = { element, reference };
-		this._wireInteractions(store, element, () => hitBox.reference.index, false);
+		this._wireInteractions(store, element, () => hitBox.reference, false);
 		this._hitBoxStores.set(key, store);
 		this._hitBoxes.set(key, hitBox);
 		return hitBox;
 	}
 
-	private _createThumbnail(index: number): IThumbnail {
+	private _createThumbnail(reference: IImageReference): IThumbnail {
 		const store = new DisposableStore();
 		const image = dom.append(this._overlay!, dom.$<HTMLImageElement>('img.maut-claude-image-thumbnail'));
 		image.alt = '';
 		image.draggable = false;
 		const badge = dom.append(this._overlay!, dom.$('span.maut-claude-image-badge'));
-		badge.textContent = `#${index}`;
+		badge.textContent = reference.index === undefined ? '' : `#${reference.index}`;
 		store.add(toDisposable(() => {
 			image.remove();
 			badge.remove();
 		}));
 		// Width depends on the image's aspect ratio, known once it loads.
 		store.add(dom.addDisposableListener(image, 'load', () => this._scheduleUpdate()));
-		this._wireInteractions(store, image, () => index, true);
+		this._wireInteractions(store, image, () => reference, true);
 		const thumbnail: IThumbnail = { image, badge };
-		this._thumbnailStores.set(index, store);
-		this._thumbnails.set(index, thumbnail);
+		this._thumbnailStores.set(reference.key, store);
+		this._thumbnails.set(reference.key, thumbnail);
 		return thumbnail;
 	}
 
-	private _wireInteractions(store: DisposableStore, element: HTMLElement, getIndex: () => number, isThumbnail: boolean): void {
+	private _wireInteractions(store: DisposableStore, element: HTMLElement, getReference: () => IImageReference, isThumbnail: boolean): void {
 		// Keep pointer events away from xterm: in fullscreen TUI they would go to Claude, which
 		// repaints, and xterm's own link hover would stack on ours.
 		for (const type of [dom.EventType.MOUSE_DOWN, dom.EventType.MOUSE_UP, dom.EventType.MOUSE_MOVE, dom.EventType.CLICK, dom.EventType.DBLCLICK]) {
@@ -356,65 +378,102 @@ class TerminalClaudeImagesContribution extends Disposable implements ITerminalCo
 		store.add(dom.addDisposableListener(element, dom.EventType.CLICK, e => {
 			if (isThumbnail || this._isOpenModifierDown(e)) {
 				e.preventDefault();
-				this._open(getIndex());
+				this._open(getReference());
 			}
 		}));
 		store.add(this._hoverService.setupDelayedHover(element, () => ({
-			content: this._createHoverContent(getIndex()),
+			content: this._createHoverContent(getReference()),
 			additionalClasses: ['xterm-hover'],
 		})));
 	}
 
-	private _getImagePath(index: number): string | undefined {
-		const resolved = this._resolved.get(index);
+	private _getImagePath(reference: IImageReference): string | undefined {
+		const resolved = this._resolved.get(reference.key);
 		const age = resolved ? Date.now() - resolved.time : Infinity;
 		if (age > (resolved?.path ? resolvedTtl : unresolvedTtl)) {
-			this._resolve(index);
+			this._resolve(reference);
 		}
 		return resolved?.path;
 	}
 
-	private async _resolve(index: number): Promise<void> {
-		if (this._pending.has(index)) {
+	private async _resolve(reference: IImageReference): Promise<void> {
+		if (this._pending.has(reference.key)) {
 			return;
 		}
-		this._pending.add(index);
+		this._pending.add(reference.key);
 		let path: string | undefined;
 		try {
-			path = await this._commandService.executeCommand<string | undefined>(resolveImageCommandId, this._ctx.instance.processId, index);
+			path = reference.path !== undefined
+				? await this._resolveFilePath(reference.path)
+				: await this._commandService.executeCommand<string | undefined>(resolveImageCommandId, this._ctx.instance.processId, reference.index);
 		} catch {
-			// The extension isn't running (yet); treat as not found and retry later.
+			// The extension isn't running (yet), or the file can't be read; retry later.
 		} finally {
-			this._pending.delete(index);
+			this._pending.delete(reference.key);
 		}
-		const previous = this._resolved.get(index);
-		this._resolved.set(index, { path, time: Date.now() });
+		const previous = this._resolved.get(reference.key);
+		this._resolved.set(reference.key, { path, time: Date.now() });
 		if (previous?.path !== path) {
 			this._scheduleUpdate();
 		}
 	}
 
-	private _createHoverContent(index: number): HTMLElement | string {
-		const path = this._resolved.get(index)?.path;
+	/**
+	 * An image path as Claude printed it: absolute, `~/`-relative, or relative to the terminal's
+	 * current folder or a workspace folder. Only a file that exists counts.
+	 */
+	private async _resolveFilePath(printed: string): Promise<string | undefined> {
+		const candidates: URI[] = [];
+		if (printed.startsWith('/')) {
+			candidates.push(URI.file(printed));
+		} else if (printed.startsWith('~/')) {
+			candidates.push(URI.joinPath(await this._pathService.userHome({ preferLocal: true }), printed.slice(2)));
+		} else {
+			const cwd = await this._ctx.instance.getCwdResource();
+			if (cwd) {
+				candidates.push(URI.joinPath(cwd, printed));
+			}
+			for (const folder of this._workspaceContextService.getWorkspace().folders) {
+				candidates.push(URI.joinPath(folder.uri, printed));
+			}
+		}
+		for (const candidate of candidates) {
+			if (candidate.scheme === 'file' && await this._fileService.exists(candidate)) {
+				return candidate.fsPath;
+			}
+		}
+		return undefined;
+	}
+
+	private _createHoverContent(reference: IImageReference): HTMLElement | string {
+		const path = this._resolved.get(reference.key)?.path;
+		const modifier = this._getOpenModifierLabel();
 		if (!path) {
-			this._resolve(index);
-			return localize('maut.claudeImage.notSaved', "Image #{0} isn't saved yet. Claude Code stores it once the prompt is sent.", index);
+			this._resolve(reference);
+			return reference.index === undefined
+				? localize('maut.claudeImage.missingFile', "{0} wasn't found.", reference.path)
+				: localize('maut.claudeImage.notSaved', "Image #{0} isn't saved yet. Claude Code stores it once the prompt is sent.", reference.index);
 		}
 		const container = dom.$('.maut-claude-image-hover');
 		const image = dom.append(container, dom.$<HTMLImageElement>('img'));
 		image.src = FileAccess.uriToBrowserUri(URI.file(path)).toString(true);
-		image.alt = localize('maut.claudeImage.alt', "Image #{0}", index);
+		image.alt = reference.index === undefined ? basename(path) : localize('maut.claudeImage.alt', "Image #{0}", reference.index);
 		const caption = dom.append(container, dom.$('.maut-claude-image-caption'));
-		caption.textContent = isUnsentSnapshot(path)
-			? localize('maut.claudeImage.unsentCaption', "Image #{0} · not sent yet · {1} to open", index, this._getOpenModifierLabel())
-			: localize('maut.claudeImage.caption', "Image #{0} · {1} · {2} to open", index, basename(path), this._getOpenModifierLabel());
+		if (reference.index === undefined) {
+			caption.textContent = localize('maut.claudeImage.fileCaption', "{0} · {1} to open", basename(path), modifier);
+		} else if (isUnsentSnapshot(path)) {
+			caption.textContent = localize('maut.claudeImage.unsentCaption', "Image #{0} · not sent yet · {1} to open", reference.index, modifier);
+		} else {
+			caption.textContent = localize('maut.claudeImage.caption', "Image #{0} · {1} · {2} to open", reference.index, basename(path), modifier);
+		}
 		return container;
 	}
 
-	private _open(index: number): void {
-		const path = this._resolved.get(index)?.path;
+	private _open(reference: IImageReference): void {
+		const path = this._resolved.get(reference.key)?.path;
 		if (path) {
-			this._editorService.openEditor({ resource: URI.file(path), options: { pinned: true } });
+			// A preview (temporary) tab: the next image opened replaces it instead of piling up.
+			this._editorService.openEditor({ resource: URI.file(path), options: { pinned: false } });
 		}
 	}
 

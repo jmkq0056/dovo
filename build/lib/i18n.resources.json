@@ -243,6 +243,10 @@
 			"project": "vscode-workbench"
 		},
 		{
+			"name": "vs/workbench/contrib/mautcode",
+			"project": "vscode-workbench"
+		},
+		{
 			"name": "vs/workbench/contrib/terminalContrib",
 			"project": "vscode-workbench"
 		},

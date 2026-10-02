@@ -30,7 +30,7 @@ import { AccessibilitySignal, IAccessibilitySignalService } from '../../../../pl
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IContextKey, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
-import { CodeDataTransfers, containsDragType, getPathForFile } from '../../../../platform/dnd/browser/dnd.js';
+import { CodeDataTransfers, containsDragType } from '../../../../platform/dnd/browser/dnd.js';
 import { FileSystemProviderCapabilities, IFileService } from '../../../../platform/files/common/files.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { ServiceCollection } from '../../../../platform/instantiation/common/serviceCollection.js';
@@ -64,7 +64,7 @@ import { TerminalExtensionsRegistry } from './terminalExtensions.js';
 import { getColorClass, createColorStyleElement, getStandardColors } from './terminalIcon.js';
 import { TerminalProcessManager } from './terminalProcessManager.js';
 import { ITerminalStatusList, TerminalStatus, TerminalStatusList } from './terminalStatusList.js';
-import { getTerminalResourcesFromDragEvent, getTerminalUri } from './terminalUri.js';
+import { getFileResourcesFromDragEvent, getTerminalResourcesFromDragEvent, getTerminalUri } from './terminalUri.js';
 import { TerminalWidgetManager } from './widgets/widgetManager.js';
 import { LineDataEventAddon } from './xterm/lineDataEventAddon.js';
 import { XtermTerminal, getXtermScaledDimensions } from './xterm/xtermTerminal.js';
@@ -1260,20 +1260,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		const store = new DisposableStore();
 		const dndController = store.add(this._scopedInstantiationService.createInstance(TerminalInstanceDragAndDropController, container));
 		store.add(dndController.onDropTerminal(e => this._onRequestAddInstanceToGroup.fire(e)));
-		store.add(dndController.onDropFile(async path => {
-			this.focus();
-			// Maut code: when the active terminal is a Maut Claude session, drag-drop a file
-			// inserts an `@workspace/relative/path` reference (matches Claude Code's @-mention
-			// convention) instead of the shell-quoted absolute path.
-			if (this.title.includes('MAUT') || this.title.startsWith('Maut')) {
-				const uri = path instanceof URI ? path : URI.file(String(path));
-				const folder = this._workspaceContextService.getWorkspaceFolder(uri);
-				const rel = folder ? uri.fsPath.substring(folder.uri.fsPath.length).replace(/^\/+/, '') : uri.fsPath;
-				await this.sendText(`@${rel} `, false);
-				return;
-			}
-			await this.sendPath(path, false);
-		}));
+		store.add(dndController.onDropFile(paths => this.insertDroppedFiles(paths)));
 		// Maut code: editor text-selection drop → `@path:start-end`.
 		store.add(dndController.onDropText(async droppedText => {
 			if (!this.title.includes('MAUT') && !this.title.startsWith('Maut')) {
@@ -1302,6 +1289,24 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		}));
 		store.add(new dom.DragAndDropObserver(container, dndController));
 		this._dndObserver.value = store;
+	}
+
+	async insertDroppedFiles(paths: URI[]): Promise<void> {
+		this.focus();
+		// Maut code: when the active terminal is a Maut Claude session, drag-drop files
+		// insert `@workspace/relative/path` references (matches Claude Code's @-mention
+		// convention) instead of shell-quoted absolute paths.
+		if (this.title.includes('MAUT') || this.title.startsWith('Maut')) {
+			const mentions = paths.map(uri => {
+				const folder = this._workspaceContextService.getWorkspaceFolder(uri);
+				const path = folder ? uri.fsPath.substring(folder.uri.fsPath.length).replace(/^[\\/]+/, '') || '.' : uri.fsPath;
+				return /\s/.test(path) ? `@"${path}"` : `@${path}`;
+			});
+			await this.sendText(`${mentions.join(' ')} `, false);
+			return;
+		}
+		const prepared = await Promise.all(paths.map(path => this.preparePathForShell(path)));
+		await this.sendText(prepared.join(' '), false);
 	}
 
 	hasSelection(): boolean {
@@ -1432,6 +1437,11 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 	async sendSignal(signal: string): Promise<void> {
 		this._logService.debug('sending signal (vscode)', signal);
 		await this._processManager.sendSignal(signal);
+	}
+
+	refreshFont(): void {
+		this._layoutSettingsChanged = true;
+		this._resize();
 	}
 
 	async sendPath(originalPath: string | URI, shouldExecute: boolean): Promise<void> {
@@ -2565,8 +2575,9 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 class TerminalInstanceDragAndDropController extends Disposable implements dom.IDragAndDropObserverCallbacks {
 	private _dropOverlay?: HTMLElement;
 
-	private readonly _onDropFile = this._register(new Emitter<string | URI>());
-	get onDropFile(): Event<string | URI> { return this._onDropFile.event; }
+	// Maut code: every dropped file, not just the first, so several can be dropped at once.
+	private readonly _onDropFile = this._register(new Emitter<URI[]>());
+	get onDropFile(): Event<URI[]> { return this._onDropFile.event; }
 	private readonly _onDropTerminal = this._register(new Emitter<IRequestAddInstanceToGroupEvent>());
 	get onDropTerminal(): Event<IRequestAddInstanceToGroupEvent> { return this._onDropTerminal.event; }
 	// Maut code: fires when a drag drops plain text (e.g. an editor selection) but no file URI.
@@ -2655,24 +2666,8 @@ class TerminalInstanceDragAndDropController extends Disposable implements dom.ID
 			return;
 		}
 
-		// Check if files were dragged from the tree explorer
-		let path: URI | undefined;
-		const rawResources = e.dataTransfer.getData(DataTransfers.RESOURCES);
-		if (rawResources) {
-			path = URI.parse(JSON.parse(rawResources)[0]);
-		}
-
-		const rawCodeFiles = e.dataTransfer.getData(CodeDataTransfers.FILES);
-		if (!path && rawCodeFiles) {
-			path = URI.file(JSON.parse(rawCodeFiles)[0]);
-		}
-
-		if (!path && e.dataTransfer.files.length > 0 && getPathForFile(e.dataTransfer.files[0])) {
-			// Check if the file was dragged from the filesystem
-			path = URI.file(getPathForFile(e.dataTransfer.files[0])!);
-		}
-
-		if (!path) {
+		const paths = getFileResourcesFromDragEvent(e);
+		if (!paths.length) {
 			// Maut code: pass the plain-text payload up so callers (TerminalInstance) can
 			// substitute an editor `@path:line-line` reference for Maut Claude terminals.
 			const text = e.dataTransfer.getData('text/plain');
@@ -2682,7 +2677,7 @@ class TerminalInstanceDragAndDropController extends Disposable implements dom.ID
 			return;
 		}
 
-		this._onDropFile.fire(path);
+		this._onDropFile.fire(paths);
 	}
 
 	private _getDropSide(e: DragEvent): 'before' | 'after' {

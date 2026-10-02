@@ -34,9 +34,13 @@ const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
 const MEDIA_TYPE_EXTS: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' };
 const IMAGE_TOKEN = /\[Image #(?<index>\d+)\]/g;
 
-interface ISessionRecord {
+export interface ISessionRecord {
 	readonly pid: number;
 	readonly sessionId: string;
+	/** `busy` while Claude works, `idle` when it waits for you. */
+	readonly status?: string;
+	/** Folder Claude was started in. */
+	readonly cwd?: string;
 	readonly updatedAt: number;
 }
 
@@ -300,7 +304,7 @@ export class ClaudeImageResolver {
 	}
 }
 
-function readSessionRecords(): ISessionRecord[] {
+export function readSessionRecords(): ISessionRecord[] {
 	const records: ISessionRecord[] = [];
 	let names: string[];
 	try {
@@ -315,7 +319,7 @@ function readSessionRecords(): ISessionRecord[] {
 		try {
 			const record = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, name), 'utf8'));
 			if (typeof record.pid === 'number' && typeof record.sessionId === 'string') {
-				records.push({ pid: record.pid, sessionId: record.sessionId, updatedAt: record.updatedAt ?? record.startedAt ?? 0 });
+				records.push({ pid: record.pid, sessionId: record.sessionId, status: record.status, cwd: record.cwd, updatedAt: record.updatedAt ?? record.startedAt ?? 0 });
 			}
 		} catch { /* skip */ }
 	}
@@ -342,7 +346,7 @@ function readParentPids(): Promise<Map<number, number>> {
 	});
 }
 
-async function findSessionId(shellPid: number | undefined): Promise<string | undefined> {
+export async function findSessionId(shellPid: number | undefined): Promise<string | undefined> {
 	const records = readSessionRecords();
 	if (!records.length) {
 		return undefined;
@@ -360,11 +364,12 @@ async function findSessionId(shellPid: number | undefined): Promise<string | und
 			}
 		}
 	}
-	// Not under this terminal's shell (e.g. ssh or tmux): fall back to the most recently active session.
-	return [...alive].sort((a, b) => b.updatedAt - a.updatedAt)[0]?.sessionId;
+	// Only ever the session running under this terminal: guessing another one would show a
+	// different project's conversation and images.
+	return undefined;
 }
 
-function findTranscript(sessionId: string): string | undefined {
+export function findTranscript(sessionId: string): string | undefined {
 	let projects: string[];
 	try {
 		projects = fs.readdirSync(PROJECTS_DIR);

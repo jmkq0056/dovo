@@ -379,6 +379,11 @@ export class EditorsObserver extends Disposable {
 				return false; // never sticky editors
 			}
 
+			// Maut code: never terminals; closing one ends whatever runs in it (e.g. a Claude session).
+			if (editor.typeId === 'workbench.editors.terminal') {
+				return false;
+			}
+
 			return true;
 		});
 

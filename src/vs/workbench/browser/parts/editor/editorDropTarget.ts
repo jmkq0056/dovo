@@ -643,7 +643,12 @@ export class EditorDropTarget extends Themable {
 			// Create overlay over target
 			if (!this.overlay) {
 				const targetGroupView = this.findTargetGroupView(target);
-				if (targetGroupView) {
+				// Maut code: files dropped on a terminal editor go into the terminal (as paths),
+				// not into a new editor; only dragged tabs and groups still split or move here.
+				const isFileDropOnTerminal = targetGroupView?.activeEditor?.typeId === 'workbench.editors.terminal'
+					&& !this.editorTransfer.hasData(DraggedEditorIdentifier.prototype)
+					&& !this.groupTransfer.hasData(DraggedEditorGroupIdentifier.prototype);
+				if (targetGroupView && !isFileDropOnTerminal) {
 					this._overlay = this.instantiationService.createInstance(DropOverlay, targetGroupView);
 				}
 			}

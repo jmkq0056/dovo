@@ -676,8 +676,35 @@ export class XtermTerminal extends Disposable implements IXtermTerminal, IDetach
 		this._searchAddon?.clearActiveDecoration();
 	}
 
+	private _fontOverride: { readonly fontSize?: number; readonly lineHeight?: number } | undefined;
+
+	setFontOverride(override: { readonly fontSize?: number; readonly lineHeight?: number } | undefined): void {
+		this._fontOverride = override;
+	}
+
 	getFont(): ITerminalFont {
-		return this._terminalConfigurationService.getFont(dom.getWindow(this.raw.element), this._core);
+		const font = this._terminalConfigurationService.getFont(dom.getWindow(this.raw.element), this._core);
+		const override = this._fontOverride;
+		if (!override) {
+			return font;
+		}
+		// Maut code: per-terminal font. Character metrics scale with the font size (monospace),
+		// measured from what xterm last rendered so the grid stays exact before and after the switch.
+		const fontSize = override.fontSize ?? font.fontSize;
+		const lineHeight = override.lineHeight ?? font.lineHeight;
+		const renderedSize = this.raw.options.fontSize || font.fontSize;
+		const renderedLineHeight = this.raw.options.lineHeight || font.lineHeight;
+		const cell = this._core._renderService?._renderer?.value ? this._core._renderService.dimensions.css.cell : undefined;
+		const baseWidth = cell?.width ? cell.width - Math.round(font.letterSpacing) / dom.getWindow(this.raw.element).devicePixelRatio : font.charWidth;
+		const baseHeight = cell?.height ? cell.height / renderedLineHeight : font.charHeight;
+		const scale = fontSize / (cell?.width ? renderedSize : font.fontSize);
+		return {
+			...font,
+			fontSize,
+			lineHeight,
+			charWidth: baseWidth === undefined ? undefined : baseWidth * scale,
+			charHeight: baseHeight === undefined ? undefined : baseHeight * scale,
+		};
 	}
 
 	getLongestViewportWrappedLineLength(): number {

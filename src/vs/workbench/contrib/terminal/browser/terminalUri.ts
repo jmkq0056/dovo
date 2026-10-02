@@ -3,7 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { DataTransfers } from '../../../../base/browser/dnd.js';
 import { Schemas } from '../../../../base/common/network.js';
+import { CodeDataTransfers, getPathForFile } from '../../../../platform/dnd/browser/dnd.js';
 import { URI } from '../../../../base/common/uri.js';
 import { ITerminalInstance, TerminalDataTransfers } from './terminal.js';
 
@@ -42,6 +44,35 @@ export interface ITerminalIdentifier {
 
 export interface IPartialDragEvent {
 	dataTransfer: Pick<DataTransfer, 'getData'> | null;
+}
+
+/**
+ * Every file and folder in a drag: from the explorer or editor tabs, or from the OS file manager.
+ */
+export function getFileResourcesFromDragEvent(event: DragEvent): URI[] {
+	const dataTransfer = event.dataTransfer;
+	if (!dataTransfer) {
+		return [];
+	}
+	// The explorer's file list holds every selected item, folders included; its resource list
+	// leaves folders out, so a mixed selection (a folder and a file, files from several folders)
+	// must be read from the former.
+	const rawCodeFiles = dataTransfer.getData(CodeDataTransfers.FILES);
+	if (rawCodeFiles) {
+		return (JSON.parse(rawCodeFiles) as string[]).map(file => URI.file(file));
+	}
+	const rawResources = dataTransfer.getData(DataTransfers.RESOURCES);
+	if (rawResources) {
+		return (JSON.parse(rawResources) as string[]).map(resource => URI.parse(resource));
+	}
+	const paths: URI[] = [];
+	for (const file of dataTransfer.files) {
+		const filePath = getPathForFile(file);
+		if (filePath) {
+			paths.push(URI.file(filePath));
+		}
+	}
+	return paths;
 }
 
 export function getTerminalResourcesFromDragEvent(event: IPartialDragEvent): URI[] | undefined {

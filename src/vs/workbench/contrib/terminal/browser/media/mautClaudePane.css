@@ -1,0 +1,414 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* Maut Claude pane: header + Reader around a terminal editor running Claude Code. */
+
+.monaco-workbench .maut-claude-host {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	--mcp-accent: var(--vscode-button-background);
+	--mcp-surface: color-mix(in srgb, var(--vscode-editor-background) 92%, var(--vscode-foreground) 8%);
+	--mcp-surface-2: color-mix(in srgb, var(--vscode-editor-background) 86%, var(--vscode-foreground) 14%);
+	--mcp-line: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	--mcp-line-strong: color-mix(in srgb, var(--vscode-foreground) 18%, transparent);
+	--mcp-muted: color-mix(in srgb, var(--vscode-foreground) 68%, transparent);
+	--mcp-subtle: color-mix(in srgb, var(--vscode-foreground) 50%, transparent);
+	--mcp-ok: var(--vscode-terminal-ansiGreen, #74d394);
+	--mcp-live: var(--vscode-terminal-ansiYellow, #e2b25d);
+	/* Chat typography, independent of the workbench font (which may be monospace). */
+	--mcp-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+	--mcp-mono: var(--vscode-editor-font-family, 'JetBrains Mono', Menlo, monospace);
+}
+
+.monaco-workbench .maut-claude-host > .mcp-header,
+.monaco-workbench .maut-claude-host > .mcp-reader {
+	display: none;
+}
+
+.monaco-workbench .maut-claude-host.maut-claude-active > .mcp-header {
+	display: flex;
+}
+
+.monaco-workbench .maut-claude-host.maut-claude-reader > .mcp-reader {
+	display: block;
+}
+
+/* ---------- Header ---------- */
+
+.monaco-workbench .mcp-header {
+	flex: none;
+	height: 46px;
+	box-sizing: border-box;
+	align-items: center;
+	gap: 10px;
+	padding: 0 12px 0 14px;
+	border-bottom: 1px solid var(--mcp-line);
+	font-family: var(--mcp-sans);
+	font-size: 12.5px;
+	color: var(--vscode-foreground);
+	user-select: none;
+}
+
+.monaco-workbench .mcp-avatar {
+	flex: none;
+	width: 24px;
+	height: 24px;
+	border-radius: 7px;
+	background: #16161d url("data:image/png;base64,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") center / cover no-repeat;
+	box-shadow: 0 0 0 1px var(--mcp-line-strong);
+}
+
+.monaco-workbench .mcp-name { font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+.monaco-workbench .mcp-meta { color: var(--mcp-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.monaco-workbench .mcp-grow { flex: 1; }
+
+.monaco-workbench .mcp-status { display: inline-flex; align-items: center; gap: 7px; color: var(--mcp-muted); white-space: nowrap; }
+.monaco-workbench .mcp-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--mcp-subtle); }
+.monaco-workbench .mcp-status.working i { background: var(--mcp-live); animation: mcp-breathe 1.6s ease-in-out infinite; }
+.monaco-workbench .mcp-status.idle i { background: var(--mcp-ok); }
+@keyframes mcp-breathe { 50% { opacity: .3; } }
+
+.monaco-workbench .mcp-seg {
+	display: inline-flex;
+	padding: 2px;
+	border-radius: 8px;
+	background: var(--mcp-surface);
+	border: 1px solid var(--mcp-line);
+}
+
+.monaco-workbench .mcp-seg-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	border: 0;
+	background: none;
+	color: var(--mcp-muted);
+	font: inherit;
+	font-weight: 550;
+	font-size: 12px;
+	padding: 4px 11px;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.monaco-workbench .mcp-seg-button:hover { color: var(--vscode-foreground); }
+.monaco-workbench .mcp-seg-button.on { background: var(--mcp-surface-2); color: var(--vscode-foreground); }
+.monaco-workbench .mcp-seg-button kbd { font-family: var(--mcp-mono); font-size: 10.5px; color: var(--mcp-subtle); }
+.monaco-workbench .mcp-seg-button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+
+/* ---------- Reader ---------- */
+
+.monaco-workbench .mcp-reader {
+	flex: none;
+	overflow-y: auto;
+	border-bottom: 1px solid var(--mcp-line);
+	font-family: var(--mcp-sans);
+	color: var(--vscode-foreground);
+	-webkit-font-smoothing: antialiased;
+}
+
+.monaco-workbench .mcp-column { max-width: 740px; margin: 0 auto; padding: 26px 26px 34px; }
+.monaco-workbench .mcp-empty { color: var(--mcp-subtle); text-align: center; padding: 40px 0; }
+.monaco-workbench .mcp-turn { margin-bottom: 26px; }
+
+.monaco-workbench .mcp-user { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.monaco-workbench .mcp-bubble {
+	max-width: 85%;
+	background: var(--mcp-surface-2);
+	border: 1px solid var(--mcp-line);
+	border-radius: 18px 18px 6px 18px;
+	padding: 10px 15px;
+	font-size: 14.5px;
+	line-height: 1.55;
+}
+.monaco-workbench .mcp-prompt { white-space: pre-wrap; word-break: break-word; }
+.monaco-workbench .mcp-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.monaco-workbench .mcp-chip {
+	display: inline-flex; align-items: center; gap: 6px;
+	font-family: var(--mcp-mono); font-size: 11.5px;
+	background: var(--mcp-surface); border: 1px solid var(--mcp-line); border-radius: 7px; padding: 2px 8px 2px 3px;
+}
+.monaco-workbench .mcp-chip[data-file] { cursor: pointer; }
+.monaco-workbench .mcp-chip img { height: 22px; max-width: 40px; object-fit: cover; border-radius: 4px; }
+
+.monaco-workbench .mcp-reply { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 14px; }
+.monaco-workbench .mcp-body { min-width: 0; font-size: 14.5px; line-height: 1.7; }
+.monaco-workbench .mcp-prose { margin: 0 0 10px; }
+.monaco-workbench .mcp-prose p { margin: 0 0 10px; }
+.monaco-workbench .mcp-prose p:last-child { margin-bottom: 0; }
+.monaco-workbench .mcp-prose code {
+	font-family: var(--mcp-mono); font-size: 0.88em;
+	background: var(--mcp-surface); border: 1px solid var(--mcp-line); border-radius: 5px; padding: 1px 5px;
+}
+.monaco-workbench .mcp-prose pre { background: var(--mcp-surface); border: 1px solid var(--mcp-line); border-radius: 10px; padding: 10px 12px; overflow-x: auto; }
+.monaco-workbench .mcp-prose pre code { background: none; border: 0; padding: 0; }
+.monaco-workbench .mcp-prose table { border-collapse: collapse; margin: 6px 0 12px; font-size: 13.5px; }
+.monaco-workbench .mcp-prose th, .monaco-workbench .mcp-prose td { border: 1px solid var(--mcp-line-strong); padding: 4px 10px; text-align: left; }
+.monaco-workbench .mcp-prose ul, .monaco-workbench .mcp-prose ol { margin: 0 0 10px; padding-left: 22px; }
+
+.monaco-workbench .mcp-steps { border: 1px solid var(--mcp-line); border-radius: 12px; margin: 4px 0 12px; background: var(--mcp-surface); overflow: hidden; }
+.monaco-workbench .mcp-steps-head {
+	display: flex; align-items: center; gap: 10px; width: 100%;
+	border: 0; background: none; color: var(--mcp-muted); font: inherit; font-size: 13px;
+	padding: 8px 12px; cursor: pointer; text-align: left;
+}
+.monaco-workbench .mcp-steps-head:hover { color: var(--vscode-foreground); }
+.monaco-workbench .mcp-chevron { display: inline-block; transition: transform .15s; font-size: 15px; line-height: 1; }
+.monaco-workbench .mcp-steps.open .mcp-chevron { transform: rotate(90deg); }
+.monaco-workbench .mcp-count { margin-left: auto; color: var(--mcp-subtle); font-size: 12px; }
+.monaco-workbench .mcp-steps-list { display: none; border-top: 1px solid var(--mcp-line); padding: 6px 0; }
+.monaco-workbench .mcp-steps.open .mcp-steps-list { display: block; }
+.monaco-workbench .mcp-step { display: flex; gap: 10px; padding: 3px 14px; font-size: 13px; color: var(--mcp-muted); min-width: 0; }
+.monaco-workbench .mcp-verb { flex: none; width: 70px; color: var(--mcp-subtle); }
+.monaco-workbench .mcp-target { font-family: var(--mcp-mono); font-size: 12.5px; color: var(--vscode-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.monaco-workbench .mcp-file { cursor: pointer; }
+.monaco-workbench .mcp-file:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.monaco-workbench .mcp-edit { border: 1px solid var(--mcp-line); border-radius: 12px; margin: 4px 0 12px; background: var(--mcp-surface); overflow: hidden; }
+.monaco-workbench .mcp-edit-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 12px; border-bottom: 1px solid var(--mcp-line); }
+.monaco-workbench .mcp-edit-file { flex: 1; min-width: 0; font-family: var(--mcp-mono); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.monaco-workbench .mcp-add { color: var(--mcp-ok); font-family: var(--mcp-mono); font-size: 12px; }
+.monaco-workbench .mcp-del { color: var(--vscode-terminal-ansiRed, #ee97a9); font-family: var(--mcp-mono); font-size: 12px; }
+.monaco-workbench .mcp-mini {
+	border: 1px solid var(--mcp-line-strong); background: none; color: var(--vscode-foreground);
+	border-radius: 7px; padding: 2px 9px; font: inherit; font-size: 12px; font-weight: 550; cursor: pointer;
+}
+.monaco-workbench .mcp-mini:hover { border-color: var(--vscode-focusBorder); }
+.monaco-workbench .mcp-diff { font-family: var(--mcp-mono); font-size: 12.5px; line-height: 1.65; padding: 6px 0; overflow-x: auto; }
+.monaco-workbench .mcp-diff div { padding: 0 12px; white-space: pre; }
+.monaco-workbench .mcp-diff .a { background: color-mix(in srgb, var(--mcp-ok) 12%, transparent); }
+.monaco-workbench .mcp-diff .d { background: color-mix(in srgb, var(--vscode-terminal-ansiRed, #ee97a9) 12%, transparent); }
+
+.monaco-workbench .mcp-foot { color: var(--mcp-subtle); font-size: 12px; margin-top: 6px; }
+.monaco-workbench .mcp-working {
+	font-size: 14px; margin-top: 4px;
+	background: linear-gradient(90deg, var(--mcp-subtle) 0%, var(--vscode-foreground) 50%, var(--mcp-subtle) 100%);
+	background-size: 200% 100%;
+	-webkit-background-clip: text; background-clip: text; color: transparent;
+	animation: mcp-shimmer 1.8s linear infinite;
+}
+@keyframes mcp-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+	.monaco-workbench .mcp-working { animation: none; color: var(--mcp-muted); background: none; }
+	.monaco-workbench .mcp-status.working i { animation: none; }
+	.monaco-workbench .mcp-reader { scroll-behavior: auto; }
+}
+
+/* The space around the centered terminal column matches the terminal itself. */
+.monaco-workbench .maut-claude-host.maut-claude-active {
+	background: var(--vscode-terminal-background, var(--vscode-panel-background, var(--vscode-editor-background)));
+}
+
+/* ---------- Live composer (the real Claude terminal under the Reader) ---------- */
+
+.monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer {
+	flex: none;
+	box-sizing: border-box;
+	border: 1px solid var(--mcp-line-strong);
+	border-radius: 14px;
+	background: var(--vscode-terminal-background, var(--mcp-surface));
+	box-shadow: 0 0 0 4px color-mix(in srgb, var(--mcp-accent) 0%, transparent);
+	transition: border-color .15s, box-shadow .15s;
+	overflow: hidden;
+}
+
+.monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer:focus-within {
+	border-color: color-mix(in srgb, var(--mcp-accent) 55%, transparent);
+	box-shadow: 0 0 0 4px color-mix(in srgb, var(--mcp-accent) 14%, transparent);
+}
+
+.monaco-workbench .mcp-live-note {
+	display: none;
+	flex: none;
+	box-sizing: border-box;
+	height: 28px;
+	margin: 0 auto;
+	align-items: center;
+	gap: 6px;
+	padding: 0 4px;
+	font-family: var(--mcp-sans);
+	font-size: 11.5px;
+	color: var(--mcp-subtle);
+}
+
+.monaco-workbench .maut-claude-host.maut-claude-reader > .mcp-live-note { display: flex; }
+.monaco-workbench .mcp-live-note i { width: 6px; height: 6px; border-radius: 50%; background: var(--mcp-ok); }
+
+/* ---------- Context button ---------- */
+
+.monaco-workbench .mcp-context {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 6px;
+	border: 1px solid var(--mcp-line);
+	background: none;
+	border-radius: 8px;
+	padding: 4px 10px;
+	color: var(--mcp-muted);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.monaco-workbench .mcp-context { cursor: default; }
+.monaco-workbench .mcp-context b { color: var(--vscode-foreground); font-weight: 600; }
+.monaco-workbench .mcp-context span { color: var(--mcp-subtle); font-size: 11.5px; }
+
+
+/* ---------- Prompt rail ---------- */
+
+.monaco-workbench .maut-claude-host { position: relative; }
+.monaco-workbench .mcp-rail { display: none; position: absolute; right: 4px; width: 12px; pointer-events: none; }
+.monaco-workbench .maut-claude-host.maut-claude-reader > .mcp-rail { display: block; }
+.monaco-workbench .mcp-rail::before { content: ''; position: absolute; left: 5px; top: 0; bottom: 0; width: 2px; border-radius: 1px; background: var(--mcp-line); }
+.monaco-workbench .mcp-rail-prompt {
+	position: absolute; left: 1px; width: 10px; height: 10px; margin-top: -5px;
+	padding: 0; border: 2px solid var(--vscode-editor-background); border-radius: 50%;
+	background: color-mix(in srgb, var(--mcp-accent) 70%, transparent);
+	cursor: pointer; pointer-events: auto;
+}
+.monaco-workbench .mcp-rail-prompt:hover, .monaco-workbench .mcp-rail-prompt.current { background: var(--mcp-accent); transform: scale(1.25); }
+.monaco-workbench .mcp-rail-edit { position: absolute; left: 3px; width: 6px; height: 3px; border-radius: 2px; background: var(--mcp-ok); opacity: .7; }
+.monaco-workbench .mcp-user { scroll-margin-top: 16px; }
+.monaco-workbench .mcp-user .mcp-bubble { transition: box-shadow .4s; }
+.monaco-workbench .mcp-user.mcp-flash .mcp-bubble { box-shadow: 0 0 0 2px var(--mcp-accent); }
+.monaco-workbench .mcp-reader:focus { outline: none; }
+/* Rail marks are placed from offsets inside the Reader. */
+.monaco-workbench .mcp-reader { position: relative; }
+
+/* Dropping files on Claude: they go to the prompt as paths. */
+.monaco-workbench .maut-claude-host.mcp-drop-target > .mcp-reader {
+	outline: 2px dashed var(--vscode-focusBorder);
+	outline-offset: -6px;
+}
+
+/* Images Claude read, under the steps that read them. */
+.monaco-workbench .mcp-steps-wrap > .mcp-steps { margin-bottom: 8px; }
+.monaco-workbench .mcp-read-images { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.monaco-workbench .mcp-read-image {
+	height: 72px; max-width: 160px; object-fit: cover;
+	border-radius: 8px; border: 1px solid var(--mcp-line-strong);
+	cursor: pointer; background: var(--mcp-surface);
+	transition: border-color .15s, transform .15s;
+}
+.monaco-workbench .mcp-read-image:hover { border-color: var(--vscode-focusBorder); transform: translateY(-1px); }
+.monaco-workbench .maut-claude-image-hover img { display: block; max-width: 480px; max-height: 360px; border-radius: 3px; }
+.monaco-workbench .maut-claude-image-hover .maut-claude-image-caption { margin-top: 6px; opacity: .8; }
+
+/* The composer shows the bottom of Claude's full-height screen: anchor the terminal to the bottom
+	of the frame and let the rest (the conversation, already in the Reader) sit above, clipped. */
+.monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer { position: relative; }
+.monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer > .terminal-wrapper {
+	position: absolute;
+	left: 14px;
+	right: 14px;
+	bottom: 8px;
+}
+
+/* Claude's live state from its screen: the block it's on, your queued messages, its spinner. */
+.monaco-workbench .mcp-live { display: none; margin: -4px 0 18px 36px; }
+.monaco-workbench .mcp-live.visible { display: block; }
+.monaco-workbench .mcp-live-block {
+	margin-bottom: 10px;
+	padding: 10px 14px;
+	border-left: 2px solid var(--mcp-accent);
+	border-radius: 0 8px 8px 0;
+	background: var(--mcp-surface-2);
+	font-family: var(--mcp-mono);
+	font-size: 12.5px;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	max-height: 360px;
+	overflow-y: auto;
+}
+.monaco-workbench .mcp-live .mcp-user.mcp-queued { margin: 0 0 10px; }
+.monaco-workbench .mcp-user.mcp-queued .mcp-bubble { opacity: .7; border-style: dashed; }
+.monaco-workbench .mcp-queued-note { margin-top: 4px; font-size: 11.5px; color: var(--mcp-muted); }
+.monaco-workbench .mcp-live-status {
+	display: flex; align-items: center; gap: 8px;
+	font: 12.5px var(--mcp-mono);
+	color: var(--mcp-muted);
+}
+.monaco-workbench .mcp-live-status > i {
+	width: 7px; height: 7px; border-radius: 50%; flex: none;
+	background: var(--mcp-accent);
+	animation: mcp-pulse 1.4s ease-in-out infinite;
+}
+@keyframes mcp-pulse { 50% { opacity: .3; } }
+.monaco-workbench .mcp-column:has(.mcp-live.visible) .mcp-working { display: none; }
+
+/* What the latest step was, beside the step count. */
+.monaco-workbench .mcp-steps-latest {
+	flex: 1; min-width: 0;
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+	color: var(--mcp-muted);
+}
+
+/* Files changed in a turn: open each, or see its diff. */
+.monaco-workbench .mcp-changed {
+	margin: 4px 0 12px;
+	padding: 8px 12px;
+	border: 1px solid var(--mcp-line);
+	border-radius: 10px;
+	background: var(--mcp-surface);
+	font-size: 12.5px;
+}
+.monaco-workbench .mcp-changed-head { margin-bottom: 4px; color: var(--mcp-muted); font-weight: 600; }
+.monaco-workbench .mcp-changed-row { display: flex; align-items: center; gap: 8px; min-height: 24px; }
+.monaco-workbench .mcp-changed-file {
+	min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+	padding: 0; border: none; background: none; cursor: pointer;
+	font: 12.5px var(--mcp-mono); color: var(--vscode-textLink-foreground); text-align: left;
+}
+.monaco-workbench .mcp-changed-file:hover { text-decoration: underline; }
+.monaco-workbench .mcp-changed-new { font-size: 11px; color: var(--mcp-ok); }
+.monaco-workbench .mcp-changed-diff {
+	margin-left: auto; padding: 1px 8px; border-radius: 5px; cursor: pointer;
+	border: 1px solid var(--mcp-line); background: none; color: var(--mcp-muted); font: 11.5px var(--mcp-sans);
+}
+.monaco-workbench .mcp-changed-diff:hover { color: var(--vscode-foreground); border-color: var(--mcp-line-strong); }
+.monaco-workbench .mcp-changed-more { color: var(--mcp-muted); font-size: 11.5px; margin-top: 2px; }
+
+/* A message you sent mid-turn, inside Claude's reply. */
+.monaco-workbench .mcp-user.mcp-midturn { margin: 6px 0 14px; }
+
+/* You pressed Esc. */
+.monaco-workbench .mcp-interrupted {
+	display: flex; align-items: center; gap: 8px;
+	margin: 8px 0 4px;
+	padding: 8px 12px;
+	border-radius: 8px;
+	border: 1px solid color-mix(in srgb, var(--vscode-errorForeground) 45%, transparent);
+	background: color-mix(in srgb, var(--vscode-errorForeground) 10%, transparent);
+	color: var(--vscode-errorForeground);
+	font-size: 13px; font-weight: 600;
+}
+.monaco-workbench .mcp-interrupted > i {
+	width: 8px; height: 8px; border-radius: 2px; flex: none;
+	background: var(--vscode-errorForeground);
+}
+
+/* Back to the newest message after scrolling up to read. */
+.monaco-workbench .mcp-jump-latest {
+	display: none;
+	position: absolute;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 5;
+	padding: 6px 14px;
+	border-radius: 999px;
+	border: 1px solid var(--mcp-line);
+	background: var(--mcp-surface-2);
+	color: var(--vscode-foreground);
+	font: 600 12px var(--mcp-sans);
+	cursor: pointer;
+	box-shadow: 0 4px 14px rgba(0, 0, 0, .3);
+}
+.monaco-workbench .maut-claude-reader > .mcp-jump-latest.visible { display: block; }
+.monaco-workbench .mcp-jump-latest:hover { background: var(--vscode-list-hoverBackground, var(--mcp-surface-2)); }

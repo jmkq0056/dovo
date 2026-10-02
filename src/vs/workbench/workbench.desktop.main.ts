@@ -22,6 +22,9 @@ import './workbench.common.main.js';
 import './electron-browser/desktop.main.js';
 import './electron-browser/desktop.contribution.js';
 
+// Maut code: project dock (switch between project windows, Claude status per project)
+import './contrib/mautcode/electron-browser/mautProjectDock.js';
+
 //#endregion
 
 

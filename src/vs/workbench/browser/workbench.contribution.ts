@@ -439,18 +439,19 @@ const registry = Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Con
 			},
 			'workbench.editor.limit.enabled': {
 				'type': 'boolean',
-				'default': false,
+				// Maut code: on by default so tabs don't pile up; pinned, unsaved and terminal tabs never close.
+				'default': true,
 				'description': localize('limitEditorsEnablement', "Controls if the number of opened editors should be limited or not. When enabled, less recently used editors will close to make space for newly opening editors.")
 			},
 			'workbench.editor.limit.value': {
 				'type': 'number',
-				'default': 10,
+				'default': 8,
 				'exclusiveMinimum': 0,
 				'markdownDescription': localize('limitEditorsMaximum', "Controls the maximum number of opened editors. Use the {0} setting to control this limit per editor group or across all groups.", '`#workbench.editor.limit.perEditorGroup#`')
 			},
 			'workbench.editor.limit.excludeDirty': {
 				'type': 'boolean',
-				'default': false,
+				'default': true,
 				'description': localize('limitEditorsExcludeDirty', "Controls if the maximum number of opened editors should exclude dirty editors for counting towards the configured limit.")
 			},
 			'workbench.editor.limit.perEditorGroup': {

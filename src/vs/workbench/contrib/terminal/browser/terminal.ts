@@ -1248,6 +1248,14 @@ export interface ITerminalInstance extends IBaseTerminalInstance {
 	 */
 	setVisible(visible: boolean): void;
 
+	/** Maut code: re-apply font settings and re-measure the grid, e.g. after a font override. */
+	refreshFont(): void;
+
+	/**
+	 * Insert dropped files at the prompt: `@path` mentions for Claude, shell-ready paths otherwise.
+	 */
+	insertDroppedFiles(paths: URI[]): Promise<void>;
+
 	/**
 	 * Immediately kills the terminal's current pty process and launches a new one to replace it.
 	 *
@@ -1430,6 +1438,13 @@ export interface IXtermTerminal extends IDisposable {
 	 * Gets the font metrics of this xterm.js instance.
 	 */
 	getFont(): ITerminalFont;
+
+	/**
+	 * Maut code: render this terminal with a different font size / line height than the
+	 * terminal settings, e.g. while Claude Code runs in it. Undefined goes back to the settings.
+	 * Call {@link ITerminalInstance.refreshFont} afterwards so the grid is re-measured.
+	 */
+	setFontOverride(override: { readonly fontSize?: number; readonly lineHeight?: number } | undefined): void;
 
 	/**
 	 * Gets the content between two markers as VT sequences.

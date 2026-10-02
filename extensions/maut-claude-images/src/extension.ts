@@ -9,8 +9,11 @@
  *  `[Image #N]` references for the workbench's terminal image previews.
  */
 
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { ClaudeImageResolver } from './claudeImageResolver';
+import { ClaudeImageResolver, findSessionId, readSessionRecords } from './claudeImageResolver';
+import { ClaudeSessionReader } from './claudeSession';
 
 // Use the full claude flag rather than the user's `clsp` alias so the app works on machines
 // where the alias isn't defined.
@@ -101,6 +104,12 @@ function makeMautName(n: number): string {
 }
 
 function startClaudeInNewTerminal(opts?: { autoResume?: boolean }): vscode.Terminal {
+	const t = createMautTerminal();
+	void runClaude(t, opts?.autoResume ?? false);
+	return t;
+}
+
+function createMautTerminal(): vscode.Terminal {
 	const n = nextNumber();
 	const icon = allocateIcon();
 	const color = allocateColor();
@@ -115,12 +124,77 @@ function startClaudeInNewTerminal(opts?: { autoResume?: boolean }): vscode.Termi
 	});
 	mautTerminals.set(t, { number: n, state: 'active', icon, color });
 	t.show(false);
-	// `clsp --continue` (auto-resume of latest session) vs `clsp` (fresh). The shell alias
-	// passes args through to the underlying claude binary.
-	const cmd = opts?.autoResume ? `${CLSP_COMMAND} --continue` : CLSP_COMMAND;
-	t.sendText(cmd, true);
 	mautTerminal = t;
 	return t;
+}
+
+/**
+ * Start Claude in `terminal` once its shell is ready. With `resume`, try `--continue` first and
+ * start a fresh session if that exits right away (e.g. no earlier conversation in this folder).
+ */
+async function runClaude(terminal: vscode.Terminal, resume: boolean): Promise<void> {
+	if (!resume) {
+		await runCommand(terminal, CLSP_COMMAND);
+		return;
+	}
+	const result = await runCommand(terminal, `${CLSP_COMMAND} --continue`);
+	if (result === 'ended-quickly') {
+		await runCommand(terminal, CLSP_COMMAND);
+	}
+}
+
+/**
+ * Run a command through shell integration so it's executed for real (not typed into a shell
+ * that isn't ready yet) and its end is known. Falls back to typing it after a few seconds.
+ * Resolves `ended-quickly` if the command finished within 8 seconds, else `running`.
+ */
+async function runCommand(terminal: vscode.Terminal, command: string): Promise<'ended-quickly' | 'running'> {
+	const integration = terminal.shellIntegration ?? await new Promise<vscode.TerminalShellIntegration | undefined>(resolve => {
+		const timer = setTimeout(() => { listener.dispose(); resolve(undefined); }, 5000);
+		const listener = vscode.window.onDidChangeTerminalShellIntegration(e => {
+			if (e.terminal === terminal) {
+				clearTimeout(timer);
+				listener.dispose();
+				resolve(e.shellIntegration);
+			}
+		});
+	});
+	if (!integration) {
+		terminal.sendText(command, true);
+		return 'running';
+	}
+	const execution = integration.executeCommand(command);
+	return new Promise(resolve => {
+		const timer = setTimeout(() => { listener.dispose(); resolve('running'); }, 8000);
+		const listener = vscode.window.onDidEndTerminalShellExecution(e => {
+			if (e.execution === execution) {
+				clearTimeout(timer);
+				listener.dispose();
+				resolve('ended-quickly');
+			}
+		});
+	});
+}
+
+/** True if a Claude Code process is running under any of this window's terminals. */
+async function isClaudeRunningHere(): Promise<boolean> {
+	for (const terminal of vscode.window.terminals) {
+		const pid = await terminal.processId;
+		if (pid && await findSessionId(pid)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/** A real project folder: not missing, not your home folder, not the disk root. */
+function projectFolder(): string | undefined {
+	const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+	if (!folder || folder.scheme !== 'file') {
+		return undefined;
+	}
+	const fsPath = path.resolve(folder.fsPath);
+	return fsPath === os.homedir() || fsPath === path.parse(fsPath).root ? undefined : fsPath;
 }
 
 function mautInfo(t: vscode.Terminal): MautTerminalInfo | undefined {
@@ -241,9 +315,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	// for the file behind `[Image #N]` because only the extension host can read ~/.claude.
 	const imageResolver = new ClaudeImageResolver(vscode.Uri.joinPath(context.globalStorageUri, 'claude-images').fsPath);
 	imageResolver.pruneCache();
+	const sessionReader = new ClaudeSessionReader();
 	context.subscriptions.push(
 		vscode.commands.registerCommand('_maut.claudeImages.resolve', (shellPid: number | undefined, index: number) => imageResolver.resolve(shellPid, index)),
 		vscode.commands.registerCommand('_maut.claudeImages.captureClipboard', (shellPid: number | undefined, index: number) => imageResolver.captureClipboard(shellPid, index)),
+		// The conversation of the Claude session in a terminal, for the workbench's Reader view.
+		vscode.commands.registerCommand('_maut.claude.session', (shellPid: number | undefined) => sessionReader.read(shellPid)),
+		// Running Claude sessions by folder, for the workbench's project dock.
+		vscode.commands.registerCommand('_maut.claude.statuses', () => runningClaudeSessions()),
 	);
 
 	context.subscriptions.push(
@@ -280,12 +359,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const autoFocus = cfg.get<boolean>('autoEnterFocusMode', false);
 	const autoResume = cfg.get<boolean>('autoResumeOnLaunch', true);
 
-	const existingMaut = vscode.window.terminals.find(t => /^\d+ -- MAUT$/.test(t.name) || t.name.startsWith('Maut'));
-	if (existingMaut) {
-		mautTerminal = existingMaut;
-		existingMaut.show(false);
-	} else if (autoLaunch) {
-		setTimeout(() => {
+	// A restored "N -- MAUT" tab is just a fresh shell with its old output replayed, so decide on
+	// whether Claude is actually running, not on tab names. Only in a real project folder.
+	if (autoLaunch && projectFolder()) {
+		setTimeout(async () => {
+			if (await isClaudeRunningHere()) {
+				return;
+			}
 			startClaudeInNewTerminal({ autoResume });
 			if (autoFocus) {
 				setTimeout(() => {
@@ -297,3 +377,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): void { /* noop */ }
+
+/** Folder and status (`busy` / `idle`) of every Claude Code process that is still running. */
+function runningClaudeSessions(): { cwd: string; status: string }[] {
+	return readSessionRecords().filter(record => {
+		try {
+			process.kill(record.pid, 0);
+			return !!record.cwd;
+		} catch {
+			return false;
+		}
+	}).map(record => ({ cwd: record.cwd!, status: record.status ?? 'idle' }));
+}

@@ -1,0 +1,71 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* Maut project dock: project buttons at the top of the activity bar. */
+
+.monaco-workbench .part.activitybar > .content > .maut-project-dock {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 9px;
+	padding: 10px 0 12px;
+	margin-bottom: 4px;
+	border-bottom: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+}
+
+.monaco-workbench .maut-dock-project {
+	position: relative;
+	width: 32px;
+	height: 32px;
+	border: 0;
+	border-radius: 10px;
+	display: grid;
+	place-items: center;
+	color: #fff;
+	font: 650 12.5px -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+	cursor: pointer;
+	opacity: .85;
+	transition: border-radius .15s, opacity .15s, transform .15s;
+}
+
+.monaco-workbench .maut-dock-project:hover { opacity: 1; border-radius: 8px; transform: translateY(-1px); }
+.monaco-workbench .maut-dock-project.closed { opacity: .5; }
+.monaco-workbench .maut-dock-project.closed:hover { opacity: .85; }
+.monaco-workbench .maut-dock-project.current {
+	opacity: 1;
+	border-radius: 8px;
+	box-shadow: 0 0 0 2px var(--vscode-activityBar-background), 0 0 0 3.5px var(--vscode-foreground);
+}
+.monaco-workbench .maut-dock-project:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 3px; }
+
+.monaco-workbench .maut-dock-status {
+	position: absolute;
+	right: -3px;
+	bottom: -3px;
+	width: 11px;
+	height: 11px;
+	border-radius: 50%;
+	border: 2px solid var(--vscode-activityBar-background);
+}
+.monaco-workbench .maut-dock-status.working { background: var(--vscode-terminal-ansiYellow, #e2b25d); animation: maut-dock-pulse 1.4s ease-in-out infinite; }
+.monaco-workbench .maut-dock-status.ready { background: var(--vscode-terminal-ansiGreen, #74d394); }
+@keyframes maut-dock-pulse { 50% { opacity: .35; } }
+
+.monaco-workbench .maut-dock-add {
+	width: 32px;
+	height: 32px;
+	border-radius: 10px;
+	border: 1px dashed color-mix(in srgb, var(--vscode-foreground) 28%, transparent);
+	background: none;
+	color: color-mix(in srgb, var(--vscode-foreground) 60%, transparent);
+	font-size: 16px;
+	cursor: pointer;
+}
+.monaco-workbench .maut-dock-add:hover { color: var(--vscode-foreground); border-color: var(--vscode-foreground); }
+
+@media (prefers-reduced-motion: reduce) {
+	.monaco-workbench .maut-dock-status.working { animation: none; }
+	.monaco-workbench .maut-dock-project { transition: none; }
+}

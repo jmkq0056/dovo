@@ -29,6 +29,7 @@ import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser
 import { IBaseActionViewItemOptions } from '../../../../base/browser/ui/actionbar/actionViewItems.js';
 import { DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { ITerminalProfile, TerminalLocation } from '../../../../platform/terminal/common/terminal.js';
+import { MautClaudePane } from './mautClaudePane.js';
 
 export class TerminalEditor extends EditorPane {
 
@@ -50,6 +51,9 @@ export class TerminalEditor extends EditorPane {
 	private readonly _sessionDisposables = this._register(new DisposableStore());
 
 	private readonly _disposableStore = this._register(new DisposableStore());
+
+	/** Maut code: header and Reader shown around the terminal while Claude Code runs in it. */
+	private _claudePane: MautClaudePane | undefined;
 
 	constructor(
 		group: IEditorGroup,
@@ -78,6 +82,7 @@ export class TerminalEditor extends EditorPane {
 		this._editorInput = newInput;
 		await super.setInput(newInput, options, context, token);
 		this._editorInput.terminalInstance?.attachToElement(this._overflowGuardElement!);
+		this._claudePane?.setInstance(this._editorInput.terminalInstance);
 		if (this._lastDimension) {
 			this.layout(this._lastDimension);
 		}
@@ -98,6 +103,7 @@ export class TerminalEditor extends EditorPane {
 			this._editorInput.terminalInstance?.detachFromElement();
 		}
 		this._editorInput = undefined;
+		this._claudePane?.setInstance(undefined);
 	}
 
 	private _setActiveInstance(): void {
@@ -118,6 +124,11 @@ export class TerminalEditor extends EditorPane {
 		this._editorInstanceElement = parent;
 		this._overflowGuardElement = dom.$('.terminal-overflow-guard.terminal-editor');
 		this._editorInstanceElement.appendChild(this._overflowGuardElement);
+		this._claudePane = this._register(this._instantiationService.createInstance(MautClaudePane, parent, this._overflowGuardElement, () => {
+			if (this._lastDimension) {
+				this.layout(this._lastDimension);
+			}
+		}));
 		this._registerListeners();
 	}
 
@@ -162,16 +173,17 @@ export class TerminalEditor extends EditorPane {
 
 	layout(dimension: dom.Dimension): void {
 		const instance = this._editorInput?.terminalInstance;
+		this._lastDimension = dimension;
 		if (instance) {
 			instance.attachToElement(this._overflowGuardElement!);
-			instance.layout(dimension);
+			instance.layout(this._claudePane?.layout(dimension) ?? dimension);
 		}
-		this._lastDimension = dimension;
 	}
 
 	override setVisible(visible: boolean): void {
 		super.setVisible(visible);
 		this._editorInput?.terminalInstance?.setVisible(visible && this._workbenchLayoutService.isVisible(Parts.EDITOR_PART, this.window));
+		this._claudePane?.setVisible(visible);
 	}
 
 	override getActionViewItem(action: IAction, options: IBaseActionViewItemOptions): IActionViewItem | undefined {

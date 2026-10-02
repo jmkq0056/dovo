@@ -49,6 +49,19 @@ type ClaudeItem =
 	| { readonly kind: 'user'; readonly text: string; readonly images: number[] }
 	| { readonly kind: 'interrupted' };
 
+/** A background shell or an agent Claude started. */
+interface IClaudeTask {
+	readonly id: string;
+	readonly kind: 'shell' | 'agent';
+	readonly title: string;
+	readonly agentType?: string;
+	readonly outputFile?: string;
+	readonly status: 'running' | 'completed' | 'failed' | 'killed';
+	readonly start: number;
+	readonly end?: number;
+	readonly tail?: string;
+}
+
 interface IChangedFile {
 	readonly path: string;
 	readonly label: string;
@@ -78,6 +91,7 @@ interface IClaudeSessionView {
 	readonly status: 'working' | 'idle';
 	readonly turns: readonly IClaudeTurn[];
 	readonly changedFiles?: readonly (readonly IChangedFile[])[];
+	readonly tasks?: readonly IClaudeTask[];
 }
 
 /**
@@ -113,6 +127,17 @@ export class MautClaudePane extends Disposable {
 	private _liveBlock: HTMLElement | undefined;
 	private _liveStatus: HTMLElement | undefined;
 	private _wasReader = false;
+	/** The Activity panel: Claude's background shells and agents. */
+	private readonly _activity: HTMLElement;
+	private _activityOpen = false;
+	/** The agent whose conversation the panel shows, if any. */
+	private _activityAgent: IClaudeTask | undefined;
+	private _activityKey = '';
+	private _activityBody: HTMLElement | undefined;
+	private readonly _activityDisposables = this._register(new DisposableStore());
+	/** A taller input, for long prompts and Claude's menus (like its agent picker). */
+	private _composerExpanded = false;
+	private readonly _expandButton: HTMLButtonElement;
 	/** The Reader follows new output, like a chat, until you scroll up to read. */
 	private _followBottom = true;
 	/** Set while the Reader scrolls itself, so that scroll isn't taken as yours. */
@@ -146,7 +171,16 @@ export class MautClaudePane extends Disposable {
 		this._root.insertBefore(this._reader, this._terminalHost);
 		this._root.insertBefore(this._header, this._reader);
 		this._liveNote = dom.$('.mcp-live-note', undefined, dom.$('i'), dom.$('span', undefined, localize('maut.claude.liveNote', "Live Claude terminal. What you type goes straight to Claude.")));
+		this._expandButton = dom.append(this._liveNote, dom.$<HTMLButtonElement>('button.mcp-expand', { type: 'button' }));
+		this._register(dom.addDisposableListener(this._expandButton, dom.EventType.CLICK, () => {
+			this._composerExpanded = !this._composerExpanded;
+			this._renderExpandButton();
+			this._relayout();
+			this._instance?.focus();
+		}));
+		this._renderExpandButton();
 		this._root.appendChild(this._liveNote);
+		this._activity = dom.append(this._root, dom.$('.mcp-activity'));
 		this._rail = dom.append(this._root, dom.$('.mcp-rail'));
 		this._register(dom.addDisposableListener(this._reader, 'scroll', () => {
 			if (!this._autoScrolling) {
@@ -457,6 +491,7 @@ export class MautClaudePane extends Disposable {
 		host.width = `${width}px`;
 		host.margin = '0 auto';
 		if (!reader) {
+			this._activity.style.bottom = '0px';
 			this._reader.style.height = '0px';
 			host.height = `${body}px`;
 			host.padding = '10px 0 0';
@@ -467,12 +502,14 @@ export class MautClaudePane extends Disposable {
 		// its bottom rows: the prompt box, or a question Claude is asking.
 		const cell = this._cellHeight();
 		const terminalRows = Math.max(12, Math.floor(body * 0.85 / cell));
-		const visibleRows = Math.min(this._composerRows, terminalRows);
+		const visibleRows = Math.min(this._composerExpanded ? Math.max(this._composerRows, Math.floor(terminalRows * 0.75)) : this._composerRows, terminalRows);
 		const composer = Math.round(visibleRows * cell) + composerPaddingY * 2 + 2;
 		const composerWidth = Math.max(0, Math.min(dimension.width - sidePadding * 2, composerMaxWidth));
 		const readerHeight = Math.max(0, body - composer - composerMarginTop - liveNoteHeight);
 		this._reader.style.height = `${readerHeight}px`;
 		this._jumpToLatest.style.bottom = `${composer + composerMarginTop + liveNoteHeight + 14}px`;
+		// The Activity panel ends above the input, so both stay in view.
+		this._activity.style.bottom = `${composer + composerMarginTop + liveNoteHeight}px`;
 		this._rail.style.top = `${headerHeight + 8}px`;
 		this._rail.style.height = `${Math.max(0, readerHeight - 16)}px`;
 		dom.getWindow(this._root).requestAnimationFrame(() => this._renderRail());
@@ -608,6 +645,7 @@ export class MautClaudePane extends Disposable {
 		}
 		this._session = session;
 		this._renderHeader();
+		this._renderActivity();
 		const last = session.turns.at(-1);
 		const changed = session.changedFiles?.map(files => files.map(file => file.label).join(',')).join('|') ?? '';
 		const key = `${session.turns.length}:${last?.items.length}:${last?.end}:${session.status}:${changed}`;
@@ -618,6 +656,163 @@ export class MautClaudePane extends Disposable {
 	}
 
 	// ---------- Header ----------
+
+	private _renderExpandButton(): void {
+		this._expandButton.textContent = this._composerExpanded ? localize('maut.claude.collapseInput', "Smaller Input") : localize('maut.claude.expandInput', "Larger Input");
+		this._expandButton.setAttribute('aria-pressed', String(this._composerExpanded));
+	}
+
+	// ---------- Activity: background shells and agents ----------
+
+	private _activityButton(session: IClaudeSessionView | undefined): HTMLElement {
+		const tasks = session?.tasks ?? [];
+		const running = tasks.filter(task => task.status === 'running').length;
+		const button = dom.$<HTMLButtonElement>('button.mcp-activity-button', { type: 'button' });
+		button.classList.toggle('on', this._activityOpen);
+		button.classList.toggle('busy', running > 0);
+		dom.append(button, dom.$('i'));
+		dom.append(button, dom.$('span', undefined, running
+			? localize('maut.claude.activityRunning', "{0} running", running)
+			: localize('maut.claude.activity', "Activity")));
+		button.title = localize('maut.claude.activityTitle', "Background shells and agents Claude started");
+		button.addEventListener('click', () => {
+			this._activityOpen = !this._activityOpen;
+			this._activityAgent = undefined;
+			this._activityKey = '';
+			this._renderHeader();
+			this._renderActivity();
+		});
+		return button;
+	}
+
+	private async _renderActivity(): Promise<void> {
+		this._activity.classList.toggle('open', this._activityOpen && this.active);
+		if (!this._activityOpen || !this.active) {
+			this._activityKey = '';
+			return;
+		}
+		const agent = this._activityAgent;
+		const turns = agent ? (await this._commandService.executeCommand<{ turns: IClaudeTurn[] }>('_maut.claude.agent', this._instance?.processId, agent.id).catch(() => undefined))?.turns ?? [] : [];
+		const tasks = this._session?.tasks ?? [];
+		const current = agent ? tasks.find(task => task.id === agent.id) ?? agent : undefined;
+		const key = agent
+			? `agent:${agent.id}:${current?.status}:${turns.length}:${turns.at(-1)?.items.length}`
+			: `list:${tasks.map(task => `${task.id}:${task.status}:${task.tail ?? ''}`).join('|')}:${Math.floor(Date.now() / 10000)}`;
+		if (key === this._activityKey) {
+			return;
+		}
+		this._activityKey = key;
+		const scroll = this._activityBody?.scrollTop ?? 0;
+		this._activityDisposables.clear();
+		dom.clearNode(this._activity);
+
+		const head = dom.append(this._activity, dom.$('.mcp-activity-head'));
+		if (agent) {
+			const back = dom.append(head, dom.$<HTMLButtonElement>('button.mcp-activity-back', { type: 'button' }, localize('maut.claude.back', "Back")));
+			this._activityDisposables.add(dom.addDisposableListener(back, dom.EventType.CLICK, () => {
+				this._activityAgent = undefined;
+				this._activityKey = '';
+				this._renderActivity();
+			}));
+		}
+		dom.append(head, dom.$('span.mcp-activity-title', undefined, agent ? agent.title : localize('maut.claude.activityHead', "Background Shells and Agents")));
+		const close = dom.append(head, dom.$<HTMLButtonElement>('button.mcp-activity-close', { type: 'button' }, localize('maut.claude.close', "Close")));
+		this._activityDisposables.add(dom.addDisposableListener(close, dom.EventType.CLICK, () => {
+			this._activityOpen = false;
+			this._renderHeader();
+			this._renderActivity();
+		}));
+
+		const content = this._activityBody = dom.append(this._activity, dom.$('.mcp-activity-body'));
+		if (agent && current) {
+			dom.append(content, dom.$('.mcp-activity-meta', undefined, this._taskMeta(current)));
+			for (const turn of turns) {
+				if (turn.prompt) {
+					dom.append(content, dom.$('.mcp-agent-prompt', undefined, turn.prompt));
+				}
+				for (const item of turn.items) {
+					if (item.kind === 'text') {
+						const rendered = this._activityDisposables.add(renderMarkdown(new MarkdownString(item.text), {
+							actionHandler: link => this._openerService.open(link, { fromUserGesture: true, allowCommands: false }),
+						}));
+						rendered.element.classList.add('mcp-prose');
+						content.appendChild(rendered.element);
+					} else if (item.kind === 'step') {
+						const step = dom.append(content, dom.$('.mcp-step'));
+						dom.append(step, dom.$('span.mcp-verb', undefined, item.verb));
+						const target = dom.append(step, dom.$('span.mcp-target', undefined, item.target));
+						if (item.file) {
+							target.classList.add('mcp-file');
+							target.dataset.file = item.file;
+						}
+					} else if (item.kind === 'edit') {
+						content.appendChild(this._renderEdit(item));
+					}
+				}
+			}
+			if (!turns.length) {
+				dom.append(content, dom.$('.mcp-activity-empty', undefined, localize('maut.claude.agentEmpty', "This agent hasn't written anything yet.")));
+			}
+		} else {
+			const shells = tasks.filter(task => task.kind === 'shell');
+			const agents = tasks.filter(task => task.kind === 'agent');
+			if (!tasks.length) {
+				dom.append(content, dom.$('.mcp-activity-empty', undefined, localize('maut.claude.activityEmpty', "When Claude runs a command in the background or starts an agent, it shows up here.")));
+			}
+			if (agents.length) {
+				dom.append(content, dom.$('.mcp-activity-section', undefined, localize('maut.claude.agents', "Agents")));
+				for (const task of agents) {
+					const row = dom.append(content, dom.$<HTMLButtonElement>(`button.mcp-task.${task.status}`, { type: 'button' }));
+					dom.append(row, dom.$('i.mcp-task-dot'));
+					const text = dom.append(row, dom.$('.mcp-task-text'));
+					dom.append(text, dom.$('.mcp-task-title', undefined, task.title));
+					dom.append(text, dom.$('.mcp-task-meta', undefined, this._taskMeta(task)));
+					this._activityDisposables.add(dom.addDisposableListener(row, dom.EventType.CLICK, () => {
+						this._activityAgent = task;
+						this._activityKey = '';
+						this._renderActivity();
+					}));
+				}
+			}
+			if (shells.length) {
+				dom.append(content, dom.$('.mcp-activity-section', undefined, localize('maut.claude.shells', "Background Shells")));
+				for (const task of shells) {
+					const row = dom.append(content, dom.$(`.mcp-task.${task.status}`));
+					dom.append(row, dom.$('i.mcp-task-dot'));
+					const text = dom.append(row, dom.$('.mcp-task-text'));
+					dom.append(text, dom.$('.mcp-task-title', undefined, task.title));
+					dom.append(text, dom.$('.mcp-task-meta', undefined, this._taskMeta(task)));
+					if (task.tail) {
+						dom.append(text, dom.$('.mcp-task-tail', undefined, task.tail));
+					}
+					const actions = dom.append(text, dom.$('.mcp-task-actions'));
+					if (task.outputFile) {
+						const output = dom.append(actions, dom.$<HTMLButtonElement>('button', { type: 'button' }, localize('maut.claude.output', "Output")));
+						output.dataset.file = task.outputFile;
+						this._activityDisposables.add(dom.addDisposableListener(output, dom.EventType.CLICK, () => this._editorService.openEditor({ resource: URI.file(task.outputFile!), options: { pinned: false } })));
+					}
+					if (task.status === 'running') {
+						const stop = dom.append(actions, dom.$<HTMLButtonElement>('button.mcp-task-stop', { type: 'button' }, localize('maut.claude.stop', "Stop")));
+						this._activityDisposables.add(dom.addDisposableListener(stop, dom.EventType.CLICK, async () => {
+							stop.disabled = true;
+							await this._commandService.executeCommand('_maut.claude.stopShell', this._instance?.processId, task.id);
+							this._refreshSoon.schedule();
+						}));
+					}
+				}
+			}
+		}
+		content.scrollTop = scroll;
+	}
+
+	private _taskMeta(task: IClaudeTask): string {
+		const status = task.status === 'running' ? localize('maut.claude.taskRunning', "Running")
+			: task.status === 'completed' ? localize('maut.claude.taskDone', "Done")
+				: task.status === 'killed' ? localize('maut.claude.taskStopped', "Stopped")
+					: localize('maut.claude.taskFailed', "Failed");
+		const took = duration((task.end ?? Date.now()) - task.start);
+		return task.kind === 'agent' ? `${task.agentType ?? ''} \u00b7 ${status} \u00b7 ${took}` : `${status} \u00b7 ${took}`;
+	}
 
 	private _renderHeader(): void {
 		const session = this._session;
@@ -631,6 +826,7 @@ export class MautClaudePane extends Disposable {
 		dom.append(this._header, dom.$('span.mcp-name', undefined, project));
 		dom.append(this._header, dom.$('span.mcp-meta', undefined, meta));
 		dom.append(this._header, dom.$('span.mcp-grow'));
+		this._header.appendChild(this._activityButton(session));
 		this._header.appendChild(this._contextButton(session));
 		dom.append(this._header, dom.$(`span.mcp-status.${status}`, undefined, dom.$('i'), dom.$('span', undefined, statusText)));
 		this._header.append(

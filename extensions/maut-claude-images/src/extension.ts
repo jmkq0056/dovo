@@ -321,6 +321,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('_maut.claudeImages.captureClipboard', (shellPid: number | undefined, index: number) => imageResolver.captureClipboard(shellPid, index)),
 		// The conversation of the Claude session in a terminal, for the workbench's Reader view.
 		vscode.commands.registerCommand('_maut.claude.session', (shellPid: number | undefined) => sessionReader.read(shellPid)),
+		vscode.commands.registerCommand('_maut.claude.agent', (shellPid: number | undefined, agentId: string) => sessionReader.readAgent(shellPid, agentId)),
+		vscode.commands.registerCommand('_maut.claude.stopShell', (shellPid: number | undefined, taskId: string) => sessionReader.stopShell(shellPid, taskId)),
 		// Running Claude sessions by folder, for the workbench's project dock.
 		vscode.commands.registerCommand('_maut.claude.statuses', () => runningClaudeSessions()),
 	);

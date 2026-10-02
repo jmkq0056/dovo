@@ -54,6 +54,25 @@ export interface ClaudeSessionView {
 	 * transcript entry records as an edit.
 	 */
 	readonly changedFiles: readonly (readonly IChangedFile[])[];
+	/** Background shells and agents Claude started in this session, newest first. */
+	readonly tasks: readonly IClaudeTask[];
+}
+
+/** A background shell or an agent that Claude started. */
+export interface IClaudeTask {
+	readonly id: string;
+	readonly kind: 'shell' | 'agent';
+	/** Claude's description of it ("Build the macOS app"), else the command or prompt. */
+	readonly title: string;
+	readonly command?: string;
+	readonly agentType?: string;
+	readonly outputFile?: string;
+	readonly status: 'running' | 'completed' | 'failed' | 'killed';
+	readonly start: number;
+	readonly end?: number;
+	readonly summary?: string;
+	/** The last lines a running shell printed. */
+	readonly tail?: string;
 }
 
 export interface IChangedFile {
@@ -65,6 +84,9 @@ export interface IChangedFile {
 
 interface IContentBlock {
 	readonly type?: string;
+	readonly id?: string;
+	readonly tool_use_id?: string;
+	readonly content?: unknown;
 	readonly text?: string;
 	readonly name?: string;
 	readonly input?: Record<string, unknown>;
@@ -79,6 +101,9 @@ interface ITranscriptEntry {
 	readonly cwd?: string;
 	readonly imagePasteIds?: number[];
 	readonly attachment?: { readonly type?: string; readonly prompt?: string | IContentBlock[] };
+	/** A queue operation's message. */
+	readonly content?: string;
+	readonly toolUseResult?: { readonly backgroundTaskId?: string; readonly agentId?: string; readonly status?: string };
 	readonly message?: {
 		readonly model?: string;
 		readonly content?: string | IContentBlock[];
@@ -95,6 +120,11 @@ interface ISessionState {
 	contextTokens: number | undefined;
 	contextReport: { used: string; window: string; percent: number; time: number } | undefined;
 	cwd: string | undefined;
+	/** Background shell and agent calls, by tool-use id, until their result names the task. */
+	readonly pendingTasks: Map<string, { readonly name: string; readonly input: Record<string, unknown> }>;
+	readonly tasks: Map<string, IClaudeTask>;
+	/** Agent transcripts are sidechains; the main conversation skips them. */
+	readonly sidechain: boolean;
 }
 
 const maxDiffLines = 40;
@@ -103,6 +133,7 @@ const hiddenTools = new Set(['TodoWrite', 'ToolSearch', 'ExitPlanMode', 'EnterPl
 
 export class ClaudeSessionReader {
 	private readonly _sessions = new Map<string, ISessionState>();
+	private readonly _agents = new Map<string, ISessionState>();
 	private readonly _gitCache = new Map<string, { time: number; files: Promise<{ path: string; isNew: boolean; mtime: number }[]> }>();
 
 	async read(shellPid: number | undefined, maxTurns = 60): Promise<ClaudeSessionView | undefined> {
@@ -130,7 +161,120 @@ export class ClaudeSessionReader {
 			status,
 			turns,
 			changedFiles: project ? await this._changedFiles(project, turns, status === 'working') : turns.map(() => []),
+			tasks: await this._taskView(state, record?.pid),
 		};
+	}
+
+	/** An agent's own conversation, from its transcript next to the session's. */
+	async readAgent(shellPid: number | undefined, agentId: string): Promise<{ readonly turns: readonly ClaudeTurn[] } | undefined> {
+		const sessionId = await findSessionId(shellPid);
+		const main = sessionId ? this._getState(sessionId) : undefined;
+		if (!main || !/^[\w-]+$/.test(agentId)) {
+			return undefined;
+		}
+		const transcript = path.join(main.transcript.replace(/\.jsonl$/, ''), 'subagents', `agent-${agentId}.jsonl`);
+		let state = this._agents.get(transcript);
+		if (!state) {
+			state = newState(transcript, true);
+			this._agents.set(transcript, state);
+		}
+		await this._readNewLines(state);
+		return { turns: state.turns };
+	}
+
+	/** Stops a background shell: its process group, found under Claude's process by its command. */
+	async stopShell(shellPid: number | undefined, taskId: string): Promise<boolean> {
+		const sessionId = await findSessionId(shellPid);
+		const state = sessionId ? this._getState(sessionId) : undefined;
+		const command = state?.tasks.get(taskId)?.command;
+		const record = readSessionRecords().find(r => r.sessionId === sessionId);
+		if (!command || !record) {
+			return false;
+		}
+		const group = (await shellProcesses(record.pid)).find(p => p.command.includes(quotedForEval(command)))?.pgid;
+		if (!group) {
+			return false;
+		}
+		try {
+			process.kill(-group, 'SIGTERM');
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	private _trackTasks(state: ISessionState, entry: ITranscriptEntry, time: number): void {
+		const content = entry.message?.content;
+		if (entry.type === 'assistant' && Array.isArray(content)) {
+			for (const block of content) {
+				const input = block.input ?? {};
+				if (block.type === 'tool_use' && block.id && ((block.name === 'Bash' && input.run_in_background) || block.name === 'Agent' || block.name === 'Task')) {
+					state.pendingTasks.set(block.id, { name: block.name, input });
+				}
+			}
+			return;
+		}
+		if (entry.type === 'attachment' || entry.type === 'queue-operation') {
+			// Task notifications Claude took in mid-turn arrive queued, not as their own message.
+			const prompt = entry.attachment?.prompt;
+			this._applyNotifications(state, entry.type === 'queue-operation' ? entry.content ?? '' : typeof prompt === 'string' ? prompt : Array.isArray(prompt) ? prompt.map(b => b.text ?? '').join('') : '', time);
+			return;
+		}
+		if (entry.type !== 'user') {
+			return;
+		}
+		const result = entry.toolUseResult;
+		const useId = Array.isArray(content) ? content.find(b => b.type === 'tool_result')?.tool_use_id : undefined;
+		const call = useId ? state.pendingTasks.get(useId) : undefined;
+		if (useId && call && result) {
+			state.pendingTasks.delete(useId);
+			const str = (key: string) => typeof call.input[key] === 'string' ? call.input[key] as string : '';
+			if (call.name === 'Bash' && result.backgroundTaskId) {
+				state.tasks.set(result.backgroundTaskId, {
+					id: result.backgroundTaskId, kind: 'shell', title: firstLine(str('description') || str('command')), command: str('command'),
+					outputFile: outputFileFrom(content), status: 'running', start: time,
+				});
+			} else if (call.name !== 'Bash' && result.agentId) {
+				const running = result.status === 'async_launched';
+				state.tasks.set(result.agentId, {
+					id: result.agentId, kind: 'agent', title: str('description') || firstLine(str('prompt')), agentType: str('subagent_type') || 'general-purpose',
+					status: running ? 'running' : 'completed', start: time, end: running ? undefined : time,
+				});
+			}
+		}
+		this._applyNotifications(state, typeof content === 'string' ? content : Array.isArray(content) ? content.map(b => b.type === 'text' ? b.text ?? '' : '').join('') : '', time);
+	}
+
+	/** Claude is told when a task ends: a <task-notification> with its id and status. */
+	private _applyNotifications(state: ISessionState, text: string, time: number): void {
+		for (const match of text.matchAll(/<task-notification>(?<body>[\s\S]*?)<\/task-notification>/g)) {
+			const body = match.groups?.body ?? '';
+			const id = /<task-id>(?<v>[^<]+)<\/task-id>/.exec(body)?.groups?.v;
+			const status = /<status>(?<v>[^<]+)<\/status>/.exec(body)?.groups?.v;
+			const task = id ? state.tasks.get(id) : undefined;
+			if (task && status) {
+				state.tasks.set(task.id, {
+					...task,
+					status: status === 'completed' ? 'completed' : status === 'killed' ? 'killed' : status === 'failed' ? 'failed' : task.status,
+					end: time,
+					summary: /<summary>(?<v>[\s\S]*?)<\/summary>/.exec(body)?.groups?.v?.trim(),
+				});
+			}
+		}
+	}
+
+	private async _taskView(state: ISessionState, claudePid: number | undefined): Promise<IClaudeTask[]> {
+		const tasks = [...state.tasks.values()].sort((a, b) => b.start - a.start).slice(0, 40);
+		const running = tasks.some(task => task.kind === 'shell' && task.status === 'running');
+		const processes = running && claudePid ? await shellProcesses(claudePid) : [];
+		return Promise.all(tasks.map(async task => {
+			if (task.kind !== 'shell' || task.status !== 'running') {
+				return task;
+			}
+			// A shell is only still running if its process is: a restarted Claude leaves none behind.
+			const alive = !!task.command && processes.some(p => p.command.includes(quotedForEval(task.command!)));
+			return alive ? { ...task, tail: await tailOf(task.outputFile) } : { ...task, status: 'completed' as const };
+		}));
 	}
 
 	private async _changedFiles(project: string, turns: readonly ClaudeTurn[], working: boolean): Promise<IChangedFile[][]> {
@@ -191,7 +335,7 @@ export class ClaudeSessionReader {
 			if (!transcript) {
 				return undefined;
 			}
-			state = { transcript, offset: 0, partial: '', turns: [], model: undefined, contextTokens: undefined, contextReport: undefined, cwd: undefined };
+			state = newState(transcript, false);
 			this._sessions.set(sessionId, state);
 		}
 		return state;
@@ -225,7 +369,7 @@ export class ClaudeSessionReader {
 		const lines = text.split('\n');
 		state.partial = lines.pop() ?? '';
 		for (const line of lines) {
-			if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"') && !line.includes('"type":"queued_command"')) {
+			if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"') && !line.includes('"type":"queued_command"') && !line.includes('task-notification')) {
 				continue;
 			}
 			let entry: ITranscriptEntry;
@@ -239,10 +383,11 @@ export class ClaudeSessionReader {
 	}
 
 	private _apply(state: ISessionState, entry: ITranscriptEntry): void {
-		if (entry.isSidechain) {
+		if (entry.isSidechain && !state.sidechain) {
 			return;
 		}
 		const time = Date.parse(entry.timestamp ?? '') || 0;
+		this._trackTasks(state, entry, time);
 		if (entry.cwd) {
 			state.cwd = entry.cwd;
 		}
@@ -300,6 +445,59 @@ export class ClaudeSessionReader {
 				turn.items.push(item);
 			}
 		}
+	}
+}
+
+function newState(transcript: string, sidechain: boolean): ISessionState {
+	return { transcript, offset: 0, partial: '', turns: [], model: undefined, contextTokens: undefined, contextReport: undefined, cwd: undefined, pendingTasks: new Map(), tasks: new Map(), sidechain };
+}
+
+/** The output file Claude names in a background shell's result. */
+function outputFileFrom(content: string | IContentBlock[] | undefined): string | undefined {
+	const text = typeof content === 'string' ? content : Array.isArray(content) ? content.map(b => typeof b.content === 'string' ? b.content : '').join('') : '';
+	return /Output is being written to: (?<file>\S+?)\.?(?:\s|$)/.exec(text)?.groups?.file;
+}
+
+/** How Claude's shell wraps a command: `eval '...'`, with single quotes escaped. */
+function quotedForEval(command: string): string {
+	return `eval '${command.replace(/'/g, `'\\''`)}`.slice(0, 200);
+}
+
+/** Shells Claude runs: direct children of its process, each in its own process group. */
+function shellProcesses(claudePid: number): Promise<{ pid: number; pgid: number; command: string }[]> {
+	if (process.platform === 'win32') {
+		return Promise.resolve([]);
+	}
+	return new Promise(resolve => cp.execFile('ps', ['-axo', 'pid=,ppid=,pgid=,command='], { maxBuffer: 16 * 1024 * 1024, timeout: 3000 }, (error, stdout) => {
+		if (error) {
+			resolve([]);
+			return;
+		}
+		resolve(stdout.split('\n').flatMap(line => {
+			const match = /^\s*(?<pid>\d+)\s+(?<ppid>\d+)\s+(?<pgid>\d+)\s+(?<command>.*)$/.exec(line);
+			return match?.groups && Number(match.groups.ppid) === claudePid ? [{ pid: Number(match.groups.pid), pgid: Number(match.groups.pgid), command: match.groups.command }] : [];
+		}));
+	}));
+}
+
+/** The last few lines a shell wrote. */
+async function tailOf(file: string | undefined): Promise<string | undefined> {
+	if (!file) {
+		return undefined;
+	}
+	try {
+		const handle = await fs.promises.open(file, 'r');
+		try {
+			const size = (await handle.stat()).size;
+			const length = Math.min(size, 4096);
+			const buffer = Buffer.alloc(length);
+			await handle.read(buffer, 0, length, size - length);
+			return buffer.toString('utf8').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').split(/\r?\n/).filter(line => line.trim()).slice(-4).join('\n');
+		} finally {
+			await handle.close();
+		}
+	} catch {
+		return undefined;
 	}
 }
 

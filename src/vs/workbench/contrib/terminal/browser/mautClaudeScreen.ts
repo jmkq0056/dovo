@@ -210,7 +210,12 @@ export function readScreen(raw: IScreen): IScreenState {
 		return { claude: true, frame: { from, to: Math.max(from, rules[0] - 1) }, liveTop, menu, notice, footer: footer.join(' \u00b7 ') };
 	}
 
-	// Anything else Claude shows (a picker, a full-screen dialog): from its rule down, as it is.
-	const top = rules.length ? rules[0] : Math.max(0, last - 11);
+	// Anything else Claude shows (a picker like /resume, a full-screen dialog): all of it, from its
+	// first line down, so its list (conversation names and all) can be read and picked from. The
+	// frame is capped to most of the height where it's shown.
+	let top = 0;
+	while (top < last && !text(top).trim()) {
+		top++;
+	}
 	return { claude: rules.length > 0, frame: { from: top, to: last }, liveTop: top };
 }

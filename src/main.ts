@@ -20,6 +20,14 @@ import { getUNCHost, addUNCHostToAllowlist } from './vs/base/node/unc.js';
 import { INLSConfiguration } from './vs/nls.js';
 import { NativeParsedArgs } from './vs/platform/environment/common/argv.js';
 
+// Dovo: when launched from inside a Claude Code session (a script, a terminal), the app inherits
+// that session's markers. Every Claude started in Dovo's terminals would then think it is a child
+// session and turn transcript saving off (so nothing can be resumed or shown in the Reader).
+// Only the markers of a running session are dropped; settings like CLAUDE_CONFIG_DIR stay.
+for (const key of ['CLAUDECODE', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_BRIDGE_SESSION_ID', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_SSE_PORT', 'CLAUDE_PID', 'CLAUDE_EFFORT']) {
+	delete process.env[key];
+}
+
 perf.mark('code/didStartMain');
 
 perf.mark('code/willLoadMainBundle', {

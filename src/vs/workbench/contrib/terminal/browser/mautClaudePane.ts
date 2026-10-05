@@ -206,6 +206,8 @@ export class MautClaudePane extends Disposable {
 	private _composerRows = 6;
 	/** Rows of Claude's screen below the frame's last shown row: the frame shows a slice, not just the bottom. */
 	private _composerShift = 0;
+	/** When Claude's prompt box last went missing from its screen, while it stays missing. */
+	private _noPromptSince: number | undefined;
 	/** A new frame size waits until Claude's screen has held it for a moment, so redraws don't make the input jump. */
 	private _pendingFrame: { readonly rows: number; readonly shift: number; readonly since: number } | undefined;
 	private readonly _settleFrame = this._register(new RunOnceScheduler(() => this._measureComposer(), 90));
@@ -873,7 +875,15 @@ export class MautClaudePane extends Disposable {
 		// the one hint line under a question. A long prompt grows it, up to most of the height.
 		if (!screen.claude) {
 			// Mid-redraw, Claude's prompt box can be missing for a frame: keep the input as it is.
-			return;
+			// Missing for longer means Claude shows something else (a picker like /resume): show it.
+			const now = Date.now();
+			this._noPromptSince ??= now;
+			if (now - this._noPromptSince < 400) {
+				this._settleFrame.schedule(450);
+				return;
+			}
+		} else {
+			this._noPromptSince = undefined;
 		}
 		const cap = Math.floor(raw.rows * 0.8);
 		const from = Math.max(screen.frame.from, screen.frame.to - cap + 1);

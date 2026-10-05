@@ -198,8 +198,9 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 				sidebarVisible: this._layoutService.isVisible(Parts.SIDEBAR_PART),
 				panelVisible: this._layoutService.isVisible(Parts.PANEL_PART),
 			};
-			// Back the way you left it in this window.
-			this._mode = this._storageService.get(modeKey, StorageScope.WORKSPACE) === 'ide' ? 'ide' : 'focus';
+			// Claude starts in Focus: Claude on the left, files and the browser on the right. Cmd+B
+			// switches to IDE when you want it.
+			this._mode = 'focus';
 			// Starting Claude always shows it; only the layout and width are remembered.
 			this._hidden = false;
 			this._treePinned = this._storageService.getBoolean(pinnedKey, StorageScope.WORKSPACE, false);
@@ -450,7 +451,11 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 	private _closeRestoredShells(): void {
 		for (const instance of [...this._terminalService.instances]) {
 			const restored = !!instance.shellLaunchConfig.attachPersistentProcess;
-			if (restored && !this._claudeService.isClaude(instance) && !instance.hasChildProcesses) {
+			// "Running" is a command shell integration saw start (a dev server, say); background
+			// helpers a shell keeps (git status daemons and the like) don't count.
+			const detection = instance.capabilities.get(TerminalCapability.CommandDetection);
+			const running = detection ? !!detection.executingCommand : instance.hasChildProcesses;
+			if (restored && !this._claudeService.isClaude(instance) && !running) {
 				instance.dispose();
 			}
 		}

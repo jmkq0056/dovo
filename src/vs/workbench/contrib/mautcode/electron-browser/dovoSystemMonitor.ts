@@ -25,6 +25,8 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
 import { IHostService } from '../../../services/host/browser/host.js';
 import './media/dovoSystemMonitor.css';
+import { Codicon } from '../../../../base/common/codicons.js';
+import { ThemeIcon } from '../../../../base/common/themables.js';
 
 /** A sample from the `maut-activity` extension (see its systemStats.ts). Sizes in bytes, percentages 0..100. */
 interface ISystemSample {
@@ -182,6 +184,9 @@ class DovoSystemMonitorItem extends BaseActionViewItem {
 	private _ram: HTMLElement | undefined;
 	private _ramBar: HTMLElement | undefined;
 	private _state: HTMLElement | undefined;
+	private _battery: HTMLElement | undefined;
+	private _batteryLevel: HTMLElement | undefined;
+	private _batteryValue: HTMLElement | undefined;
 	private _root: HTMLElement | undefined;
 
 	constructor(
@@ -203,7 +208,6 @@ class DovoSystemMonitorItem extends BaseActionViewItem {
 		root.setAttribute('aria-label', localize('dovo.systemMonitor.label', "System monitor. Click to open {0}.", activityMonitorName()));
 
 		const cpu = dom.append(root, dom.$('span.dovo-sysmon-seg'));
-		dom.append(cpu, dom.$('span.dovo-sysmon-key', undefined, localize('dovo.systemMonitor.cpu', "CPU")));
 		const svgNs = 'http://www.w3.org/2000/svg';
 		const svg = document.createElementNS(svgNs, 'svg');
 		svg.setAttribute('class', 'dovo-sysmon-spark');
@@ -215,7 +219,6 @@ class DovoSystemMonitorItem extends BaseActionViewItem {
 		this._cpu = dom.append(cpu, dom.$('span.dovo-sysmon-value.dovo-sysmon-cpu', undefined, '--'));
 
 		const ram = dom.append(root, dom.$('span.dovo-sysmon-seg'));
-		dom.append(ram, dom.$('span.dovo-sysmon-key', undefined, localize('dovo.systemMonitor.ram', "RAM")));
 		const bar = dom.append(ram, dom.$('span.dovo-sysmon-bar'));
 		this._ramBar = dom.append(bar, dom.$('b'));
 		this._ram = dom.append(ram, dom.$('span.dovo-sysmon-value.dovo-sysmon-ram', undefined, '--'));
@@ -223,6 +226,13 @@ class DovoSystemMonitorItem extends BaseActionViewItem {
 		const state = dom.append(root, dom.$('span.dovo-sysmon-seg.dovo-sysmon-state'));
 		dom.append(state, dom.$('i'));
 		this._state = dom.append(state, dom.$('span.dovo-sysmon-value'));
+
+		// Battery: a tiny battery filled to its level, the percentage, and a bolt while charging.
+		const battery = this._battery = dom.append(root, dom.$('span.dovo-sysmon-seg.dovo-sysmon-battery.hidden'));
+		const shell = dom.append(battery, dom.$('span.dovo-sysmon-battery-shell'));
+		this._batteryLevel = dom.append(shell, dom.$('b'));
+		this._batteryValue = dom.append(battery, dom.$('span.dovo-sysmon-value'));
+		dom.append(battery, dom.$(`span.dovo-sysmon-bolt${ThemeIcon.asCSSSelector(Codicon.zap)}`));
 
 		this._register(this._hoverService.setupDelayedHover(root, () => ({ content: this._hoverContent, appearance: { showPointer: true } })));
 		this._register(dom.addDisposableListener(root, dom.EventType.CONTEXT_MENU, e => {
@@ -253,7 +263,7 @@ class DovoSystemMonitorItem extends BaseActionViewItem {
 		const offset = historyLength - history.length;
 		this._spark.setAttribute('points', history.map((value, i) => `${i + offset},${(10 - value / 10).toFixed(2)}`).join(' '));
 		const memory = sample.memory;
-		this._ram.textContent = localize('dovo.systemMonitor.ramValue', "{0}/{1} GB", gb(memory.used), Math.round(memory.total / 1024 ** 3));
+		this._ram.textContent = localize('dovo.systemMonitor.ramShort', "{0}G", gb(memory.used));
 		const ratio = memory.total ? memory.used / memory.total : 0;
 		this._ramBar.style.width = `${Math.round(ratio * 100)}%`;
 		const memoryHot = memory.pressure === 'warn' || memory.pressure === 'critical' || (!memory.pressure && ratio > 0.9);
@@ -261,8 +271,19 @@ class DovoSystemMonitorItem extends BaseActionViewItem {
 		this._ramBar.classList.toggle('hot', memoryHot);
 		const thermal = sample.thermal?.state;
 		this._state.parentElement!.classList.toggle('hidden', !thermal);
-		this._state.textContent = thermal ? thermalLabel(thermal) : '';
+		// Just a dot while all is well; the word only when the Mac runs warm.
+		this._state.textContent = thermal && thermal !== 'nominal' ? thermalLabel(thermal) : '';
 		this._state.parentElement!.classList.toggle('hot', thermal === 'serious' || thermal === 'critical');
+		const battery = sample.battery;
+		if (this._battery && this._batteryLevel && this._batteryValue) {
+			this._battery.classList.toggle('hidden', !battery);
+			if (battery) {
+				this._batteryLevel.style.width = `${Math.max(4, Math.min(100, battery.percent))}%`;
+				this._batteryValue.textContent = `${battery.percent}%`;
+				this._battery.classList.toggle('charging', battery.charging);
+				this._battery.classList.toggle('hot', !battery.charging && battery.percent <= 15);
+			}
+		}
 		this._renderHover(sample);
 	}
 

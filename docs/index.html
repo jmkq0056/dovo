@@ -246,7 +246,6 @@
   .grid4 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; border-top: 1px solid var(--line-strong); }
   .mini { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--line); }
   .mini h3 { margin: 0; font-size: 15.5px; font-weight: 600; letter-spacing: 0; }
-  .mini h3 svg { display: none; }
   .mini p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
 
   .install-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
@@ -301,28 +300,9 @@
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
-    <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
-    <symbol id="i-at" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></symbol>
-    <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
-    <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></symbol>
-    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></symbol>
-    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></symbol>
-    <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/></symbol>
-    <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21 12-8.5 8.5a5.5 5.5 0 0 1-8-8L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a1.5 1.5 0 0 1-2-2L15 8"/></symbol>
-    <symbol id="i-focus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></symbol>
-    <symbol id="i-commit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M2 12h6M16 12h6"/></symbol>
-    <symbol id="i-pull" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
-    <symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-2a2 2 0 0 0-1.5 3.3A1.6 1.6 0 0 1 12 22z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/></symbol>
-    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
-    <symbol id="i-layout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M14 3v18"/></symbol>
-    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></symbol>
-    <symbol id="i-stack" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></symbol>
-    <symbol id="i-tabs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M3 11h18M8 7V4h8v3"/></symbol>
-    <symbol id="i-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14 16 9"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
-    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
     <symbol id="i-apple" viewBox="0 0 384 512" fill="currentColor"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></symbol>
     <symbol id="i-windows" viewBox="0 0 448 512" fill="currentColor"><path d="M0 93.7l183.6-25.3v177.4H0V93.7zm0 324.6l183.6 25.3V268.4H0v149.9zm203.8 28L448 480V268.4H203.8v178zm0-380.6v180.1H448V32L203.8 65.7z"/></symbol>
     <symbol id="i-github" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 0 0-3.6 22.4c.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A11.5 11.5 0 0 0 12 .5z"/></symbol>
@@ -519,19 +499,16 @@
     </div>
     <div class="cards">
       <div class="card">
-        <div class="ic"><svg><use href="#i-send"/></svg></div>
         <h3>Queue and send now</h3>
         <p>Messages you type while Claude works show up queued, exactly as Claude sees them. <kbd>Ctrl &#x21b5;</kbd> sends one right away.</p>
         <p>Press Esc and the Reader marks clearly where you interrupted. Larger Input gives long prompts room.</p>
       </div>
       <div class="card">
-        <div class="ic"><svg><use href="#i-server"/></svg></div>
         <h3>Background shells and agents</h3>
         <p>The Activity panel lists every command Claude runs in the background and every agent it starts, live.</p>
         <p>Read a shell's output or stop it, and open an agent to read its own conversation.</p>
       </div>
       <div class="card">
-        <div class="ic"><svg><use href="#i-gauge"/></svg></div>
         <h3>True context meter</h3>
         <p>The header shows how much of Claude's context is used, read from the session itself and matching <code>/context</code>, 1M windows included.</p>
         <p>Nothing is typed into Claude to get it.</p>
@@ -577,18 +554,18 @@
       <p>Smaller things, each added because a Claude Code workflow needed it. All of it sits on top of the full VS Code editor.</p>
     </div>
     <div class="grid4">
-      <div class="mini"><h3><svg><use href="#i-stack"/></svg>Project dock</h3><p>Open and starred projects at the top of the activity bar, each in its own window. A spinner while Claude works, a bell when it needs you.</p></div>
-      <div class="mini"><h3><svg><use href="#i-tabs"/></svg>Tabs that tidy themselves</h3><p>At most eight tabs; files you haven't looked at for 20 minutes close by themselves, with a Reopen.</p></div>
-      <div class="mini"><h3><svg><use href="#i-image"/></svg>Image previews</h3><p>Pasted images preview right in Claude's terminal and the Reader, as thumbnails that open full size.</p></div>
-      <div class="mini"><h3><svg><use href="#i-zap"/></svg>Smart auto-launch</h3><p>Opening a project starts Claude in it, resuming the last session. Your launch flags, model and permission mode live in the Dovo panel.</p></div>
-      <div class="mini"><h3><svg><use href="#i-at"/></svg>Drag as @-mention</h3><p>Drop files or folders on Claude, even several from different places, and they arrive as <code>@-mentions</code>.</p></div>
-      <div class="mini"><h3><svg><use href="#i-undo"/></svg>Undo Claude's edits</h3><p>Roll back what Claude did to a file, per file, without touching the rest.</p></div>
-      <div class="mini"><h3><svg><use href="#i-file"/></svg>PDF page picker</h3><p>Pick the pages of a PDF to hand to Claude instead of the whole document.</p></div>
-      <div class="mini"><h3><svg><use href="#i-book"/></svg>Markdown that reads well</h3><p>Markdown opens rendered, with proper type, so Claude's plans and notes read like documents.</p></div>
-      <div class="mini"><h3><svg><use href="#i-server"/></svg>Right-click servers</h3><p>Start and stop the dev servers in your project from the explorer's context menu.</p></div>
-      <div class="mini"><h3><svg><use href="#i-clip"/></svg>Word, Excel, PowerPoint</h3><p>Click an Office file to open it in its app; right-click to convert it to TXT, JSON or PDF.</p></div>
-      <div class="mini"><h3><svg><use href="#i-commit"/></svg>One-click commit</h3><p>A status-bar button stages everything, commits with your message and optionally pushes.</p></div>
-      <div class="mini"><h3><svg><use href="#i-palette"/></svg>Theme Studio</h3><p>Accent, surface, font and size for light and dark separately; <kbd>&#x21e7;&#x2318;L</kbd> swaps between them.</p></div>
+      <div class="mini"><h3>Project dock</h3><p>Open and starred projects at the top of the activity bar, each in its own window. A spinner while Claude works, a bell when it needs you.</p></div>
+      <div class="mini"><h3>Tabs that tidy themselves</h3><p>At most eight tabs; files you haven't looked at for 20 minutes close by themselves, with a Reopen.</p></div>
+      <div class="mini"><h3>Image previews</h3><p>Pasted images preview right in Claude's terminal and the Reader, as thumbnails that open full size.</p></div>
+      <div class="mini"><h3>Smart auto-launch</h3><p>Opening a project starts Claude in it, resuming the last session. Your launch flags, model and permission mode live in the Dovo panel.</p></div>
+      <div class="mini"><h3>Drag as @-mention</h3><p>Drop files or folders on Claude, even several from different places, and they arrive as <code>@-mentions</code>.</p></div>
+      <div class="mini"><h3>Undo Claude's edits</h3><p>Roll back what Claude did to a file, per file, without touching the rest.</p></div>
+      <div class="mini"><h3>PDF page picker</h3><p>Pick the pages of a PDF to hand to Claude instead of the whole document.</p></div>
+      <div class="mini"><h3>Markdown that reads well</h3><p>Markdown opens rendered, with proper type, so Claude's plans and notes read like documents.</p></div>
+      <div class="mini"><h3>Right-click servers</h3><p>Start and stop the dev servers in your project from the explorer's context menu.</p></div>
+      <div class="mini"><h3>Word, Excel, PowerPoint</h3><p>Click an Office file to open it in its app; right-click to convert it to TXT, JSON or PDF.</p></div>
+      <div class="mini"><h3>One-click commit</h3><p>A status-bar button stages everything, commits with your message and optionally pushes.</p></div>
+      <div class="mini"><h3>Theme Studio</h3><p>Accent, surface, font and size for light and dark separately; <kbd>&#x21e7;&#x2318;L</kbd> swaps between them.</p></div>
     </div>
   </section>
 
@@ -615,7 +592,7 @@
         <p>Installs for your user with no admin rights and no wizard; adds Start menu and desktop shortcuts, Explorer's right-click menu and <code>dovo</code> on your <code>PATH</code>; offers to install Claude Code.</p>
       </div>
       <div class="install wide">
-        <h3><span class="ic"><svg><use href="#i-download"/></svg></span>Prefer a download?</h3>
+        <h3>Prefer a download?</h3>
         <p>The download button at the top gets the same builds. On macOS, open the <code>.dmg</code>, drag Dovo to Applications, then right-click it and choose Open the first time (it's ad-hoc signed, not notarized). On Windows, run <code>Dovo-Setup-x64.exe</code>: it installs for your user, no admin rights needed. It isn't code-signed yet, so SmartScreen may ask you to choose More info, then Run anyway. Windows 11 with Smart App Control on, or a work PC with an app-control policy, blocks unsigned apps entirely; there, Dovo can't install until it's signed. A portable <code>Dovo-win-x64.zip</code> is on every <a class="link" href="https://github.com/jmkq0056/dovo/releases/latest">release</a> too.</p>
       </div>
     </div>

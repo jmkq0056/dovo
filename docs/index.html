@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Maut code · The Claude Code editor</title>
-<meta name="description" content="A fork of VS Code built around the Claude Code CLI: a Reader for the conversation, live change highlights, a file finder, and a one-line install on macOS and Windows.">
+<title>Maut code · The editor for agentic coding</title>
+<meta name="description" content="An open source editor built on VS Code for terminal coding agents like the Claude Code CLI: a Reader for the conversation, live change highlights, a file finder, and a one-line install on macOS and Windows.">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -370,9 +370,9 @@
 <header class="hero">
   <div class="glyphs" aria-hidden="true"><canvas id="glyphs"></canvas></div>
   <div class="wrap">
-    <h1>The <span class="accent">Claude Code</span> editor</h1>
-    <p class="lede">Code with Claude, not around it.</p>
-    <p class="lede-sub">A fork of VS Code built around the Claude Code CLI. Read the conversation like a chat, watch every change land in your files, and keep the full editor one keystroke away.</p>
+    <h1>The editor built for <span class="accent">agentic coding</span></h1>
+    <p class="lede">Code with your agent, not around it.</p>
+    <p class="lede-sub">An open source editor built on VS Code, designed around terminal coding agents and working with the Claude Code CLI today. Read the conversation like a chat, watch every change land in your files, and keep the full editor one keystroke away.</p>
 
     <div class="dl-card">
       <a class="dl-main" id="dl-main" href="https://github.com/jmkq0056/maut-code/releases/latest/download/Maut-code-arm64.dmg">
@@ -663,7 +663,7 @@
 
 <footer>
   <div class="wrap">
-    <span>Maut code &middot; MIT &middot; Built on <a href="https://github.com/microsoft/vscode">microsoft/vscode</a>, not affiliated with Microsoft or Anthropic</span>
+    <span>Maut code &middot; MIT &middot; Built on <a href="https://github.com/microsoft/vscode">microsoft/vscode</a>, not affiliated with or endorsed by Microsoft or Anthropic. Claude and Claude Code are trademarks of Anthropic.</span>
     <div class="links">
       <a href="https://github.com/jmkq0056/maut-code">Source</a>
       <a href="https://github.com/jmkq0056/maut-code/releases">Releases</a>
@@ -685,7 +685,7 @@
     const canvas = document.getElementById('glyphs');
     const ctx = canvas.getContext && canvas.getContext('2d');
     if (!ctx) { return; }
-    const marks = ['0', '1', '0', '1', '❯', '⏺', '·'];
+    const marks = ['0', '1', '0', '1', '>', '/', '.'];
     const draw = () => {
       const ratio = window.devicePixelRatio || 1;
       const width = canvas.clientWidth, height = canvas.clientHeight;
@@ -700,7 +700,7 @@
         for (let x = 10; x < width; x += 22) {
           const r = random();
           const mark = marks[Math.floor(r * marks.length)];
-          ctx.fillStyle = mark === '❯' || mark === '⏺' ? `rgba(236, 88, 115, ${0.12 + random() * 0.16})` : `rgba(255, 225, 232, ${0.045 + random() * 0.07})`;
+          ctx.fillStyle = mark === '>' || mark === '/' ? `rgba(236, 88, 115, ${0.12 + random() * 0.16})` : `rgba(255, 225, 232, ${0.045 + random() * 0.07})`;
           ctx.fillText(mark, x, y);
         }
       }

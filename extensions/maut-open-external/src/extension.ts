@@ -13,6 +13,7 @@
 
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
+import { registerBrowserDock } from './browserDock';
 
 async function resolveTarget(arg: unknown): Promise<vscode.Uri | undefined> {
 	if (arg instanceof vscode.Uri) { return arg; }
@@ -107,6 +108,7 @@ class HandoffEditorProvider implements vscode.CustomReadonlyEditorProvider<vscod
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+	registerBrowserDock(context);
 	context.subscriptions.push(
 		vscode.commands.registerCommand('maut.openIn.firefox', (arg) => openWith('Firefox', arg)),
 		vscode.commands.registerCommand('maut.openIn.word', (arg) => openWith('Microsoft Word', arg)),

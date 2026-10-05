@@ -1,0 +1,67 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* The browser tab's body: the real browser window covers it; this shows only until it does.
+	In Dovo's Ember colours: a soft amber glow, an amber badge, amber actions. */
+.monaco-workbench .dovo-browser-body {
+	height: 100%;
+	display: grid;
+	place-items: center;
+	background:
+		radial-gradient(60% 55% at 50% 45%, rgba(245, 158, 11, .10), transparent 70%),
+		var(--vscode-editor-background);
+	cursor: pointer;
+	outline: none;
+}
+.monaco-workbench .dovo-browser-center,
+.monaco-workbench .dovo-browser-view {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	max-width: 440px;
+	padding: 28px;
+	text-align: center;
+}
+.monaco-workbench .dovo-browser-center .dovo-browser-icon {
+	display: grid;
+	place-items: center;
+	width: 72px;
+	height: 72px;
+	margin-bottom: 6px;
+	border-radius: 18px;
+	background: linear-gradient(145deg, #fbbf24, #ea580c);
+	box-shadow: 0 14px 34px -14px rgba(234, 88, 12, .65), inset 0 1px 0 rgba(255, 255, 255, .35);
+	color: #1a1208;
+	font-size: 36px !important;
+}
+.monaco-workbench .dovo-browser-title { font-size: 17px; font-weight: 650; letter-spacing: -.01em; color: var(--vscode-foreground); }
+.monaco-workbench .dovo-browser-detail { font-size: 13px; line-height: 1.55; color: var(--vscode-descriptionForeground); }
+.monaco-workbench .dovo-browser-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
+.monaco-workbench .dovo-browser-actions button {
+	padding: 6px 14px;
+	border-radius: 8px;
+	border: 1px solid rgba(245, 158, 11, .35);
+	background: rgba(245, 158, 11, .08);
+	color: var(--vscode-foreground);
+	font: inherit;
+	font-size: 12.5px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background .15s ease, border-color .15s ease;
+}
+.monaco-workbench .dovo-browser-actions button:hover { background: rgba(245, 158, 11, .16); border-color: rgba(245, 158, 11, .65); }
+.monaco-workbench .dovo-browser-actions button.primary { background: #f59e0b; border-color: #f59e0b; color: #1a1208; font-weight: 600; }
+.monaco-workbench .dovo-browser-actions button.primary:hover { background: #fbbf24; border-color: #fbbf24; }
+
+/* The side bar view: compact, left aligned, same accents. */
+.monaco-workbench .dovo-browser-view { align-items: stretch; text-align: left; padding: 12px 16px; max-width: none; gap: 8px; }
+.monaco-workbench .dovo-browser-view .dovo-browser-icon { display: none; }
+.monaco-workbench .dovo-browser-view .dovo-browser-title { font-size: 13px; }
+.monaco-workbench .dovo-browser-view .dovo-browser-detail { font-size: 12px; }
+.monaco-workbench .dovo-browser-view .dovo-browser-actions { justify-content: flex-start; }
+
+.monaco-workbench.vs .dovo-browser-actions button.primary,
+.monaco-workbench.hc-light .dovo-browser-actions button.primary { background: #ea580c; border-color: #ea580c; color: #fff; }

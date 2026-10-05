@@ -288,7 +288,8 @@ class EditorChanges extends Disposable {
 		const widget: IOverlayWidget = {
 			getId: () => 'maut.changeBar',
 			getDomNode: () => bar,
-			getPosition: (): IOverlayWidgetPosition => ({ preference: OverlayWidgetPositionPreference.TOP_RIGHT_CORNER }),
+			// Bottom right: at the top, sticky scroll (the function you're in) covers it as soon as you scroll.
+			getPosition: (): IOverlayWidgetPosition => ({ preference: OverlayWidgetPositionPreference.BOTTOM_RIGHT_CORNER }),
 		};
 		_editor.addOverlayWidget(widget);
 		this._register(toDisposable(() => _editor.removeOverlayWidget(widget)));

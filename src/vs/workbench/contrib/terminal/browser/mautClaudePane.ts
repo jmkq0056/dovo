@@ -31,6 +31,7 @@ import { IMautClaudeService, MautClaudeView } from './mautClaude.js';
 import type { ITerminalInstance } from './terminal.js';
 import { getFileResourcesFromDragEvent } from './terminalUri.js';
 import type { IXtermCore } from './xterm-private.js';
+import type { IBuffer, IBufferCell } from '@xterm/xterm';
 import { IScreenMenu, IScreenState, readScreen } from './mautClaudeScreen.js';
 import './media/mautClaudePane.css';
 
@@ -84,8 +85,22 @@ interface IChangedFile {
 
 interface ILiveState {
 	readonly block: string;
+	/** The same block as the terminal draws it: colours, bold, dim and all. */
+	readonly lines: readonly ILiveLine[];
 	readonly queued: string[];
 	readonly status: string;
+}
+
+/** A stretch of a live line with one look (inline CSS built from the terminal cell's attributes). */
+interface ILiveRun {
+	readonly text: string;
+	readonly style: string;
+}
+
+/** One visual line of Claude's live output; `background` fills the whole line, as diffs do. */
+interface ILiveLine {
+	readonly runs: readonly ILiveRun[];
+	readonly background: string;
 }
 
 interface IClaudeTurn {
@@ -144,7 +159,7 @@ export class MautClaudePane extends Disposable {
 	/** Claude's live state as last read from its screen, for the header's "Now" line. */
 	private _lastLive: ILiveState | undefined;
 	/** The live output opened full screen, if it is: it keeps streaming there. */
-	private _liveFull: { readonly element: HTMLElement; readonly text: HTMLElement; readonly status: HTMLElement } | undefined;
+	private _liveFull: { readonly element: HTMLElement; readonly text: HTMLElement; readonly status: HTMLElement; readonly verb: HTMLElement } | undefined;
 	private readonly _liveFullStore = this._register(new MutableDisposable<DisposableStore>());
 	/** The live output follows its newest line until you scroll up in it. */
 	private _liveFollow = true;
@@ -152,6 +167,8 @@ export class MautClaudePane extends Disposable {
 	private _liveLastApply = 0;
 	private _livePending: ILiveState | undefined;
 	private readonly _livePace = this._register(new MutableDisposable());
+	/** The live card's own listeners: they live as long as the card, not one conversation render. */
+	private readonly _liveDisposables = this._register(new DisposableStore());
 	/** The live card only grows while Claude works on a step, so it doesn't jump up and down. */
 	private _liveMinHeight = 0;
 	/** The "Now" line: one element for the pane's life, so hovering it holds and it never jumps. */
@@ -251,7 +268,7 @@ export class MautClaudePane extends Disposable {
 		this._register(dom.addDisposableListener(this._askCard, dom.EventType.MOUSE_DOWN, e => e.preventDefault()));
 		this._now = dom.$<HTMLButtonElement>('button.mcp-now', { type: 'button' });
 		dom.append(this._now, dom.$('i'));
-		this._nowVerb = dom.append(this._now, dom.$('span.mcp-verb.mcp-now-verb'));
+		this._nowVerb = dom.append(this._now, dom.$('span.mcp-spinner-word.mcp-now-verb'));
 		this._nowLabel = dom.append(this._now, dom.$('span.mcp-now-label'));
 		this._nowElapsed = dom.append(this._now, dom.$('span.mcp-now-time'));
 		this._register(dom.addDisposableListener(this._now, dom.EventType.CLICK, () => this._onNowClick()));
@@ -468,8 +485,16 @@ export class MautClaudePane extends Disposable {
 			return false;
 		}
 		const buffer = raw.buffer.active;
+		const line = (row: number) => buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? '';
+		// The footer says "esc to interrupt" while Claude works; a narrow pane cuts it short.
 		for (let row = raw.rows - 1; row >= Math.max(0, raw.rows - 4); row--) {
-			if ((buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? '').includes('esc to interrupt')) {
+			if (/esc to (?:i|\u2026)/.test(line(row))) {
+				return true;
+			}
+		}
+		// Or its spinner line, "\u273b Booping\u2026 (1m 12s \u00b7 ...)", is on screen above the prompt.
+		for (let row = raw.rows - 1; row >= Math.max(0, raw.rows - 30); row--) {
+			if (/^\S\s\S[^()]*\u2026\s*\(\d/.test(line(row))) {
 				return true;
 			}
 		}
@@ -509,7 +534,7 @@ export class MautClaudePane extends Disposable {
 				break;
 			}
 		}
-		const state: { block: string[]; queued: string[]; status: string } = { block: [], queued: [], status: '' };
+		const state: { block: string[]; rows: number[]; queued: string[]; status: string } = { block: [], rows: [], queued: [], status: '' };
 		let section: 'block' | 'queue' | 'status' | 'note' = 'block';
 		for (let row = start; row < promptTop; row++) {
 			const text = line(row);
@@ -527,10 +552,12 @@ export class MautClaudePane extends Disposable {
 				section = 'note'; // the spinner's notes and tips: noise in the Reader
 			} else if (section === 'block') {
 				state.block.push(text);
+				state.rows.push(row);
 			}
 		}
 		while (state.block.length && !state.block.at(-1)!.trim()) {
 			state.block.pop();
+			state.rows.pop();
 		}
 		let block = state.block.join('\n').trim();
 		// Already in the transcript? Then the Reader shows it properly.
@@ -539,7 +566,8 @@ export class MautClaudePane extends Disposable {
 		if (first && last?.kind === 'text' && last.text.replace(/\s+/g, ' ').startsWith(first)) {
 			block = '';
 		}
-		return { block: block.replace(/^\u23fa\s*/, ''), queued: state.queued, status: state.status };
+		const lines = block ? readRichLines(buffer, state.rows, raw.cols) : [];
+		return { block: block.replace(/^\u23fa\s*/, ''), lines, queued: state.queued, status: state.status };
 	}
 
 	private _updateLive(promptTop: number): void {
@@ -557,6 +585,7 @@ export class MautClaudePane extends Disposable {
 		this._live.classList.toggle('visible', !!live && !!(live.block || live.queued.length));
 		this._updateLiveFull(live);
 		if (!live) {
+			this._liveDisposables.clear();
 			dom.clearNode(this._live);
 			return;
 		}
@@ -565,8 +594,9 @@ export class MautClaudePane extends Disposable {
 			this._applyLiveText(live);
 		} else {
 			this._livePace.clear();
+			this._liveDisposables.clear();
 			dom.clearNode(this._live);
-			this._liveBlock = live.block ? this._createLiveBlock(live.block) : undefined;
+			this._liveBlock = live.block ? this._createLiveBlock(live) : undefined;
 			for (const queued of live.queued) {
 				const user = dom.append(this._live, dom.$('.mcp-user.mcp-queued'));
 				const bubble = dom.append(user, dom.$('.mcp-bubble'));
@@ -579,15 +609,18 @@ export class MautClaudePane extends Disposable {
 	}
 
 	/** Claude's streaming output: scrollable, following the newest line, with a way to open it full screen. */
-	private _createLiveBlock(text: string): HTMLElement {
-		const block = dom.append(this._live, dom.$('.mcp-live-block'));
-		const body = dom.append(block, dom.$('.mcp-live-text', undefined, text));
+	private _createLiveBlock(live: ILiveState): HTMLElement {
+		const block = dom.append(this._live, dom.$('.mcp-live-block.working'));
+		// A slow amber sweep along the top edge says Claude is still at it, without anything blinking.
+		dom.append(block, dom.$('span.mcp-live-sweep'));
+		const body = dom.append(block, dom.$('.mcp-live-text'));
+		this._renderLiveLines(body, live.lines);
 		const label = localize('maut.claude.liveFullScreen', "Open Full Screen");
 		const expand = dom.append(block, dom.$<HTMLButtonElement>(`button.mcp-live-expand${ThemeIcon.asCSSSelector(Codicon.screenFull)}`, { type: 'button' }));
 		expand.setAttribute('aria-label', label);
-		this._renderDisposables.add(this._hoverService.setupDelayedHover(expand, { content: label }));
-		this._renderDisposables.add(dom.addDisposableListener(expand, dom.EventType.CLICK, () => this._openLiveFull()));
-		this._renderDisposables.add(dom.addDisposableListener(body, 'scroll', () => {
+		this._liveDisposables.add(this._hoverService.setupDelayedHover(expand, { content: label }));
+		this._liveDisposables.add(dom.addDisposableListener(expand, dom.EventType.CLICK, () => this._openLiveFull()));
+		this._liveDisposables.add(dom.addDisposableListener(body, 'scroll', () => {
 			this._liveFollow = body.scrollTop + body.clientHeight >= body.scrollHeight - 8;
 			block.classList.toggle('scrolled', body.scrollTop > 4);
 		}));
@@ -617,10 +650,55 @@ export class MautClaudePane extends Disposable {
 		}
 		this._livePending = undefined;
 		this._liveLastApply = Date.now();
-		if (this._liveBlock && this._liveBlock.textContent !== live.block) {
-			this._liveBlock.textContent = live.block;
+		if (this._liveBlock && this._renderLiveLines(this._liveBlock, live.lines)) {
 			this._followLive();
 		}
+	}
+
+	/**
+	 * Shows live lines in `container`, reusing the elements of lines that didn't change so nothing
+	 * flickers; new or changed lines fade in. Image references get their thumbnails. Returns whether
+	 * anything changed.
+	 */
+	private _renderLiveLines(container: HTMLElement, lines: readonly ILiveLine[]): boolean {
+		let changed = false;
+		lines.forEach((line, index) => {
+			const key = JSON.stringify(line);
+			const existing = container.children.item(index) as HTMLElement | null;
+			if (existing?.dataset.key === key) {
+				return;
+			}
+			changed = true;
+			const element = dom.$('.mcp-live-line.fresh');
+			element.dataset.key = key;
+			if (line.background) {
+				element.style.backgroundColor = line.background;
+			}
+			for (const run of line.runs) {
+				const span = dom.append(element, dom.$('span', undefined, run.text));
+				if (run.style) {
+					span.style.cssText = run.style;
+				}
+			}
+			const text = line.runs.map(run => run.text).join('');
+			const images = [...text.matchAll(/\[Image #(?<n>\d+)\]/g)].map(match => Number(match.groups?.n));
+			if (images.length) {
+				const row = dom.append(element, dom.$('.mcp-live-images'));
+				for (const n of images) {
+					row.appendChild(this._imageChip(n));
+				}
+			}
+			if (existing) {
+				existing.replaceWith(element);
+			} else {
+				container.appendChild(element);
+			}
+		});
+		while (container.children.length > lines.length) {
+			container.lastElementChild?.remove();
+			changed = true;
+		}
+		return changed;
 	}
 
 	private _followLive(): void {
@@ -650,18 +728,29 @@ export class MautClaudePane extends Disposable {
 			element.remove();
 			this._liveFull = undefined;
 		}));
-		element.style.top = `${this._headerHeight}px`;
 		element.tabIndex = -1;
+		this._root.classList.add('mcp-live-full-open');
+		store.add(toDisposable(() => this._root.classList.remove('mcp-live-full-open')));
 		element.setAttribute('role', 'dialog');
 		element.setAttribute('aria-label', localize('maut.claude.liveFullLabel', "What Claude is doing"));
 		const bar = dom.append(element, dom.$('.mcp-live-full-bar'));
-		dom.append(bar, dom.$('i'));
+		dom.append(bar, dom.$('span.mcp-live-orbit'));
+		const verb = dom.append(bar, dom.$('span.mcp-spinner-word.mcp-live-full-verb'));
 		const status = dom.append(bar, dom.$('span.mcp-live-full-status'));
 		const close = dom.append(bar, dom.$<HTMLButtonElement>(`button.mcp-live-full-close${ThemeIcon.asCSSSelector(Codicon.close)}`, { type: 'button' }));
 		const closeLabel = localize('maut.claude.liveFullClose', "Close (Escape)");
 		close.setAttribute('aria-label', closeLabel);
 		store.add(this._hoverService.setupDelayedHover(close, { content: closeLabel }));
+		dom.append(element, dom.$('span.mcp-live-sweep'));
 		const text = dom.append(element, dom.$('.mcp-live-full-text'));
+		// Images Claude shows open like in the Reader.
+		store.add(dom.addDisposableListener(text, dom.EventType.CLICK, e => {
+			const file = (e.target as HTMLElement).closest<HTMLElement>('[data-file]')?.dataset.file;
+			if (file) {
+				e.preventDefault();
+				this._openFile(file);
+			}
+		}));
 		const dispose = () => this._liveFullStore.clear();
 		store.add(dom.addDisposableListener(close, dom.EventType.CLICK, dispose));
 		store.add(dom.addDisposableListener(element, dom.EventType.KEY_DOWN, e => {
@@ -671,7 +760,7 @@ export class MautClaudePane extends Disposable {
 				dispose();
 			}
 		}));
-		this._liveFull = { element, text, status };
+		this._liveFull = { element, text, status, verb };
 		this._updateLiveFull(this._lastLive);
 		text.scrollTop = text.scrollHeight;
 		element.focus();
@@ -683,15 +772,21 @@ export class MautClaudePane extends Disposable {
 			return;
 		}
 		const follow = full.text.scrollTop + full.text.clientHeight >= full.text.scrollHeight - 8;
-		if (live?.block) {
-			full.text.textContent = live.block;
+		if (live?.lines.length) {
+			this._renderLiveLines(full.text, live.lines);
 		}
-		full.element.classList.toggle('done', !live?.block && !live?.status);
-		const figures = spinnerParts(live?.status ?? '').rest.replace(/^\(|\)$/g, '').trim();
-		if (live?.block) {
-			full.status.textContent = figures ? localize('maut.claude.liveFullFigures', "Live output \u00b7 {0}", figures) : localize('maut.claude.liveFullWorking', "Claude is working");
-		} else {
-			full.status.textContent = live?.block ? localize('maut.claude.liveFullWorking', "Claude is working") : localize('maut.claude.liveFullDone', "Claude finished this step. The reply is in the Reader.");
+		const done = !live?.block && !live?.status;
+		full.element.classList.toggle('done', done);
+		const { verb, rest } = spinnerParts(live?.status ?? '');
+		const figures = rest.replace(/^\(|\)$/g, '').trim();
+		if (full.verb.textContent !== verb) {
+			full.verb.textContent = done ? '' : verb;
+		}
+		const status = done
+			? localize('maut.claude.liveFullDone', "Claude finished this step. The reply is in the Reader.")
+			: figures || localize('maut.claude.liveFullWorking', "Claude is working");
+		if (full.status.textContent !== status) {
+			full.status.textContent = status;
 		}
 		if (follow) {
 			full.text.scrollTop = full.text.scrollHeight;
@@ -1942,6 +2037,125 @@ function conversationText(turns: readonly IClaudeTurn[]): string {
 		}
 	}
 	return parts.join('\n\n');
+}
+
+/** The terminal's 16 theme colours, by palette index. */
+const ansiColors = ['Black', 'Red', 'Green', 'Yellow', 'Blue', 'Magenta', 'Cyan', 'White', 'BrightBlack', 'BrightRed', 'BrightGreen', 'BrightYellow', 'BrightBlue', 'BrightMagenta', 'BrightCyan', 'BrightWhite']
+	.map(name => `var(--vscode-terminal-ansi${name})`);
+
+/** A palette index (xterm's 256 colours) as CSS. */
+function paletteColor(index: number): string {
+	if (index < 16) {
+		return ansiColors[index];
+	}
+	if (index < 232) {
+		const levels = [0, 95, 135, 175, 215, 255];
+		const n = index - 16;
+		return `rgb(${levels[Math.floor(n / 36)]}, ${levels[Math.floor(n / 6) % 6]}, ${levels[n % 6]})`;
+	}
+	const gray = 8 + (index - 232) * 10;
+	return `rgb(${gray}, ${gray}, ${gray})`;
+}
+
+function cellColor(rgb: boolean, palette: boolean, value: number): string {
+	if (rgb) {
+		return `rgb(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255})`;
+	}
+	return palette ? paletteColor(value) : '';
+}
+
+/** One terminal cell's look as inline CSS: colours, bold, dim, italic, underline. */
+function cellLook(cell: IBufferCell): { style: string; background: string } {
+	let color = cellColor(!!cell.isFgRGB(), !!cell.isFgPalette(), cell.getFgColor());
+	let background = cellColor(!!cell.isBgRGB(), !!cell.isBgPalette(), cell.getBgColor());
+	if (cell.isInverse()) {
+		[color, background] = [background || 'var(--vscode-terminal-background, var(--vscode-editor-background))', color || 'var(--vscode-terminal-foreground, var(--vscode-foreground))'];
+	}
+	const parts: string[] = [];
+	if (color) {
+		parts.push(`color: ${color}`);
+	}
+	if (background) {
+		parts.push(`background-color: ${background}`);
+	}
+	if (cell.isBold()) {
+		parts.push('font-weight: 600');
+	}
+	if (cell.isDim()) {
+		parts.push('opacity: .6');
+	}
+	if (cell.isItalic()) {
+		parts.push('font-style: italic');
+	}
+	if (cell.isUnderline()) {
+		parts.push('text-decoration: underline');
+	}
+	return { style: parts.join('; '), background };
+}
+
+/**
+ * Claude's live output exactly as the terminal shows it: each row's cells grouped into runs that
+ * look the same. Rows the terminal wrapped continue the line before them; a background that runs
+ * to the edge (a diff line) fills the whole line.
+ */
+function readRichLines(buffer: IBuffer, rows: readonly number[], cols: number): ILiveLine[] {
+	const lines: { runs: ILiveRun[]; background: string }[] = [];
+	const cell = buffer.getNullCell();
+	for (const row of rows) {
+		const line = buffer.getLine(buffer.viewportY + row);
+		if (!line) {
+			continue;
+		}
+		// The last cell worth showing: text, or a background colour (diff lines are filled to the edge).
+		let end = Math.min(cols, line.length) - 1;
+		for (; end >= 0; end--) {
+			line.getCell(end, cell);
+			if (cell.getChars().trim() || !cell.isBgDefault()) {
+				break;
+			}
+		}
+		const runs: ILiveRun[] = [];
+		let lineBackground = '';
+		for (let x = 0; x <= end; x++) {
+			line.getCell(x, cell);
+			if (cell.getWidth() === 0) {
+				continue; // the second half of a wide character
+			}
+			const look = cellLook(cell);
+			const text = cell.getChars() || ' ';
+			const previous = runs.at(-1);
+			if (previous && previous.style === look.style) {
+				runs[runs.length - 1] = { text: previous.text + text, style: look.style };
+			} else {
+				runs.push({ text, style: look.style });
+			}
+			if (x === end && look.background && end >= cols - 2) {
+				lineBackground = look.background;
+			}
+		}
+		const previousLine = lines.at(-1);
+		if (line.isWrapped && previousLine) {
+			previousLine.runs.push(...runs);
+			previousLine.background ||= lineBackground;
+		} else {
+			lines.push({ runs, background: lineBackground });
+		}
+	}
+	// The block's own bullet is drawn by the Reader.
+	const firstRun = lines[0]?.runs[0];
+	if (firstRun && /^\u23fa/.test(firstRun.text)) {
+		const text = firstRun.text.replace(/^\u23fa\s*/, '');
+		if (text) {
+			lines[0].runs[0] = { text, style: firstRun.style };
+		} else {
+			lines[0].runs.shift();
+			const next = lines[0].runs[0];
+			if (next) {
+				lines[0].runs[0] = { text: next.text.replace(/^\s+/, ''), style: next.style };
+			}
+		}
+	}
+	return lines;
 }
 
 /**

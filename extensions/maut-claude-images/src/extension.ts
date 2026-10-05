@@ -107,7 +107,6 @@ function makeMautName(n: number): string {
 }
 
 /** A Claude terminal's name: "Agent 2", or the older "2 -- DOVO" / "2 -- MAUT" of restored tabs. */
-const agentNameRegex = /^(?:Agent \d+|\d+ -- (?:DOVO|MAUT))$/;
 
 function startClaudeInNewTerminal(opts?: { autoResume?: boolean }): vscode.Terminal {
 	const t = createMautTerminal();
@@ -369,24 +368,23 @@ function bindShellExecutionTracking(context: vscode.ExtensionContext): void {
 			if (!isClaudeCommand(cmd)) { return; }
 			const info = mautTerminals.get(e.terminal);
 			if (!info || info.state === 'idle') { return; }
-			// Free the number and colour; the tab says the agent ended and its icon goes quiet.
-			const ended = endedName(info.number);
+			// Claude ended here: free its number and close the tab, so only live agents stay open.
 			releaseAllocation(info);
 			info.state = 'idle';
-			info.icon = 'history';
-			info.color = 'terminal.ansiBlack';
-			await setTerminalAppearance(e.terminal, { name: ended, icon: info.icon, color: info.color });
+			mautTerminals.delete(e.terminal);
+			const terminal = e.terminal;
+			setTimeout(() => {
+				// Unless you started Claude in it again meanwhile.
+				if (!mautTerminals.has(terminal)) {
+					terminal.dispose();
+				}
+			}, 1500);
 		}));
 	}
 
-	// On extension activation, mark restored "Agent N" terminals as ended until a
-	// shell-execution event proves them alive again.
-	void markRestoredTerminalsClosed();
-}
-
-/** "Agent 3 \u00b7 ended": an agent tab whose Claude has exited (never matched as a live agent). */
-function endedName(number: number | undefined): string {
-	return number === undefined ? 'Agent \u00b7 ended' : `Agent ${number} \u00b7 ended`;
+	// On activation, close agent tabs restored from last time: their Claude is gone, and Dovo
+	// starts (or continues) Claude in a fresh Agent tab of its own.
+	void closeRestoredAgentTerminals();
 }
 
 /**
@@ -405,14 +403,17 @@ async function setTerminalAppearance(terminal: vscode.Terminal, appearance: { na
 	}
 }
 
-async function markRestoredTerminalsClosed(): Promise<void> {
+/** Agent tabs left from an earlier run, under any name they had: "Agent 2", "Agent 2 \u00b7 ended", "CLOSED", "3 -- DOVO". */
+const leftoverAgentNameRegex = /^(?:Agent \d+(?: \u00b7 ended)?|Agent \u00b7 ended|CLOSED|\d+ -- (?:DOVO|MAUT))$/;
+
+async function closeRestoredAgentTerminals(): Promise<void> {
 	// Defer to give VS Code time to restore terminal tabs.
 	await new Promise(r => setTimeout(r, 1500));
 	for (const t of vscode.window.terminals) {
-		if (!agentNameRegex.test(t.name)) { continue; }
-		if (mautTerminals.has(t)) { continue; }
-		const number = /^Agent (?<number>\d+)$/.exec(t.name)?.groups?.number;
-		await setTerminalAppearance(t, { name: number ? endedName(Number(number)) : endedName(undefined), icon: 'history', color: 'terminal.ansiBlack' });
+		if (!leftoverAgentNameRegex.test(t.name) || mautTerminals.has(t)) {
+			continue;
+		}
+		t.dispose();
 	}
 }
 

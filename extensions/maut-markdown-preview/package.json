@@ -2,7 +2,7 @@
 	"name": "maut-markdown-preview",
 	"displayName": "Dovo Markdown Preview-by-Default",
 	"description": "Open .md files in the rendered preview by default. Editor button toggles to source.",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"publisher": "maut",
 	"license": "MIT",
 	"engines": { "vscode": "^1.121.0" },

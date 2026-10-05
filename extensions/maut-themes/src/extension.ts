@@ -53,8 +53,8 @@ const DEFAULT_DARK: Snapshot = {
 
 const DEFAULT_LIGHT: Snapshot = {
 	mode: 'light',
-	accent: '#ea580c',
-	tint: '#fbf6ec',
+	accent: '#c2410c',
+	tint: '#f3eee6',
 	fontFamily: 'JetBrains Mono, Menlo, Monaco, monospace',
 	fontSize: 13,
 };
@@ -130,14 +130,20 @@ function buildPalette(snap: Snapshot): Record<string, string> {
 	const surfaceHi = isLight ? darken(base, 0.07) : lighten(base, 0.08);
 	const border = isLight ? mix(darken(base, 0.12), accent, 0.06) : lighten(base, 0.12);
 
-	const fg = isLight ? '#1e1e22' : '#f0f0f8';
-	const fgMuted = isLight ? '#5a5a6a' : '#a8a8bb';
-	const fgSubtle = isLight ? '#8a8a98' : '#6868a0';
-	const inputBg = isLight ? '#ffffff' : darken(base, 0.04);
+	// Light mode stays off pure white and pure black: a warm paper ground, ink
+	// that is dark but not harsh, and inputs only a step lighter than the page.
+	const fg = isLight ? '#2b2724' : '#f0f0f8';
+	const fgMuted = isLight ? '#5f5850' : '#a8a8bb';
+	const fgSubtle = isLight ? '#8c847a' : '#6868a0';
+	const inputBg = isLight ? lighten(base, 0.35) : darken(base, 0.04);
 
 	return {
 		'focusBorder': accent,
 		'foreground': fg,
+		'editorGutter.background': base,
+		'editorGroup.border': border,
+		'editorPane.background': base,
+		'welcomePage.background': base,
 		'descriptionForeground': fgMuted,
 		'errorForeground': isLight ? '#c62a47' : '#e8465f',
 		'selection.background': withAlpha(accent, 0.33),
@@ -149,7 +155,7 @@ function buildPalette(snap: Snapshot): Record<string, string> {
 		'editor.selectionHighlightBackground': withAlpha(accent, 0.14),
 		'editor.findMatchBackground': withAlpha(accent, 0.30),
 		'editor.findMatchHighlightBackground': withAlpha(accent, 0.18),
-		'editor.lineHighlightBackground': surface,
+		'editor.lineHighlightBackground': isLight ? withAlpha('#000000', 0.035) : surface,
 		'editor.lineHighlightBorder': '#00000000',
 		'editorCursor.foreground': accent,
 		'editorLineNumber.foreground': fgSubtle,
@@ -306,6 +312,7 @@ function buildPalette(snap: Snapshot): Record<string, string> {
 		'editorOverviewRuler.selectionHighlightForeground': withAlpha(accent, 0.4),
 		'editorOverviewRuler.border': border,
 
+		'minimap.background': base,
 		'minimap.findMatchHighlight': accent,
 		'minimap.selectionHighlight': withAlpha(accent, 0.5),
 
@@ -335,7 +342,14 @@ const STATE_LEGACY = 'maut.theme.current';
 const LEGACY_ACCENT = '#c62a47';
 const LEGACY_DARK_TINT = '#2a181c';
 
+/** The first Ember light: bright cream that glared. Saved copies move to the softer default. */
+const BRIGHT_LIGHT_ACCENT = '#ea580c';
+const BRIGHT_LIGHT_TINT = '#fbf6ec';
+
 function toEmber(snap: Snapshot): Snapshot {
+	if (snap.mode === 'light' && snap.accent.toLowerCase() === BRIGHT_LIGHT_ACCENT && snap.tint.toLowerCase() === BRIGHT_LIGHT_TINT) {
+		return { ...snap, accent: DEFAULT_LIGHT.accent, tint: DEFAULT_LIGHT.tint };
+	}
 	if (snap.accent.toLowerCase() !== LEGACY_ACCENT) {
 		return snap;
 	}

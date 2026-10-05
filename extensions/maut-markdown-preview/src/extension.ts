@@ -1,10 +1,15 @@
 /*---------------------------------------------------------------------------------------------
- *  Maut Markdown Preview — custom renderer.
- *  - markdown-it (with anchor + task-lists) parses on the extension side.
- *  - Webview hosts the rendered HTML with a sticky TOC sidebar and Maut typography.
- *  - Live re-render on save. Theme-aware (Maut Dark / Light).
- *  - ⇧⌘V or the editor-title button toggles between preview and source.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+/*
+ *  Dovo Markdown Preview: custom renderer.
+ *  - markdown-it (with anchor + task-lists) parses on the extension side.
+ *  - Webview hosts the rendered HTML with a sticky TOC sidebar and Dovo typography.
+ *  - Live re-render on save. Theme-aware (Ember dark / light).
+ *  - Cmd+Shift+V or the editor-title button toggles between preview and source.
+ */
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -116,28 +121,30 @@ function wrap(webview: vscode.Webview, themeClass: string, title: string, toc: s
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.10.0/build/styles/atom-one-light.min.css" id="hljs-css-light" disabled>
 <style>
 :root {
-	--accent: #c62a47;
-	--accent-hover: #e8465f;
+	--accent: #f59e0b;
+	--accent-hover: #fbbf24;
 }
 .maut-dark {
-	--bg: #2a181c;
-	--fg: #f0f0f8;
-	--muted: #a8a8bb;
-	--subtle: #6868a0;
-	--border: #3a2026;
-	--code-bg: #1f1216;
-	--toc-bg: #2a181c;
-	--toc-hover: #3a2026;
+	--bg: #1f1a1d;
+	--fg: #f3ebe1;
+	--muted: #b3a89b;
+	--subtle: #7d7268;
+	--border: #352d29;
+	--code-bg: #181416;
+	--toc-bg: #1a1618;
+	--toc-hover: #2a2321;
 }
 .maut-light {
-	--bg: #fafaf5;
-	--fg: #3a2026;
-	--muted: #6868a0;
-	--subtle: #9090a8;
-	--border: #e8e5dc;
-	--code-bg: #f0eee8;
-	--toc-bg: #f4f2ea;
-	--toc-hover: #ece9df;
+	--accent: #c2410c;
+	--accent-hover: #9a3412;
+	--bg: #f3eee6;
+	--fg: #2b2724;
+	--muted: #5f5850;
+	--subtle: #8c847a;
+	--border: #e0d8cc;
+	--code-bg: #ebe4d8;
+	--toc-bg: #ede7dd;
+	--toc-hover: #e5ddd0;
 }
 html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--fg); }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'SF Pro Text', system-ui, sans-serif; font-size: 15px; line-height: 1.7; }
@@ -166,7 +173,7 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { color: var(--accent-hover); text-decoration: underline; }
 code { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; background: var(--code-bg); color: var(--fg); padding: 2px 6px; border-radius: 4px; }
 pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; overflow-x: auto; margin: 16px 0; font-size: 13px; line-height: 1.55; }
-pre code { background: transparent; padding: 0; font-size: 13px; }
+pre code, pre code.hljs { background: transparent; padding: 0; font-size: 13px; }
 blockquote { border-left: 4px solid var(--accent); padding: 0 16px; margin: 16px 0; color: var(--muted); font-style: italic; }
 table { border-collapse: collapse; margin: 16px 0; width: 100%; font-size: 14px; }
 th, td { border: 1px solid var(--border); padding: 8px 14px; text-align: left; }

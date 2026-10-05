@@ -142,6 +142,8 @@ export class DovoBrowserDock extends Disposable {
 	private running: Promise<void> | undefined;
 	private readonly dirty = new Set<number>();
 	private readonly installed = new Set<string>();
+	/** Where each browser app was found, for its executable. */
+	private readonly appPaths = new Map<string, string>();
 	private askedForPermission = false;
 
 	constructor(@ILogService private readonly logService: ILogService) {
@@ -233,9 +235,13 @@ export class DovoBrowserDock extends Disposable {
 		// in a Finder window, and AppleScript would ask "Where is ...?" when it's missing.)
 		const name = app.endsWith('.app') ? app : `${app}.app`;
 		const folders = ['/Applications', join(homedir(), 'Applications'), '/Applications/Setapp'];
-		let found = folders.some(folder => existsSync(join(folder, name)));
-		if (!found) {
-			found = await new Promise<boolean>(resolve => execFile('/usr/bin/mdfind', [`kMDItemContentType == "com.apple.application-bundle" && kMDItemFSName == "${name.replace(/["\\]/g, '')}"`], { timeout: 4000 }, (error, stdout) => resolve(!error && stdout.trim().length > 0)));
+		let appPath = folders.map(folder => join(folder, name)).find(candidate => existsSync(candidate));
+		if (!appPath) {
+			appPath = await new Promise<string | undefined>(resolve => execFile('/usr/bin/mdfind', [`kMDItemContentType == "com.apple.application-bundle" && kMDItemFSName == "${name.replace(/["\\]/g, '')}"`], { timeout: 4000 }, (error, stdout) => resolve(error ? undefined : stdout.trim().split('\n')[0] || undefined)));
+		}
+		const found = !!appPath;
+		if (appPath) {
+			this.appPaths.set(app, appPath);
 		}
 		if (found) {
 			this.installed.add(app);
@@ -442,12 +448,41 @@ export class DovoBrowserDock extends Disposable {
 		return { status: 'ok', title: title.join('\t') || undefined };
 	}
 
-	private launch(app: string, url?: string): Promise<boolean> {
+	/**
+	 * Gives the browser a window here. If it's running, ask it for a new window (it opens in the
+	 * current Space; `open -a` would switch to wherever its windows are); otherwise start it.
+	 */
+	private async launch(app: string, url?: string): Promise<boolean> {
+		const executable = await this.executable(app);
+		const running = executable && await new Promise<boolean>(resolve => execFile('/usr/bin/pgrep', ['-f', executable], { timeout: 3000 }, error => resolve(!error)));
+		const [command, args] = running && executable
+			? [executable, ['--new-window', url ?? 'about:newtab']]
+			: ['/usr/bin/open', ['-a', app, ...(url ? [url] : [])]];
 		return new Promise(resolve => {
-			const child = spawn('/usr/bin/open', ['-a', app, ...(url ? [url] : [])], { stdio: 'ignore' });
+			const child = spawn(command, args, { stdio: 'ignore', detached: !!running });
 			child.on('error', () => resolve(false));
-			child.on('exit', code => resolve(code === 0));
+			if (running) {
+				// The browser hands the request to its running instance; this process just exits.
+				child.unref();
+				setTimeout(() => resolve(true), 300);
+			} else {
+				child.on('exit', code => resolve(code === 0));
+			}
 		});
+	}
+
+	/** The browser's executable inside its app bundle (Contents/MacOS/<CFBundleExecutable>). */
+	private async executable(app: string): Promise<string | undefined> {
+		if (!await this.isInstalled(app)) {
+			return undefined;
+		}
+		const appPath = this.appPaths.get(app);
+		if (!appPath) {
+			return undefined;
+		}
+		const name = await new Promise<string | undefined>(resolve => execFile('/usr/bin/defaults', ['read', join(appPath, 'Contents', 'Info'), 'CFBundleExecutable'], { timeout: 3000 }, (error, stdout) => resolve(error ? undefined : stdout.trim() || undefined)));
+		const executable = name ? join(appPath, 'Contents', 'MacOS', name) : undefined;
+		return executable && existsSync(executable) ? executable : undefined;
 	}
 
 	private osascript(script: string, args: string[]): Promise<{ status: DovoBrowserDockStatus; out: string }> {
@@ -459,7 +494,11 @@ export class DovoBrowserDock extends Disposable {
 					return;
 				}
 				const text = `${stderr ?? ''} ${error.message}`;
-				if (/-1719|-25211|assistive|not allowed/i.test(text)) {
+				// "Invalid index" (-1719 too) only means no such window in this Space; a missing
+				// permission reads -25211 / "assistive access", and Dovo isn't trusted.
+				if (/Invalid index/i.test(text) || (/-1719/.test(text) && this.trusted(false))) {
+					resolve({ status: 'noWindow', out: '' });
+				} else if (/-1719|-25211|assistive|not allowed/i.test(text)) {
 					resolve({ status: 'permission', out: '' });
 				} else if (/-1728|-10814|Can.t get application/i.test(text)) {
 					resolve({ status: 'missing', out: '' });

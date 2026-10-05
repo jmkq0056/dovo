@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import electron, { BrowserWindowConstructorOptions, Display, screen } from 'electron';
+import { execFileSync } from 'child_process';
 import { DeferredPromise, RunOnceScheduler, timeout, Delayer } from '../../../base/common/async.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import { toErrorMessage } from '../../../base/common/errorMessage.js';
@@ -315,13 +316,25 @@ export abstract class BaseWindow extends Disposable implements IBaseWindow {
 			// we show the window at the end of this block.
 			this._win?.maximize();
 
-			if (state.mode === WindowMode.Fullscreen) {
+			// Dovo: Dovo's own (simple) full screen goes on once the window is showing, exactly as
+			// Ctrl+Cmd+F does it; entered while hidden it ignored the camera notch.
+			const fullScreenOnShow = state.mode === WindowMode.Fullscreen && isMacintosh && !useNativeFullScreen(this.configurationService);
+			if (state.mode === WindowMode.Fullscreen && !fullScreenOnShow) {
 				this.setFullScreen(true, true);
 			}
 
 			// to reduce flicker from the default window size
 			// to maximize or fullscreen, we only show after
 			this._win?.show();
+
+			if (fullScreenOnShow) {
+				const win = this._win;
+				setTimeout(() => {
+					if (win && !win.isDestroyed() && !this.isFullScreen) {
+						this.setFullScreen(true, false);
+					}
+				}, 50);
+			}
 		}
 	}
 
@@ -503,6 +516,8 @@ export abstract class BaseWindow extends Disposable implements IBaseWindow {
 
 	private transientIsNativeFullScreen: boolean | undefined = undefined;
 	private joinNativeFullScreenTransition: DeferredPromise<boolean> | undefined = undefined;
+	/** Dovo: keeps a simple-full-screen window below the camera notch while it lasts. */
+	private readonly dovoNotchGuard = this._register(new MutableDisposable<DisposableStore>());
 
 	toggleFullScreen(): void {
 		this.setFullScreen(!this.isFullScreen, false);
@@ -599,16 +614,45 @@ export abstract class BaseWindow extends Disposable implements IBaseWindow {
 			this.doSetNativeFullScreen(false, false);
 		}
 
-		// Dovo: on a display with a camera notch, keep below it like macOS full screen does, so the
-		// middle of the title bar isn't hidden behind the camera. Measured before entering: the menu
-		// bar there is 30+ points tall (elsewhere about 24), and full screen hides it.
-		const display = fullscreen && win && isMacintosh ? electron.screen.getDisplayMatching(win.getBounds()) : undefined;
-		const notch = display ? display.workArea.y - display.bounds.y : 0;
-
+		// Dovo: on a display with a camera notch, keep the window below it, like macOS full screen
+		// does, so the title bar and search bar are never hidden behind the camera. The notch height
+		// comes from macOS itself (NSScreen safe area), and the position is kept on every resize,
+		// since simple full screen re-applies the whole-screen frame.
+		this.dovoNotchGuard.clear();
 		win?.setSimpleFullScreen(fullscreen);
-
-		if (display && win && notch > 30) {
-			win.setBounds({ x: display.bounds.x, y: display.bounds.y + notch, width: display.bounds.width, height: display.bounds.height - notch });
+		if (fullscreen && win && isMacintosh) {
+			// At most a few corrections a second: if macOS insists on its frame, don't fight it in a loop.
+			const corrections: number[] = [];
+			const keepBelowNotch = (fromResize: boolean) => {
+				if (win.isDestroyed() || !win.isSimpleFullScreen()) {
+					return;
+				}
+				const now = Date.now();
+				while (corrections.length && now - corrections[0] > 2000) {
+					corrections.shift();
+				}
+				if (fromResize && corrections.length >= 4) {
+					return;
+				}
+				const display = electron.screen.getDisplayMatching(win.getBounds());
+				const notch = notchInset(display);
+				const bounds = win.getBounds();
+				if (notch > 0 && (bounds.y < display.bounds.y + notch || bounds.height !== display.bounds.height - notch)) {
+					corrections.push(now);
+					win.setBounds({ x: display.bounds.x, y: display.bounds.y + notch, width: display.bounds.width, height: display.bounds.height - notch });
+				}
+			};
+			keepBelowNotch(false);
+			const store = new DisposableStore();
+			store.add(Event.fromNodeEventEmitter(win, 'resize')(() => keepBelowNotch(true)));
+			store.add(Event.fromNodeEventEmitter(win, 'show')(() => keepBelowNotch(false)));
+			// macOS animates into full screen and can drag the window back up meanwhile: check again
+			// once the animation has had time to finish, so the last word is below the notch.
+			for (const delay of [400, 900, 1500, 2500]) {
+				const handle = setTimeout(() => keepBelowNotch(false), delay);
+				store.add(toDisposable(() => clearTimeout(handle)));
+			}
+			this.dovoNotchGuard.value = store;
 		}
 
 		win?.webContents.focus(); // workaround issue where focus is not going into window
@@ -1755,4 +1799,24 @@ class UnresponsiveError extends Error {
 		this.name = 'UnresponsiveSampleError';
 		this.stack = sample;
 	}
+}
+
+/** Dovo: each display's camera notch height (macOS safe area top), read once per display. */
+const notchInsets = new Map<number, number>();
+
+function notchInset(display: Display): number {
+	const known = notchInsets.get(display.id);
+	if (known !== undefined) {
+		return known;
+	}
+	let inset = 0;
+	try {
+		// NSScreen frames are bottom-left based; match the display by size and horizontal origin.
+		const script = `ObjC.import('AppKit'); var s = $.NSScreen.screens; var r = 0; for (var i = 0; i < s.count; i++) { var c = s.objectAtIndex(i); var f = c.frame; if (Math.round(f.size.width) === ${Math.round(display.bounds.width)} && Math.round(f.size.height) === ${Math.round(display.bounds.height)} && Math.round(f.origin.x) === ${Math.round(display.bounds.x)}) { r = c.safeAreaInsets.top; } } r`;
+		inset = Math.max(0, Math.round(Number(execFileSync('/usr/bin/osascript', ['-l', 'JavaScript', '-e', script], { timeout: 3000 }).toString().trim()) || 0));
+	} catch {
+		inset = 0;
+	}
+	notchInsets.set(display.id, inset);
+	return inset;
 }

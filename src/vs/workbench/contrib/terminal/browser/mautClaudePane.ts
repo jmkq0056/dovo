@@ -218,7 +218,8 @@ export class MautClaudePane extends Disposable {
 	private _autoScrolling = false;
 	private readonly _jumpToLatest: HTMLButtonElement;
 	private _visible = false;
-	private readonly _imagePaths = new Map<number, string | undefined>();
+	/** Resolved image files, by number and the time of the message that pasted it. */
+	private readonly _imagePaths = new Map<string, string | undefined>();
 	/** Rows at the bottom of Claude's screen the composer shows: its prompt box (or a question). */
 	private _composerRows = 6;
 	/** Rows of Claude's screen below the frame's last shown row: the frame shows a slice, not just the bottom. */
@@ -1736,7 +1737,7 @@ export class MautClaudePane extends Disposable {
 			if (turn.images.length) {
 				const chips = dom.append(bubble, dom.$('.mcp-attachments'));
 				for (const n of turn.images) {
-					chips.appendChild(this._imageChip(n));
+					chips.appendChild(this._imageChip(n, turn.time));
 				}
 			}
 		}
@@ -1767,7 +1768,8 @@ export class MautClaudePane extends Disposable {
 				if (item.images.length) {
 					const chips = dom.append(bubble, dom.$('.mcp-attachments'));
 					for (const n of item.images) {
-						chips.appendChild(this._imageChip(n));
+						// Sent while Claude worked: no time of its own, but within this turn.
+						chips.appendChild(this._imageChip(n, turn.end));
 					}
 				}
 			} else if (item.kind === 'interrupted') {
@@ -1906,7 +1908,9 @@ export class MautClaudePane extends Disposable {
 		return card;
 	}
 
-	private _imageChip(n: number): HTMLElement {
+	/** `[Image #n]` with its thumbnail; `time` picks the right one when Claude reused the number. */
+	private _imageChip(n: number, time?: number): HTMLElement {
+		const key = `${n}@${time ?? 'latest'}`;
 		const chip = dom.$('span.mcp-chip', undefined, `[Image #${n}]`);
 		const show = (path: string | undefined) => {
 			if (!path) {
@@ -1918,11 +1922,11 @@ export class MautClaudePane extends Disposable {
 			chip.prepend(thumb);
 			chip.dataset.file = path;
 		};
-		if (this._imagePaths.has(n)) {
-			show(this._imagePaths.get(n));
+		if (this._imagePaths.has(key)) {
+			show(this._imagePaths.get(key));
 		} else {
-			this._commandService.executeCommand<string | undefined>(resolveImageCommandId, this._instance?.processId, n).then(path => {
-				this._imagePaths.set(n, path);
+			this._commandService.executeCommand<string | undefined>(resolveImageCommandId, this._instance?.processId, n, time).then(path => {
+				this._imagePaths.set(key, path);
 				show(path);
 			}, () => { /* the extension isn't running yet */ });
 		}

@@ -5,7 +5,7 @@
 
 import * as dom from '../../../../../base/browser/dom.js';
 import { mainWindow } from '../../../../../base/browser/window.js';
-import { RunOnceScheduler, timeout } from '../../../../../base/common/async.js';
+import { disposableTimeout, RunOnceScheduler, timeout } from '../../../../../base/common/async.js';
 import { KeyCode, KeyMod } from '../../../../../base/common/keyCodes.js';
 import { Disposable, DisposableMap, DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { localize, localize2 } from '../../../../../nls.js';
@@ -99,6 +99,8 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 	private readonly _strip: HTMLElement;
 	private readonly _stripStatus: HTMLElement;
 	private readonly _saveWidth = this._register(new RunOnceScheduler(() => this._rememberWidth(), 400));
+	/** A new group (a terminal or tab opened beside) is folded back in shortly after it appears. */
+	private readonly _arrangeSoon = this._register(new RunOnceScheduler(() => this._sessions.length ? this._arrange() : this._keepTwoColumns(), 300));
 
 	constructor(
 		@ITerminalService private readonly _terminalService: ITerminalService,
@@ -129,6 +131,17 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 			this._watch(instance);
 		}
 		this._register(this._terminalService.onDidCreateInstance(instance => this._watch(instance)));
+		// Never a third column: whatever opens in a group of its own joins the files (or Claude's).
+		this._register(this._editorGroupsService.onDidAddGroup(() => {
+			if (!this._applying && !this._hidden) {
+				this._arrangeSoon.schedule();
+			}
+		}));
+		// A window can also come back with three columns from last time.
+		this._arrangeSoon.schedule();
+		// And with terminals from last time: a fresh shell with old output replayed and nothing
+		// running. Close those, in the editor area and the panel; Dovo starts its own Agent tab.
+		this._register(disposableTimeout(() => this._closeRestoredShells(), 2500));
 		this._register(this._claudeService.onDidRequestLayoutMode(mode => this._setMode(mode)));
 		// allow-any-unicode-next-line
 		// ⌘B and the Explorer icon toggle the side bar. In Focus that means "go to IDE, with the tree";
@@ -293,6 +306,7 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 			for (const group of this._editorGroupsService.groups) {
 				this._unmaximize(group);
 			}
+			this._mergeIntoTwoGroups(claude);
 			const others = this._otherGroups(claude);
 			if (this._mode === 'ide') {
 				// Files on the left, Claude full height on the right.
@@ -398,6 +412,58 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 			}
 		}
 		return undefined;
+	}
+
+	/**
+	 * Two columns, never three: terminals (other agents, a shell you opened) sit beside Claude as
+	 * tabs in its group, and everything else (files, the Firefox tab) shares one files group.
+	 */
+	private _mergeIntoTwoGroups(claude: IEditorGroup): void {
+		const isTerminal = (group: IEditorGroup) => group.editors.length > 0 && group.editors.every(editor => editor instanceof TerminalEditorInput);
+		const others = this._otherGroups(claude);
+		const files = others.find(group => !group.isEmpty && !isTerminal(group)) ?? others.find(group => !isTerminal(group));
+		const wasLocked = claude.isLocked;
+		claude.lock(false);
+		for (const group of others) {
+			if (!this._editorGroupsService.getGroup(group.id)) {
+				continue;
+			}
+			// Terminals go beside Claude, whichever group they were in.
+			for (const editor of [...group.editors]) {
+				if (editor instanceof TerminalEditorInput) {
+					group.moveEditor(editor, claude, { preserveFocus: true, inactive: true });
+				}
+			}
+			if (group === files || !this._editorGroupsService.getGroup(group.id)) {
+				continue;
+			}
+			if (group.isEmpty) {
+				this._editorGroupsService.removeGroup(group);
+			} else if (files) {
+				this._editorGroupsService.mergeGroup(group, files);
+			}
+		}
+		claude.lock(wasLocked);
+	}
+
+	/** Terminals restored from last time with nothing running in them, wherever they are: just old output. */
+	private _closeRestoredShells(): void {
+		for (const instance of [...this._terminalService.instances]) {
+			const restored = !!instance.shellLaunchConfig.attachPersistentProcess;
+			if (restored && !this._claudeService.isClaude(instance) && !instance.hasChildProcesses) {
+				instance.dispose();
+			}
+		}
+	}
+
+	/** Without a running Claude: still two columns at most, the agent tab's group kept as one of them. */
+	private async _keepTwoColumns(): Promise<void> {
+		if (this._applying || this._editorGroupsService.count <= 2) {
+			return;
+		}
+		const groups = this._editorGroupsService.getGroups(GroupsOrder.GRID_APPEARANCE);
+		const agent = groups.find(group => group.editors.some(editor => editor instanceof TerminalEditorInput && /^Agent\b/.test(editor.getName()))) ?? groups[0];
+		await this._applying$(async () => this._mergeIntoTwoGroups(agent));
 	}
 
 	private _otherGroups(claude: IEditorGroup): IEditorGroup[] {

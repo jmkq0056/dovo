@@ -425,7 +425,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const sessionReader = new ClaudeSessionReader();
 	registerClaudeLaunch(context);
 	context.subscriptions.push(
-		vscode.commands.registerCommand('_maut.claudeImages.resolve', (shellPid: number | undefined, index: number) => imageResolver.resolve(shellPid, index)),
+		vscode.commands.registerCommand('_maut.claudeImages.resolve', (shellPid: number | undefined, index: number, time?: number) => imageResolver.resolve(shellPid, index, time)),
 		// Images handed to Claude: paths checked, HEIC converted to JPEG; and the files copied in Finder.
 		vscode.commands.registerCommand('_maut.images.prepare', (paths: string[]) => prepareImages(Array.isArray(paths) ? paths : [])),
 		vscode.commands.registerCommand('_maut.images.clipboardFiles', () => clipboardFilePaths()),

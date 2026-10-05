@@ -21,6 +21,7 @@
  */
 
 import { execFile } from 'child_process';
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -75,8 +76,13 @@ interface ISessionImages {
 	readonly transcript: string;
 	offset: number;
 	partial: string;
-	/** Image number → file on disk (original upload, legacy cache file or decoded copy). */
+	/** Image number → file on disk (original upload, legacy cache file or decoded copy): the latest. */
 	readonly files: Map<number, string>;
+	/**
+	 * Every time each number was pasted, oldest first. Claude restarts its numbering when it
+	 * restarts (e.g. --continue), so one session can have several different "#54"s.
+	 */
+	readonly pasted: Map<number, { readonly time: number; readonly file: string }[]>;
 	/** Image messages that carried no `imagePasteIds` (uploaded or queued prompts). */
 	readonly unnumbered: IUnnumberedMessage[];
 	lastUnnumbered: IUnnumberedMessage | undefined;
@@ -93,18 +99,22 @@ export class ClaudeImageResolver {
 	 * Returns the absolute path of the image file, or `undefined` when the image hasn't been
 	 * sent yet (Claude only keeps unsent images in memory) or no session was found.
 	 */
-	async resolve(shellPid: number | undefined, index: number): Promise<string | undefined> {
+	async resolve(shellPid: number | undefined, index: number, time?: number): Promise<string | undefined> {
 		const sessionId = await findSessionId(shellPid);
 		if (!sessionId) {
 			return undefined;
 		}
-		const legacy = findLegacyCacheFile(sessionId, index);
-		if (legacy) {
-			return legacy;
-		}
 		const state = this._getState(sessionId);
 		if (state) {
 			await this._readNewTranscriptLines(state, sessionId);
+			// The image pasted with that message: the last paste of this number up to its time.
+			const pasted = state.pasted.get(index);
+			if (pasted?.length && time) {
+				const match = [...pasted].reverse().find(item => item.time <= time + 10_000) ?? pasted[0];
+				if (fs.existsSync(match.file)) {
+					return match.file;
+				}
+			}
 			const known = state.files.get(index);
 			if (known && fs.existsSync(known)) {
 				return known;
@@ -118,6 +128,10 @@ export class ClaudeImageResolver {
 				}
 				return file;
 			}
+		}
+		const legacy = findLegacyCacheFile(sessionId, index);
+		if (legacy) {
+			return legacy;
 		}
 		const snapshot = this._snapshotPath(sessionId, index);
 		return fs.existsSync(snapshot) ? snapshot : undefined;
@@ -173,7 +187,7 @@ export class ClaudeImageResolver {
 			if (!transcript) {
 				return undefined;
 			}
-			state = { transcript, offset: 0, partial: '', files: new Map(), unnumbered: [], lastUnnumbered: undefined, pendingBlocks: new Map() };
+			state = { transcript, offset: 0, partial: '', files: new Map(), pasted: new Map(), unnumbered: [], lastUnnumbered: undefined, pendingBlocks: new Map() };
 			this._sessions.set(sessionId, state);
 		}
 		return state;
@@ -191,6 +205,7 @@ export class ClaudeImageResolver {
 			state.offset = 0;
 			state.partial = '';
 			state.files.clear();
+			state.pasted.clear();
 			state.unnumbered.length = 0;
 			state.lastUnnumbered = undefined;
 			state.pendingBlocks.clear();
@@ -230,11 +245,19 @@ export class ClaudeImageResolver {
 					if (!block) {
 						return;
 					}
-					// Decode to the cache right away rather than holding the base64 in memory.
-					const file = state.files.has(id) ? undefined : this._writeDecoded(sessionId, id, block);
+					// Decode to the cache right away rather than holding the base64 in memory. A number
+					// pasted again later (Claude restarted its numbering) is a different image: keep both.
+					const file = this._writeDecoded(sessionId, id, block);
 					if (file) {
 						state.files.set(id, file);
-					} else if (!state.files.has(id)) {
+						const time = Date.parse(entry.timestamp ?? '') || 0;
+						const list = state.pasted.get(id) ?? [];
+						if (!list.some(item => item.file === file)) {
+							list.push({ time, file });
+							state.pasted.set(id, list);
+						}
+						state.pendingBlocks.delete(id);
+					} else {
 						state.pendingBlocks.set(id, block);
 					}
 				});
@@ -289,7 +312,9 @@ export class ClaudeImageResolver {
 		}
 		const ext = MEDIA_TYPE_EXTS[block.source?.media_type ?? ''] ?? '.png';
 		const dir = path.join(this._cacheDir, sessionId);
-		const file = path.join(dir, `${index}${ext}`);
+		// Named by content, so a number Claude reuses never brings back an older picture.
+		const hash = createHash('sha1').update(data).digest('hex').slice(0, 12);
+		const file = path.join(dir, `${index}-${hash}${ext}`);
 		try {
 			if (!fs.existsSync(file)) {
 				fs.mkdirSync(dir, { recursive: true });

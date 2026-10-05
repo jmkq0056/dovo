@@ -39,6 +39,12 @@ const sessionCommandId = '_maut.claude.session';
 const resolveImageCommandId = '_maut.claudeImages.resolve';
 /** Two rows: who and how (name, view, layout, hide), then what's happening (Now, context, tasks). */
 const headerHeight = 72;
+/** The slim bar shown instead of the header once Claude has left the terminal. */
+const goneHeaderHeight = 44;
+/** How long Claude's UI and session can both be missing before the pane decides Claude has exited. */
+const goneAfter = 4000;
+/** The internal command that returns the command line Dovo starts Claude with. */
+const launchCommandId = '_maut.claude.launchCommand';
 const refreshInterval = 1500;
 const imageFileRegex = /\.(?:png|jpe?g|gif|webp|bmp)$/i;
 /** Widest the terminal gets while Claude runs: a comfortable reading column. */
@@ -138,15 +144,37 @@ export class MautClaudePane extends Disposable {
 	private _liveStructure = '';
 	/** Claude's live state as last read from its screen, for the header's "Now" line. */
 	private _lastLive: ILiveState | undefined;
+	/** The live output opened full screen, if it is: it keeps streaming there. */
+	private _liveFull: { readonly element: HTMLElement; readonly text: HTMLElement; readonly status: HTMLElement } | undefined;
+	private readonly _liveFullStore = this._register(new MutableDisposable<DisposableStore>());
+	/** The live output follows its newest line until you scroll up in it. */
+	private _liveFollow = true;
+	/** Live updates are paced so the card changes calmly instead of on every redraw. */
+	private _liveLastApply = 0;
+	private _livePending: ILiveState | undefined;
+	private readonly _livePace = this._register(new MutableDisposable());
+	/** The live card only grows while Claude works on a step, so it doesn't jump up and down. */
+	private _liveMinHeight = 0;
 	/** The "Now" line: one element for the pane's life, so hovering it holds and it never jumps. */
 	private readonly _now: HTMLButtonElement;
 	private readonly _nowLabel: HTMLElement;
+	/** Claude's own word for what it's doing ("Booping\u2026"), in its orange shimmer. */
+	private readonly _nowVerb: HTMLElement;
+	/** Shows a new activity once it has held, even if the screen doesn't change again meanwhile. */
+	private readonly _nowRecheck = this._register(new RunOnceScheduler(() => this._updateNow(), 650));
 	private readonly _nowElapsed: HTMLElement;
 	private _nowFile: string | undefined;
 	private _nowFull = '';
 	/** A new activity shows once it has held for a moment, so quick switches don't flicker. */
 	private _nowPending: { label: string; since: number } | undefined;
 	private _headerKey = '';
+	/** When Claude's UI or session was last seen in this terminal. */
+	private _claudeSeenAt = 0;
+	/** Marked running, but Claude has exited (or never came back after a restore): plain terminal, with a Start Claude bar. */
+	private _claudeGone = false;
+	private _wasActive = false;
+	/** The last session lookup found a live Claude process under this terminal's shell. */
+	private _sessionLive = false;
 	private readonly _headerDisposables = this._register(new DisposableStore());
 	/** The line under the input: Claude's latest notice ("Update installed"), else a hint. */
 	private readonly _liveNoteText: HTMLElement;
@@ -159,7 +187,6 @@ export class MautClaudePane extends Disposable {
 		}
 	}, 120));
 	private _liveBlock: HTMLElement | undefined;
-	private _liveStatus: HTMLElement | undefined;
 	private _wasReader = false;
 	/** The Activity panel: Claude's background shells and agents. */
 	private readonly _activity: HTMLElement;
@@ -183,6 +210,9 @@ export class MautClaudePane extends Disposable {
 	private _composerRows = 6;
 	/** Rows of Claude's screen below the frame's last shown row: the frame shows a slice, not just the bottom. */
 	private _composerShift = 0;
+	/** A new frame size waits until Claude's screen has held it for a moment, so redraws don't make the input jump. */
+	private _pendingFrame: { readonly rows: number; readonly shift: number; readonly since: number } | undefined;
+	private readonly _settleFrame = this._register(new RunOnceScheduler(() => this._measureComposer(), 90));
 	/** Claude's menus and questions, drawn as HTML above the input instead of inside the frame. */
 	private readonly _menuPop: HTMLElement;
 	private readonly _askCard: HTMLElement;
@@ -231,6 +261,7 @@ export class MautClaudePane extends Disposable {
 		this._register(dom.addDisposableListener(this._askCard, dom.EventType.MOUSE_DOWN, e => e.preventDefault()));
 		this._now = dom.$<HTMLButtonElement>('button.mcp-now', { type: 'button' });
 		dom.append(this._now, dom.$('i'));
+		this._nowVerb = dom.append(this._now, dom.$('span.mcp-verb.mcp-now-verb'));
 		this._nowLabel = dom.append(this._now, dom.$('span.mcp-now-label'));
 		this._nowElapsed = dom.append(this._now, dom.$('span.mcp-now-time'));
 		this._register(dom.addDisposableListener(this._now, dom.EventType.CLICK, () => this._onNowClick()));
@@ -276,7 +307,9 @@ export class MautClaudePane extends Disposable {
 				return;
 			}
 			if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+				// In the Reader this searches your prompts; the file finder keeps the key everywhere else.
 				e.preventDefault();
+				e.stopPropagation();
 				this._searchPrompts();
 				return;
 			}
@@ -309,6 +342,55 @@ export class MautClaudePane extends Disposable {
 		return !!this._instance && this._claudeService.isClaude(this._instance);
 	}
 
+	/** The Reader is shown: Claude runs here, is really on screen, and the Reader view is picked. */
+	private get _readerShown(): boolean {
+		return this.active && !this._claudeGone && !!this._instance && this._claudeService.viewOf(this._instance) === 'reader';
+	}
+
+	private get _headerHeight(): number {
+		return this._claudeGone ? goneHeaderHeight : headerHeight;
+	}
+
+	/**
+	 * Whether Claude is still in this terminal. Being marked running isn't proof: a restored tab
+	 * replays old output and its command can look started but never finish. Claude's own UI on
+	 * screen, or a live Claude process under the shell, is; missing both for a while means gone.
+	 */
+	private _noteClaude(seen: boolean): void {
+		const now = Date.now();
+		if (seen) {
+			this._claudeSeenAt = now;
+		}
+		const gone = !seen && now - this._claudeSeenAt > goneAfter;
+		if (gone === this._claudeGone) {
+			return;
+		}
+		this._claudeGone = gone;
+		if (gone && this._instance) {
+			this._claudeService.setWorking(this._instance, false);
+		}
+		this._headerKey = '';
+		this._update();
+	}
+
+	/** Start Claude again in this terminal, the way Dovo starts it. */
+	private async _startClaude(): Promise<void> {
+		const instance = this._instance;
+		if (!instance) {
+			return;
+		}
+		let command: string | undefined;
+		try {
+			command = await this._commandService.executeCommand<string>(launchCommandId);
+		} catch {
+			// The extension isn't up: plain claude still works.
+		}
+		this._claudeSeenAt = Date.now();
+		this._noteClaude(true);
+		instance.sendText(command || 'claude', true);
+		instance.focus();
+	}
+
 	setInstance(instance: ITerminalInstance | undefined): void {
 		if (instance === this._instance) {
 			return;
@@ -316,6 +398,9 @@ export class MautClaudePane extends Disposable {
 		this._resetFont();
 		this._instance = instance;
 		this._followBottom = true;
+		this._claudeGone = false;
+		this._sessionLive = false;
+		this._claudeSeenAt = Date.now();
 		this._instanceDisposables.clear();
 		this._session = undefined;
 		this._renderedKey = '';
@@ -467,35 +552,148 @@ export class MautClaudePane extends Disposable {
 		const sameStructure = structure === this._liveStructure;
 		this._liveText = key;
 		this._liveStructure = structure;
-		this._live.classList.toggle('visible', !!live && !!(live.block || live.queued.length || live.status));
+		this._live.classList.toggle('visible', !!live && !!(live.block || live.queued.length));
+		this._updateLiveFull(live);
 		if (!live) {
 			dom.clearNode(this._live);
 			return;
 		}
 		// Only text changed (the spinner's timer, more output): update in place, no rebuild, no blink.
 		if (sameStructure && this._live.childElementCount) {
-			if (this._liveBlock) {
-				this._liveBlock.textContent = live.block;
-			}
-			if (this._liveStatus) {
-				this._liveStatus.textContent = live.status;
-			}
+			this._applyLiveText(live);
 		} else {
+			this._livePace.clear();
 			dom.clearNode(this._live);
-			this._liveBlock = live.block ? dom.append(this._live, dom.$('.mcp-live-block', undefined, live.block)) : undefined;
+			this._liveBlock = live.block ? this._createLiveBlock(live.block) : undefined;
 			for (const queued of live.queued) {
 				const user = dom.append(this._live, dom.$('.mcp-user.mcp-queued'));
 				const bubble = dom.append(user, dom.$('.mcp-bubble'));
 				dom.append(bubble, dom.$('.mcp-prompt', undefined, queued));
 				dom.append(bubble, dom.$('.mcp-queued-note', undefined, localize('maut.claude.queuedNote', "Queued. Claude reads it after this step, or press Ctrl+Enter to send it now.")));
 			}
-			this._liveStatus = undefined;
-			if (live.status) {
-				this._liveStatus = dom.$('span', undefined, live.status);
-				dom.append(this._live, dom.$('.mcp-live-status', undefined, dom.$('i'), this._liveStatus));
-			}
+			// Claude's spinner word and figures show once, in the header's Now line, not again here.
 		}
 		this._scrollToEnd();
+	}
+
+	/** Claude's streaming output: scrollable, following the newest line, with a way to open it full screen. */
+	private _createLiveBlock(text: string): HTMLElement {
+		const block = dom.append(this._live, dom.$('.mcp-live-block'));
+		const body = dom.append(block, dom.$('.mcp-live-text', undefined, text));
+		const label = localize('maut.claude.liveFullScreen', "Open Full Screen");
+		const expand = dom.append(block, dom.$<HTMLButtonElement>(`button.mcp-live-expand${ThemeIcon.asCSSSelector(Codicon.screenFull)}`, { type: 'button' }));
+		expand.setAttribute('aria-label', label);
+		this._renderDisposables.add(this._hoverService.setupDelayedHover(expand, { content: label }));
+		this._renderDisposables.add(dom.addDisposableListener(expand, dom.EventType.CLICK, () => this._openLiveFull()));
+		this._renderDisposables.add(dom.addDisposableListener(body, 'scroll', () => {
+			this._liveFollow = body.scrollTop + body.clientHeight >= body.scrollHeight - 8;
+			block.classList.toggle('scrolled', body.scrollTop > 4);
+		}));
+		this._liveFollow = true;
+		this._liveMinHeight = 0;
+		this._liveLastApply = Date.now();
+		dom.getWindow(body).requestAnimationFrame(() => this._followLive());
+		return body;
+	}
+
+	/** Applies new live text at most every 220ms; the latest text always lands. */
+	private _applyLiveText(live: ILiveState): void {
+		const wait = 220 - (Date.now() - this._liveLastApply);
+		if (wait > 0) {
+			this._livePending = live;
+			if (!this._livePace.value) {
+				const targetWindow = dom.getWindow(this._root);
+				const timer = targetWindow.setTimeout(() => {
+					this._livePace.clear();
+					if (this._livePending) {
+						this._applyLiveText(this._livePending);
+					}
+				}, wait);
+				this._livePace.value = toDisposable(() => targetWindow.clearTimeout(timer));
+			}
+			return;
+		}
+		this._livePending = undefined;
+		this._liveLastApply = Date.now();
+		if (this._liveBlock && this._liveBlock.textContent !== live.block) {
+			this._liveBlock.textContent = live.block;
+			this._followLive();
+		}
+	}
+
+	private _followLive(): void {
+		const body = this._liveBlock;
+		if (!body) {
+			return;
+		}
+		const height = Math.min(body.scrollHeight, 240);
+		if (height > this._liveMinHeight) {
+			this._liveMinHeight = height;
+			body.style.minHeight = `${height}px`;
+		}
+		if (this._liveFollow) {
+			body.scrollTo({ top: body.scrollHeight, behavior: 'smooth' });
+			body.parentElement?.classList.toggle('scrolled', body.scrollHeight > body.clientHeight + 4);
+		}
+	}
+
+	/** The live output in a full-screen view over the Reader; it keeps streaming until you close it. */
+	private _openLiveFull(): void {
+		if (this._liveFull) {
+			return;
+		}
+		const store = this._liveFullStore.value = new DisposableStore();
+		const element = dom.append(this._root, dom.$('.mcp-live-full'));
+		store.add(toDisposable(() => {
+			element.remove();
+			this._liveFull = undefined;
+		}));
+		element.style.top = `${this._headerHeight}px`;
+		element.tabIndex = -1;
+		element.setAttribute('role', 'dialog');
+		element.setAttribute('aria-label', localize('maut.claude.liveFullLabel', "What Claude is doing"));
+		const bar = dom.append(element, dom.$('.mcp-live-full-bar'));
+		dom.append(bar, dom.$('i'));
+		const status = dom.append(bar, dom.$('span.mcp-live-full-status'));
+		const close = dom.append(bar, dom.$<HTMLButtonElement>(`button.mcp-live-full-close${ThemeIcon.asCSSSelector(Codicon.close)}`, { type: 'button' }));
+		const closeLabel = localize('maut.claude.liveFullClose', "Close (Escape)");
+		close.setAttribute('aria-label', closeLabel);
+		store.add(this._hoverService.setupDelayedHover(close, { content: closeLabel }));
+		const text = dom.append(element, dom.$('.mcp-live-full-text'));
+		const dispose = () => this._liveFullStore.clear();
+		store.add(dom.addDisposableListener(close, dom.EventType.CLICK, dispose));
+		store.add(dom.addDisposableListener(element, dom.EventType.KEY_DOWN, e => {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				e.stopPropagation();
+				dispose();
+			}
+		}));
+		this._liveFull = { element, text, status };
+		this._updateLiveFull(this._lastLive);
+		text.scrollTop = text.scrollHeight;
+		element.focus();
+	}
+
+	private _updateLiveFull(live: ILiveState | undefined): void {
+		const full = this._liveFull;
+		if (!full) {
+			return;
+		}
+		const follow = full.text.scrollTop + full.text.clientHeight >= full.text.scrollHeight - 8;
+		if (live?.block) {
+			full.text.textContent = live.block;
+		}
+		full.element.classList.toggle('done', !live?.block && !live?.status);
+		const figures = spinnerParts(live?.status ?? '').rest.replace(/^\(|\)$/g, '').trim();
+		if (live?.block) {
+			full.status.textContent = figures ? localize('maut.claude.liveFullFigures', "Live output \u00b7 {0}", figures) : localize('maut.claude.liveFullWorking', "Claude is working");
+		} else {
+			full.status.textContent = live?.block ? localize('maut.claude.liveFullWorking', "Claude is working") : localize('maut.claude.liveFullDone', "Claude finished this step. The reply is in the Reader.");
+		}
+		if (follow) {
+			full.text.scrollTop = full.text.scrollHeight;
+		}
 	}
 
 	private _isAtBottom(): boolean {
@@ -554,7 +752,7 @@ export class MautClaudePane extends Disposable {
 	/** Lay out header and Reader; returns the size the terminal itself should take. */
 	layout(dimension: dom.Dimension): dom.Dimension {
 		const host = this._terminalHost.style;
-		const reader = this.active && this._claudeService.view === 'reader';
+		const reader = this._readerShown;
 		this._terminalHost.classList.toggle('mcp-composer', reader);
 		if (!this.active) {
 			host.height = host.width = host.margin = host.padding = '';
@@ -563,7 +761,7 @@ export class MautClaudePane extends Disposable {
 		this._header.classList.toggle('mcp-compact', dimension.width < 900);
 		this._header.classList.toggle('mcp-narrow', dimension.width < 700);
 		this._header.classList.toggle('mcp-tiny', dimension.width < 460);
-		const body = Math.max(0, dimension.height - headerHeight);
+		const body = Math.max(0, dimension.height - this._headerHeight);
 		// A centered reading column instead of edge-to-edge text.
 		const width = Math.max(0, Math.min(dimension.width - sidePadding * 2, maxColumnWidth));
 		host.width = `${width}px`;
@@ -591,9 +789,9 @@ export class MautClaudePane extends Disposable {
 		this._jumpToLatest.style.bottom = `${composer + composerMarginTop + liveNoteHeight + 14}px`;
 		// The Activity panel ends above the input, so both stay in view.
 		this._activity.style.bottom = `${composer + composerMarginTop + liveNoteHeight}px`;
-		this._rail.style.top = `${headerHeight + 8}px`;
+		this._rail.style.top = `${this._headerHeight + 8}px`;
 		this._rail.style.height = `${Math.max(0, readerHeight - 16)}px`;
-		this._promptNav.style.top = `${headerHeight + 8}px`;
+		this._promptNav.style.top = `${this._headerHeight + 8}px`;
 		this._promptNav.style.maxHeight = `${Math.max(0, readerHeight - 16)}px`;
 		dom.getWindow(this._root).requestAnimationFrame(() => this._renderRail());
 		host.width = `${composerWidth}px`;
@@ -617,7 +815,13 @@ export class MautClaudePane extends Disposable {
 	private _update(): void {
 		this._updateFont();
 		const active = this.active;
-		const reader = active && this._claudeService.view === 'reader';
+		if (active && !this._wasActive) {
+			// Just started: give Claude a moment to draw before judging whether it's there.
+			this._claudeSeenAt = Date.now();
+			this._claudeGone = false;
+		}
+		this._wasActive = active;
+		const reader = this._readerShown;
 		if (reader !== this._wasReader) {
 			this._repaint.schedule();
 		}
@@ -627,7 +831,9 @@ export class MautClaudePane extends Disposable {
 		}
 		this._wasReader = reader;
 		this._root.classList.toggle('maut-claude-active', active);
-		this._root.classList.toggle('maut-claude-reader', active && this._claudeService.view === 'reader');
+		this._root.classList.toggle('maut-claude-reader', reader);
+		this._root.classList.toggle('mcp-gone', active && this._claudeGone);
+		this._header.classList.toggle('mcp-gone', active && this._claudeGone);
 		if (active) {
 			this._renderHeader();
 			this._refresh();
@@ -650,26 +856,54 @@ export class MautClaudePane extends Disposable {
 	 */
 	private _measureComposer(): void {
 		const raw = this._instance?.xterm?.raw;
-		if (!raw || !this.active || this._claudeService.view !== 'reader') {
+		const screen = raw && this.active ? readScreen(raw) : undefined;
+		if (screen) {
+			this._noteClaude(screen.claude || this._sessionLive);
+		}
+		if (!raw || !screen || !this._readerShown) {
 			this._showOverlays(undefined);
 			return;
 		}
-		const screen = readScreen(raw);
 		this._setNotice(screen.notice ?? '', screen.footer ?? '');
 		this._updateLive(screen.liveTop);
 		this._showOverlays(screen);
 		// The frame shows exactly the rows that matter, never more: the prompt box and its footer, or
 		// the one hint line under a question. A long prompt grows it, up to most of the height.
+		if (!screen.claude) {
+			// Mid-redraw, Claude's prompt box can be missing for a frame: keep the input as it is.
+			return;
+		}
 		const cap = Math.floor(raw.rows * 0.8);
 		const from = Math.max(screen.frame.from, screen.frame.to - cap + 1);
 		const rows = Math.max(1, screen.frame.to - from + 1);
 		const shift = raw.rows - 1 - screen.frame.to;
-		if (rows !== this._composerRows || shift !== this._composerShift) {
-			this._composerRows = rows;
-			this._composerShift = shift;
-			this._relayout();
-			this._repaint.schedule();
+		if (rows === this._composerRows && shift === this._composerShift) {
+			this._pendingFrame = undefined;
+			return;
 		}
+		// Which rows the frame shows must always match the screen: a stale position shows the wrong
+		// rows (a rule and the footer instead of your prompt). So the position and any growth apply
+		// at once; only shrinking waits a moment, since a redraw can shrink the box for a frame and
+		// grow it right back, and that flicker is what made the input jump.
+		if (shift === this._composerShift && rows < this._composerRows) {
+			const now = Date.now();
+			const pending = this._pendingFrame;
+			if (!pending || pending.rows !== rows || pending.shift !== shift) {
+				this._pendingFrame = { rows, shift, since: now };
+				this._settleFrame.schedule(260);
+				return;
+			}
+			const wait = 260 - (now - pending.since);
+			if (wait > 0) {
+				this._settleFrame.schedule(wait);
+				return;
+			}
+		}
+		this._pendingFrame = undefined;
+		this._composerRows = rows;
+		this._composerShift = shift;
+		this._relayout();
+		this._repaint.schedule();
 	}
 
 	/** Claude's / and @ menus as a list above the input, and its questions as a card with buttons. */
@@ -815,11 +1049,19 @@ export class MautClaudePane extends Disposable {
 		if (instance !== this._instance) {
 			return;
 		}
+		this._sessionLive = !!session;
+		const raw = instance.xterm?.raw;
+		this._noteClaude(!!session || (!!raw && readScreen(raw).claude));
+		if (!this.active || this._claudeGone) {
+			return;
+		}
 		if (!session) {
 			if (this._renderedKey !== 'none') {
 				this._renderedKey = 'none';
 				dom.clearNode(this._column);
 				dom.append(this._column, dom.$('.mcp-empty', undefined, localize('maut.claude.noSession', "The conversation appears here once Claude has saved it. Type below to start.")));
+				// Claude's work on your first message shows live even before anything is saved.
+				this._column.appendChild(this._live);
 			}
 			return;
 		}
@@ -851,6 +1093,10 @@ export class MautClaudePane extends Disposable {
 		const activity = working ? this._currentActivity() : undefined;
 		this._now.classList.add('visible');
 		this._now.classList.toggle('idle', !activity);
+		const verb = working ? spinnerParts(this._lastLive?.status ?? '').verb : '';
+		if (this._nowVerb.textContent !== verb) {
+			this._nowVerb.textContent = verb;
+		}
 		if (!activity) {
 			this._nowPending = undefined;
 			this._nowElapsed.textContent = '';
@@ -863,7 +1109,9 @@ export class MautClaudePane extends Disposable {
 			return;
 		}
 		// The time ticks in place; the activity itself changes only once it has held for 600ms.
-		this._nowElapsed.textContent = activity.elapsed ? `\u00b7 ${activity.elapsed}` : '';
+		// The figures from Claude's spinner line ("1m 12s \u00b7 \u2193 4.2k tokens") sit after the activity.
+		const figures = spinnerParts(this._lastLive?.status ?? '').rest.replace(/^\(|\)$/g, '').trim() || activity.elapsed;
+		this._nowElapsed.textContent = figures ? `\u00b7 ${figures}` : '';
 		const shown = this._nowLabel.textContent;
 		if (activity.label !== shown) {
 			const now = Date.now();
@@ -871,6 +1119,7 @@ export class MautClaudePane extends Disposable {
 				this._nowPending = { label: activity.label, since: now };
 			}
 			if (shown && now - this._nowPending.since < 600) {
+				this._nowRecheck.schedule();
 				return;
 			}
 			this._nowLabel.textContent = activity.label;
@@ -1086,13 +1335,17 @@ export class MautClaudePane extends Disposable {
 	}
 
 	private _renderHeader(): void {
+		if (this._claudeGone) {
+			this._renderGoneHeader();
+			return;
+		}
 		const session = this._session;
 		const project = session?.project || this._workspaceContextService.getWorkspace().folders[0]?.name || localize('maut.claude.title', "Claude");
 		const meta = session?.model ? modelLabel(session.model) : '';
 
 		// Rebuild only when something shown changed: a rebuild drops hovers and focus.
 		const running = session?.tasks?.filter(task => task.status === 'running').length ?? 0;
-		const key = JSON.stringify([project, meta, session?.contextTokens, session?.contextWindow, running, this._activityOpen, this._claudeService.view, this._claudeService.layoutMode]);
+		const key = JSON.stringify([project, meta, session?.contextTokens, session?.contextWindow, running, this._activityOpen, this._instance ? this._claudeService.viewOf(this._instance) : 'reader', this._claudeService.layoutMode]);
 		this._updateNow();
 		if (key === this._headerKey && this._header.childElementCount) {
 			return;
@@ -1109,19 +1362,35 @@ export class MautClaudePane extends Disposable {
 		top.appendChild(this._segment<MautClaudeView>(localize('maut.claude.viewLabel', "View"), [
 			['reader', localize('maut.claude.reader', "Reader"), undefined, Codicon.commentDiscussion],
 			['terminal', localize('maut.claude.terminal', "Terminal"), undefined, Codicon.terminal],
-		], this._claudeService.view, view => this._claudeService.setView(view)));
+		], this._instance ? this._claudeService.viewOf(this._instance) : 'reader', view => this._instance && this._claudeService.setView(this._instance, view)));
 		const ide = this._claudeService.layoutMode === 'ide';
 		top.appendChild(this._iconButton(ide ? Codicon.screenFull : Codicon.layoutSidebarLeft,
 			ide ? localize('maut.claude.toFocus', "Focus layout: Claude takes the window (\u2318B)") : localize('maut.claude.toIde', "IDE layout: files beside Claude (\u2318B)"),
 			() => this._claudeService.requestLayoutMode(ide ? 'focus' : 'ide')));
 		top.appendChild(this._iconButton(Codicon.layoutSidebarRightOff,
-			isMacintosh ? localize('maut.claude.hideMac', "Hide Claude (\u2303\u2318J)") : localize('maut.claude.hideOther', "Hide Claude (Ctrl+Alt+J)"),
+			isMacintosh ? localize('maut.claude.hideMac', "Hide Claude (\u21e7\u2318J)") : localize('maut.claude.hideOther', "Hide Claude (Ctrl+Shift+J)"),
 			() => this._claudeService.requestToggleHidden()));
 
 		const bottom = dom.append(this._header, dom.$('.mcp-hrow.mcp-hrow-bottom'));
 		bottom.appendChild(this._now);
 		bottom.appendChild(this._contextButton(session));
 		bottom.appendChild(this._activityButton(session));
+	}
+
+	/** Claude has left this terminal: say so, and offer to start it again. The terminal shows as is. */
+	private _renderGoneHeader(): void {
+		if (this._headerKey === 'gone' && this._header.childElementCount) {
+			return;
+		}
+		this._headerKey = 'gone';
+		this._headerDisposables.clear();
+		dom.clearNode(this._header);
+		const row = dom.append(this._header, dom.$('.mcp-hrow.mcp-gone-row'));
+		dom.append(row, dom.$('span.mcp-avatar'));
+		dom.append(row, dom.$('span.mcp-gone-text', undefined, localize('maut.claude.notRunning', "Claude isn't running in this terminal")));
+		dom.append(row, dom.$('span.mcp-grow'));
+		const start = dom.append(row, dom.$<HTMLButtonElement>('button.mcp-start-claude', { type: 'button' }, localize('maut.claude.startClaude', "Start Claude")));
+		this._headerDisposables.add(dom.addDisposableListener(start, dom.EventType.CLICK, () => this._startClaude()));
 	}
 
 	private _iconButton(icon: ThemeIcon, label: string, run: () => void): HTMLElement {
@@ -1665,6 +1934,15 @@ function conversationText(turns: readonly IClaudeTurn[]): string {
 		}
 	}
 	return parts.join('\n\n');
+}
+
+/**
+ * Claude's spinner line, "Booping\u2026 (2m 14s \u00b7 \u2193 1.2k tokens)", split into its word and the rest, so the
+ * word can carry Claude's orange shimmer and the figures stay quiet.
+ */
+function spinnerParts(status: string): { verb: string; rest: string } {
+	const match = /^(?<verb>[^()]*?\u2026)\s*(?<rest>.*)$/.exec(status.trim());
+	return match?.groups ? { verb: match.groups.verb.trim(), rest: match.groups.rest } : { verb: '', rest: status.trim() };
 }
 
 /**

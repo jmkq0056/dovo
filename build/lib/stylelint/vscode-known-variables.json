@@ -1074,6 +1074,7 @@
 		"--slide-from-x",
 		"--slide-from-y",
 		"--mcp-accent",
+		"--mcp-code",
 		"--mcp-line",
 		"--mcp-line-strong",
 		"--mcp-live",

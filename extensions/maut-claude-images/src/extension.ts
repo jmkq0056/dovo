@@ -17,6 +17,7 @@ import * as vscode from 'vscode';
 import { ClaudeImageResolver, findSessionId, readSessionRecords } from './claudeImageResolver';
 import { claudeCommand, registerClaudeLaunch } from './claudeLaunch';
 import { ClaudeSessionReader } from './claudeSession';
+import { clipboardFilePaths, prepareImages } from './imagePrep';
 
 // Use the full claude flag rather than the user's `clsp` alias so the app works on machines
 // where the alias isn't defined.
@@ -102,8 +103,11 @@ function nextNumber(): number {
 }
 
 function makeMautName(n: number): string {
-	return `${n} -- DOVO`;
+	return `Agent ${n}`;
 }
+
+/** A Claude terminal's name: "Agent 2", or the older "2 -- DOVO" / "2 -- MAUT" of restored tabs. */
+const agentNameRegex = /^(?:Agent \d+|\d+ -- (?:DOVO|MAUT))$/;
 
 function startClaudeInNewTerminal(opts?: { autoResume?: boolean }): vscode.Terminal {
 	const t = createMautTerminal();
@@ -120,8 +124,8 @@ function createMautTerminal(): vscode.Terminal {
 		iconPath: new vscode.ThemeIcon(icon),
 		color: new vscode.ThemeColor(color),
 		env: {
-			EDITOR: 'maut-code --wait',
-			VISUAL: 'maut-code --wait',
+			EDITOR: 'dovo --wait',
+			VISUAL: 'dovo --wait',
 		},
 	});
 	mautTerminals.set(t, { number: n, state: 'active', icon, color });
@@ -311,16 +315,17 @@ async function switchMautTerminal(): Promise<void> {
 			description: info.state === 'active' ? 'active' : 'idle',
 		});
 	}
-	entries.push({ label: '$(add) Start new DOVO', description: 'spawn a fresh numbered terminal' });
-	const pick = await vscode.window.showQuickPick(entries, { placeHolder: 'Switch Dovo terminal' });
+	entries.push({ label: '$(add) Start New Agent', description: 'a new terminal running Claude' });
+	const pick = await vscode.window.showQuickPick(entries, { placeHolder: 'Switch agent' });
 	if (!pick) { return; }
 	if (pick.label.startsWith('$(add)')) {
 		startClaudeInNewTerminal();
 		return;
 	}
-	const m = /(\d+) -- (?:DOVO|MAUT)/.exec(pick.label);
-	if (!m) { return; }
-	const target = sorted.find(([, info]) => info.number === parseInt(m[1], 10));
+	const m = /Agent (?<number>\d+)/.exec(pick.label);
+	if (!m?.groups) { return; }
+	const number = parseInt(m.groups.number, 10);
+	const target = sorted.find(([, info]) => info.number === number);
 	if (target) {
 		target[0].show(false);
 		mautTerminal = target[0];
@@ -341,11 +346,7 @@ function bindShellExecutionTracking(context: vscode.ExtensionContext): void {
 				const color = allocateColor();
 				info = { number: n, state: 'active', icon, color };
 				mautTerminals.set(e.terminal, info);
-				try {
-					e.terminal.show(false);
-					await vscode.commands.executeCommand('workbench.action.terminal.renameWithArg', { name: makeMautName(n) });
-					await vscode.commands.executeCommand('maut.terminal.setAppearance', { icon, color });
-				} catch { /* noop */ }
+				await setTerminalAppearance(e.terminal, { name: makeMautName(n), icon, color });
 			} else if (info.state === 'idle') {
 				// Previously CLOSED terminal → allocate fresh number + fresh appearance + rename.
 				const n = nextNumber();
@@ -355,11 +356,7 @@ function bindShellExecutionTracking(context: vscode.ExtensionContext): void {
 				info.icon = icon;
 				info.color = color;
 				info.state = 'active';
-				try {
-					e.terminal.show(false);
-					await vscode.commands.executeCommand('workbench.action.terminal.renameWithArg', { name: makeMautName(n) });
-					await vscode.commands.executeCommand('maut.terminal.setAppearance', { icon, color });
-				} catch { /* noop */ }
+				await setTerminalAppearance(e.terminal, { name: makeMautName(n), icon, color });
 			} else {
 				info.state = 'active';
 			}
@@ -372,36 +369,50 @@ function bindShellExecutionTracking(context: vscode.ExtensionContext): void {
 			if (!isClaudeCommand(cmd)) { return; }
 			const info = mautTerminals.get(e.terminal);
 			if (!info || info.state === 'idle') { return; }
-			// Free the number + colorful slot, rename tab to CLOSED, mute the icon.
+			// Free the number and colour; the tab says the agent ended and its icon goes quiet.
+			const ended = endedName(info.number);
 			releaseAllocation(info);
 			info.state = 'idle';
 			info.icon = 'history';
 			info.color = 'terminal.ansiBlack';
-			try {
-				e.terminal.show(false);
-				await vscode.commands.executeCommand('workbench.action.terminal.renameWithArg', { name: 'CLOSED' });
-				await vscode.commands.executeCommand('maut.terminal.setAppearance', { icon: info.icon, color: info.color });
-			} catch { /* noop */ }
+			await setTerminalAppearance(e.terminal, { name: ended, icon: info.icon, color: info.color });
 		}));
 	}
 
-	// On extension activation, mark any restored "N -- DOVO" terminals as CLOSED until a
+	// On extension activation, mark restored "Agent N" terminals as ended until a
 	// shell-execution event proves them alive again.
 	void markRestoredTerminalsClosed();
+}
+
+/** "Agent 3 \u00b7 ended": an agent tab whose Claude has exited (never matched as a live agent). */
+function endedName(number: number | undefined): string {
+	return number === undefined ? 'Agent \u00b7 ended' : `Agent ${number} \u00b7 ended`;
+}
+
+/**
+ * Renames and recolours one terminal, found by its shell's process id, without focusing it. (Going
+ * through "rename the active terminal" stole focus and could rename whichever terminal was active.)
+ */
+async function setTerminalAppearance(terminal: vscode.Terminal, appearance: { name?: string; icon?: string; color?: string }): Promise<void> {
+	try {
+		const processId = await terminal.processId;
+		if (processId === undefined) {
+			return;
+		}
+		await vscode.commands.executeCommand('maut.terminal.setAppearance', { processId, ...appearance });
+	} catch {
+		// The terminal closed meanwhile.
+	}
 }
 
 async function markRestoredTerminalsClosed(): Promise<void> {
 	// Defer to give VS Code time to restore terminal tabs.
 	await new Promise(r => setTimeout(r, 1500));
 	for (const t of vscode.window.terminals) {
-		if (!/^\d+ -- (?:DOVO|MAUT)$/.test(t.name)) { continue; }
+		if (!agentNameRegex.test(t.name)) { continue; }
 		if (mautTerminals.has(t)) { continue; }
-		try {
-			t.show(false);
-			await new Promise(r => setTimeout(r, 50));
-			await vscode.commands.executeCommand('workbench.action.terminal.renameWithArg', { name: 'CLOSED' });
-			await vscode.commands.executeCommand('maut.terminal.setAppearance', { icon: 'history', color: 'terminal.ansiBlack' });
-		} catch { /* noop */ }
+		const number = /^Agent (?<number>\d+)$/.exec(t.name)?.groups?.number;
+		await setTerminalAppearance(t, { name: number ? endedName(Number(number)) : endedName(undefined), icon: 'history', color: 'terminal.ansiBlack' });
 	}
 }
 
@@ -414,12 +425,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	registerClaudeLaunch(context);
 	context.subscriptions.push(
 		vscode.commands.registerCommand('_maut.claudeImages.resolve', (shellPid: number | undefined, index: number) => imageResolver.resolve(shellPid, index)),
+		// Images handed to Claude: paths checked, HEIC converted to JPEG; and the files copied in Finder.
+		vscode.commands.registerCommand('_maut.images.prepare', (paths: string[]) => prepareImages(Array.isArray(paths) ? paths : [])),
+		vscode.commands.registerCommand('_maut.images.clipboardFiles', () => clipboardFilePaths()),
 		vscode.commands.registerCommand('_maut.claudeImages.captureClipboard', (shellPid: number | undefined, index: number) => imageResolver.captureClipboard(shellPid, index)),
 		// The conversation of the Claude session in a terminal, for the workbench's Reader view.
 		vscode.commands.registerCommand('_maut.claude.session', (shellPid: number | undefined) => sessionReader.read(shellPid)),
 		vscode.commands.registerCommand('_maut.claude.agent', (shellPid: number | undefined, agentId: string) => sessionReader.readAgent(shellPid, agentId)),
 		vscode.commands.registerCommand('_maut.claude.install', () => installClaude()),
 		vscode.commands.registerCommand('_maut.claude.check', () => claudeStatus()),
+		// The command line that starts Claude with the launch settings, for the pane's Start Claude.
+		vscode.commands.registerCommand('_maut.claude.launchCommand', () => claudeCommand()),
 		vscode.commands.registerCommand('_maut.git.original', (fsPath: string) => gitOriginal(fsPath)),
 		vscode.commands.registerCommand('_maut.files.changed', (cwd: string) => sessionReader.changedFiles(cwd)),
 		vscode.commands.registerCommand('_maut.claude.stopShell', (shellPid: number | undefined, taskId: string) => sessionReader.stopShell(shellPid, taskId)),
@@ -444,14 +460,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('maut.terminals.label', (t: vscode.Terminal) => labelFor(t)),
 	);
 
-	// Move any editor-area terminals down into the bottom panel (like a drag-and-drop)
-	// so they share the panel and free up editor area width.
-	for (const t of vscode.window.terminals) {
-		try {
-			t.show(false);
-			await vscode.commands.executeCommand('workbench.action.terminal.moveToTerminalPanel');
-		} catch { /* noop */ }
-	}
+	// (Terminals stay where they are: Claude's lives in the editor area, beside your files; moving
+	// every terminal to the panel at startup pulled Claude out of its pane and stole focus.)
 
 	// Smart auto-launch: if there's no Maut-active terminal AND the setting allows it,
 	// spawn a fresh clsp. Existing non-Maut terminals (zsh, etc.) are left alone — we don't
@@ -461,7 +471,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const autoFocus = cfg.get<boolean>('autoEnterFocusMode', false);
 	const autoResume = cfg.get<boolean>('autoResumeOnLaunch', true);
 
-	// A restored "N -- DOVO" tab is just a fresh shell with its old output replayed, so decide on
+	// A restored "Agent N" tab is just a fresh shell with its old output replayed, so decide on
 	// whether Claude is actually running, not on tab names. Only in a real project folder.
 	const folder = projectFolder();
 	if (autoLaunch && folder) {

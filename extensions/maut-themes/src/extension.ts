@@ -7,12 +7,12 @@
  *  Maut Theme Studio: visual theme/font customiser.
  *
  *    - Lives as a sidebar view inside the Maut activity bar container,
- *      next to Maut Activity. Open the Maut activity icon  →  Theme
+ *      next to Maut Activity. Open the Maut activity icon  ->  Theme
  *      Studio expands directly in the sidebar (no editor tab).
  *    - The user configures TWO snapshots (light and dark) independently;
  *      both are remembered. Pressing Shift+Cmd+L (or the editor toolbar
  *      sun/moon button) flips the active mode and applies that mode's
- *      saved snapshot — nothing is clobbered.
+ *      saved snapshot - nothing is clobbered.
  *    - Font choices are written to every documented font setting (editor,
  *      terminal, debug console, scm, notebook, markdown preview, chat) and
  *      ALSO to  maut.workbenchFontFamily / maut.workbenchFontSize, which
@@ -31,6 +31,8 @@ interface Snapshot {
 	tint: string;
 	fontFamily: string;
 	fontSize: number;
+	/** The workbench UI font (sidebar, tabs, menus, Markdown preview). The code font stays in `fontFamily`. */
+	uiFontFamily?: string;
 }
 
 interface NamedSnapshot extends Snapshot {
@@ -41,6 +43,19 @@ interface ThemeState {
 	active: Mode;
 	light: Snapshot;
 	dark: Snapshot;
+}
+
+/** The platform's own UI face: SF Pro on macOS, Segoe UI on Windows. */
+const SYSTEM_UI_FONT = '-apple-system, BlinkMacSystemFont, \'SF Pro Text\', \'Segoe UI Variable Text\', \'Segoe UI\', system-ui, sans-serif';
+/** The code font that used to set the UI font too. A theme still on it gets the system UI font. */
+const OLD_DEFAULT_FONT = 'JetBrains Mono, Menlo, Monaco, monospace';
+
+/** The UI font for a theme: its own choice, else the system face (unless it picked a custom font before the UI font was separate). */
+function uiFontOf(snap: Snapshot): string {
+	if (snap.uiFontFamily) {
+		return snap.uiFontFamily;
+	}
+	return snap.fontFamily.trim() === OLD_DEFAULT_FONT ? SYSTEM_UI_FONT : snap.fontFamily;
 }
 
 const DEFAULT_DARK: Snapshot = {
@@ -393,13 +408,13 @@ async function applySnapshot(snap: Snapshot): Promise<void> {
 	await cfg.update('workbench.colorTheme', baseTheme, vscode.ConfigurationTarget.Global);
 	await cfg.update('workbench.colorCustomizations', colors, vscode.ConfigurationTarget.Global);
 
-	// Editor / terminal — primary code surfaces.
+	// Editor / terminal - primary code surfaces.
 	await cfg.update('editor.fontFamily', snap.fontFamily, vscode.ConfigurationTarget.Global);
 	await cfg.update('editor.fontSize', snap.fontSize, vscode.ConfigurationTarget.Global);
 	await cfg.update('terminal.integrated.fontFamily', snap.fontFamily, vscode.ConfigurationTarget.Global);
 	await cfg.update('terminal.integrated.fontSize', snap.fontSize, vscode.ConfigurationTarget.Global);
 
-	// Every other documented font setting — debug console, scm input, notebooks,
+	// Every other documented font setting - debug console, scm input, notebooks,
 	// markdown preview, chat input, etc. Best-effort: if a particular setting
 	// isn't registered in this build we just swallow the rejection.
 	const extras: [string, unknown][] = [
@@ -409,22 +424,22 @@ async function applySnapshot(snap: Snapshot): Promise<void> {
 		['scm.inputFontSize', snap.fontSize],
 		['notebook.output.fontFamily', snap.fontFamily],
 		['notebook.output.fontSize', snap.fontSize],
-		['markdown.preview.fontFamily', snap.fontFamily],
+		['markdown.preview.fontFamily', uiFontOf(snap)],
 		['markdown.preview.fontSize', snap.fontSize],
 		['chat.editor.fontFamily', snap.fontFamily],
 		['chat.editor.fontSize', snap.fontSize],
 		['markdown.preview.lineHeight', 1.6],
-		// Workbench UI chrome — picked up by our patched src/vs/workbench/browser/workbench.ts
-		// at startup AND on change. This is what gives the JetBrains feel — sidebar, tabs,
-		// menus, palette and status bar all switch to the chosen font.
-		['maut.workbenchFontFamily', snap.fontFamily],
+		// Workbench UI chrome, picked up by our patched src/vs/workbench/browser/workbench.ts
+		// at startup and on change: sidebar, tabs, menus, palette and status bar use the UI
+		// font (the system face by default); code keeps the monospace font above.
+		['maut.workbenchFontFamily', uiFontOf(snap)],
 		['maut.workbenchFontSize', snap.fontSize],
 	];
 	for (const [k, v] of extras) {
 		try {
 			await cfg.update(k, v, vscode.ConfigurationTarget.Global);
 		} catch {
-			// setting not registered in this build — skip silently
+			// setting not registered in this build - skip silently
 		}
 	}
 }
@@ -434,7 +449,7 @@ async function activateMode(context: vscode.ExtensionContext, mode: Mode): Promi
 	state.active = mode;
 	await applySnapshot(state[mode]);
 	await saveState(context, state);
-	vscode.window.setStatusBarMessage(`Dovo · ${mode === 'light' ? 'Light' : 'Dark'}`, 2000);
+	vscode.window.setStatusBarMessage(`Dovo \u00b7 ${mode === 'light' ? 'Light' : 'Dark'}`, 2000);
 	provider?.refresh();
 }
 
@@ -542,7 +557,7 @@ class StudioViewProvider implements vscode.WebviewViewProvider {
 						this.refresh();
 						vscode.window.showInformationMessage('Dovo: theme imported.');
 					} catch (e) {
-						vscode.window.showErrorMessage(`Dovo: import failed — ${e instanceof Error ? e.message : 'bad JSON'}`);
+						vscode.window.showErrorMessage(`Dovo: import failed - ${e instanceof Error ? e.message : 'bad JSON'}`);
 					}
 					return;
 				}
@@ -582,7 +597,7 @@ function setupStatusBar(context: vscode.ExtensionContext): void {
 	const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 9_500);
 	item.command = 'maut.theme.studio';
 	item.text = '$(symbol-color)  Theme';
-	item.tooltip = 'Dovo Theme Studio — colour, font, light/dark (Shift+Cmd+T)';
+	item.tooltip = 'Dovo Theme Studio - colour, font, light/dark (Shift+Cmd+T)';
 	item.show();
 	context.subscriptions.push(item);
 }

@@ -8,7 +8,10 @@ import { Disposable, toDisposable, type IDisposable } from '../../../../../base/
 import { Schemas } from '../../../../../base/common/network.js';
 import { IClipboardService } from '../../../../../platform/clipboard/common/clipboardService.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
-import { IDetachedTerminalInstance, ITerminalConfigurationService, ITerminalContribution, ITerminalInstance, type IXtermTerminal } from '../../../terminal/browser/terminal.js';
+import { IDetachedTerminalInstance, ITerminalConfigurationService, ITerminalContribution, ITerminalInstance, ITerminalService, type IXtermTerminal } from '../../../terminal/browser/terminal.js';
+import { IMautClaudeService } from '../../../terminal/browser/mautClaude.js';
+import { clipboardFilePaths, imagePasteText, isImagePath, pathsFromText, prepareImagePaths } from '../../../terminal/browser/mautImagePaste.js';
+import { ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { registerTerminalContribution, type IDetachedCompatibleTerminalContributionContext, type ITerminalContributionContext } from '../../../terminal/browser/terminalExtensions.js';
 import { shouldPasteTerminalText } from './terminalClipboard.js';
 import { Emitter } from '../../../../../base/common/event.js';
@@ -53,6 +56,9 @@ export class TerminalClipboardContribution extends Disposable implements ITermin
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@INotificationService private readonly _notificationService: INotificationService,
 		@ITerminalConfigurationService private readonly _terminalConfigurationService: ITerminalConfigurationService,
+		@ITerminalService private readonly _terminalService: ITerminalService,
+		@IMautClaudeService private readonly _mautClaudeService: IMautClaudeService,
+		@ICommandService private readonly _commandService: ICommandService,
 	) {
 		super();
 	}
@@ -84,7 +90,11 @@ export class TerminalClipboardContribution extends Disposable implements ITermin
 	async paste(): Promise<void> {
 		let text = await this._clipboardService.readText();
 
-		if (!text) {
+		// Dovo: images pasted into Claude attach as images, like in Terminal.app.
+		const images = await this._claudeImagePaste(text);
+		if (images) {
+			text = images;
+		} else if (!text) {
 			const [resource] = await this._clipboardService.readResources();
 			if (resource?.scheme === Schemas.file) {
 				text = resource.fsPath;
@@ -92,6 +102,26 @@ export class TerminalClipboardContribution extends Disposable implements ITermin
 		}
 
 		await this._paste(text);
+	}
+
+	/**
+	 * Dovo: when pasting into Claude, image files (copied in Finder, or their paths copied as text)
+	 * become their absolute paths, HEIC/HEIF converted to JPEG, which Claude attaches as images.
+	 * Undefined when this isn't Claude's terminal or the clipboard isn't only images.
+	 */
+	private async _claudeImagePaste(text: string): Promise<string | undefined> {
+		const instance = this._terminalService.instances.find(candidate => candidate === this._ctx.instance);
+		if (!instance || !(this._mautClaudeService.isClaude(instance) || /^Agent \d+$/.test(instance.title))) {
+			return undefined;
+		}
+		// Finder puts only the file names in the clipboard's text; the files themselves come separately.
+		const looksLikeFinderNames = !!text && text.split(/\r?\n/).every(line => !line.trim() || (!line.includes('/') && /\.[A-Za-z0-9]{1,5}\s*$/.test(line)));
+		const paths = !text || looksLikeFinderNames ? await clipboardFilePaths(this._commandService) : pathsFromText(text) ?? [];
+		if (!paths.length || !paths.every(isImagePath)) {
+			return undefined;
+		}
+		const prepared = await prepareImagePaths(this._commandService, paths);
+		return prepared ? imagePasteText(prepared) : undefined;
 	}
 
 	/**

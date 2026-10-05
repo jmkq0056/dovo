@@ -86,6 +86,7 @@ import { terminalStrings } from '../common/terminalStrings.js';
 import { TerminalIconPicker } from './terminalIconPicker.js';
 import { TerminalResizeDebouncer } from './terminalResizeDebouncer.js';
 import { openContextMenu } from './terminalContextMenu.js';
+import { imagePasteText, isImagePath, prepareImagePaths } from './mautImagePaste.js';
 import type { IMenu } from '../../../../platform/actions/common/actions.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { TerminalContribCommandId } from '../terminalContribExports.js';
@@ -1297,12 +1298,23 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		// insert `@workspace/relative/path` references (matches Claude Code's @-mention
 		// convention) instead of shell-quoted absolute paths.
 		if (isDovoTerminalTitle(this.title)) {
-			const mentions = paths.map(uri => {
+			// Images attach as images (their absolute paths, pasted as Terminal.app drops them; HEIC
+			// becomes JPEG first); everything else is an @-mention.
+			const imageUris = paths.filter(uri => uri.scheme === Schemas.file && isImagePath(uri.fsPath));
+			const images = imageUris.length ? await prepareImagePaths(this._commandService, imageUris.map(uri => uri.fsPath)) : undefined;
+			const others = images ? paths.filter(uri => !imageUris.includes(uri)) : paths;
+			const mentions = others.map(uri => {
 				const folder = this._workspaceContextService.getWorkspaceFolder(uri);
 				const path = folder ? uri.fsPath.substring(folder.uri.fsPath.length).replace(/^[\\/]+/, '') || '.' : uri.fsPath;
 				return /\s/.test(path) ? `@"${path}"` : `@${path}`;
 			});
-			await this.sendText(`${mentions.join(' ')} `, false);
+			if (mentions.length) {
+				await this.sendText(`${mentions.join(' ')} `, false);
+			}
+			if (images?.length) {
+				await this.sendText(imagePasteText(images), false, true);
+				await this.sendText(' ', false);
+			}
 			return;
 		}
 		const prepared = await Promise.all(paths.map(path => this.preparePathForShell(path)));
@@ -2943,11 +2955,11 @@ export class TerminalInstanceColorProvider implements IXtermColorProvider {
 }
 
 /**
- * Whether a terminal is one of Dovo's Claude terminals ("1 -- DOVO"), including ones named
- * before the rename ("1 -- MAUT").
+ * Whether a terminal is one of Dovo's Claude terminals ("Agent 1"), including ones named
+ * before ("1 -- DOVO", "1 -- MAUT").
  */
 function isDovoTerminalTitle(title: string): boolean {
-	return title.includes('DOVO') || title.includes('MAUT') || title.startsWith('Dovo') || title.startsWith('Maut');
+	return /^Agent \d+$/.test(title) || title.includes('DOVO') || title.includes('MAUT') || title.startsWith('Dovo') || title.startsWith('Maut');
 }
 
 function guessShellTypeFromExecutable(os: OperatingSystem, executable: string): TerminalShellType | undefined {

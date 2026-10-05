@@ -500,6 +500,9 @@ export const enum TerminalCommandId {
 }
 
 export const DEFAULT_COMMANDS_TO_SKIP_SHELL: string[] = [
+	// Dovo: hide/show Claude and the file finder work from inside Claude's terminal too
+	'maut.claude.toggleHidden',
+	'maut.finder.open',
 	TerminalCommandId.ClearSelection,
 	TerminalCommandId.Clear,
 	TerminalCommandId.CopyAndClearSelection,

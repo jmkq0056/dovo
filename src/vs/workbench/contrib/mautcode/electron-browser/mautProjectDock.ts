@@ -293,9 +293,14 @@ class MautProjectDock extends Disposable implements IWorkbenchContribution {
 	}
 }
 
+/** A two-letter monogram: the first letters of two words ("MC"), else "Do" for one word. */
 function initials(name: string): string {
-	const words = name.replace(/[-_.]+/g, ' ').trim().split(/\s+/);
-	return (words.length > 1 ? words[0][0] + words[1][0] : name.slice(0, 1)).toUpperCase();
+	const words = name.replace(/[-_.]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+	if (words.length > 1) {
+		return (words[0][0] + words[1][0]).toUpperCase();
+	}
+	const word = words[0] ?? name;
+	return word.slice(0, 1).toUpperCase() + word.slice(1, 2).toLowerCase();
 }
 
 registerWorkbenchContribution2(MautProjectDock.ID, MautProjectDock, WorkbenchPhase.AfterRestored);

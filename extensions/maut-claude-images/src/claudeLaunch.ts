@@ -104,7 +104,7 @@ class ClaudeLaunchProvider implements vscode.TreeDataProvider<Row> {
 			case 'start': {
 				const item = new vscode.TreeItem('Start new Claude');
 				item.description = claudeCommand();
-				item.tooltip = `Opens a new DOVO terminal and runs: ${claudeCommand()}`;
+				item.tooltip = `Opens a new agent terminal and runs: ${claudeCommand()}`;
 				item.iconPath = new vscode.ThemeIcon('play');
 				item.command = { command: 'maut.chat.startClaude', title: 'Start New Claude' };
 				return item;

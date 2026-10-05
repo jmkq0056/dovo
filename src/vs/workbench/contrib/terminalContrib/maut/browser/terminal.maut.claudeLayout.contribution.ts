@@ -12,6 +12,7 @@ import { localize, localize2 } from '../../../../../nls.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../../platform/configuration/common/configurationRegistry.js';
 import { Action2, registerAction2 } from '../../../../../platform/actions/common/actions.js';
+import { ContextKeyExpr } from '../../../../../platform/contextkey/common/contextkey.js';
 import { KeybindingWeight } from '../../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { Registry } from '../../../../../platform/registry/common/platform.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
@@ -29,6 +30,8 @@ import './media/claudeLayout.css';
 const enabledSetting = 'maut.claudeLayout.enabled';
 /** `claude`, `clsp`, or Claude started by its path (`~/.local/bin/claude --continue`). */
 const claudeCommandRegex = /^\s*(?:\S*\/)?(?:claude|clsp)(?:\s|$)/;
+/** One-off runs of claude that print and exit (no session to show): `claude -p ...`, `claude --version`, `claude mcp list`. */
+const claudeOneOffRegex = /^\s*(?:\S*\/)?claude\s+(?:-p\b|--print\b|-v\b|--version\b|-h\b|--help\b|update\b|mcp\b|config\b|doctor\b|install\b|setup-token\b|migrate-installer\b)/;
 /** Per window: the layout Claude was in, its width in IDE mode, and whether it was hidden. */
 const modeKey = 'maut.claude.layout.mode';
 const widthKey = 'maut.claude.layout.ideWidth';
@@ -67,7 +70,7 @@ interface IRestoreState {
  *   beside Claude, which also lifts the maximized state.
  * - **IDE**: side bar shown, the files on the left and Claude full height on the right, at the
  *   width you last gave it.
- * - **Hidden** (either mode, Ctrl+Cmd+J): the files take the editor area and a slim strip on the
+ * - **Hidden** (either mode, Cmd+Shift+J or Ctrl+Cmd+J): the files take the editor area and a slim strip on the
  *   right shows Claude's status; a click or the shortcut brings Claude back.
  *
  * Switching only rearranges editor groups, so the Claude process keeps running.
@@ -151,7 +154,7 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 		const store = new DisposableStore();
 		const attach = (detection: ICommandDetectionCapability) => {
 			store.add(detection.onCommandExecuted(command => {
-				if (claudeCommandRegex.test(command.command)) {
+				if (claudeCommandRegex.test(command.command) && !claudeOneOffRegex.test(command.command)) {
 					this._start(instance);
 				}
 			}));
@@ -456,12 +459,18 @@ registerAction2(class extends Action2 {
 			title: localize2('maut.claude.toggleHidden', "Hide or Show Claude"),
 			category: localize2('maut.claude.category', "Dovo"),
 			f1: true,
-			keybinding: {
-				weight: KeybindingWeight.WorkbenchContrib,
-				// Ctrl+Cmd+J on macOS and Ctrl+Alt+J elsewhere: free in VS Code, Maut and the OS.
+			keybinding: [{
+				// Cmd+Shift+J (Ctrl+Shift+J elsewhere) everywhere except the Search view and Search
+				// editor, which keep it for Toggle Query Details.
+				weight: KeybindingWeight.WorkbenchContrib + 100,
+				when: ContextKeyExpr.and(ContextKeyExpr.not('searchViewletFocus'), ContextKeyExpr.not('inSearchEditor')),
+				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyJ,
+			}, {
+				// Ctrl+Cmd+J on macOS and Ctrl+Alt+J elsewhere, as before.
+				weight: KeybindingWeight.WorkbenchContrib + 100,
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyJ,
 				mac: { primary: KeyMod.WinCtrl | KeyMod.CtrlCmd | KeyCode.KeyJ },
-			},
+			}],
 		});
 	}
 	run(accessor: ServicesAccessor): void {

@@ -3,90 +3,141 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-/* Maut project dock: project buttons at the top of the activity bar. */
+/* Dovo project dock: project tiles at the top of the activity bar. Calm neutral tiles; the
+	Ember accent only marks where you are and what Claude is doing. */
 
 .monaco-workbench .part.activitybar > .content > .maut-project-dock {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 9px;
+	gap: 8px;
 	padding: 10px 0 12px;
 	margin-bottom: 4px;
-	border-bottom: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	border-bottom: 1px solid color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
 }
 
 .monaco-workbench .maut-dock-project {
 	position: relative;
-	width: 32px;
-	height: 32px;
+	width: 34px;
+	height: 34px;
 	border: 0;
 	border-radius: 10px;
 	display: grid;
 	place-items: center;
-	/* Quiet, one tone: the letters tell projects apart, the ring shows where you are. */
-	background: color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
-	color: color-mix(in srgb, var(--vscode-foreground) 72%, transparent);
-	font: 650 12px -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+	background: linear-gradient(180deg, color-mix(in srgb, var(--vscode-foreground) 11%, transparent), color-mix(in srgb, var(--vscode-foreground) 6%, transparent));
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vscode-foreground) 9%, transparent), inset 0 1px 0 color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+	color: color-mix(in srgb, var(--vscode-foreground) 74%, transparent);
+	/* The system face, whatever the workbench font is set to: monograms read best in it. */
+	font: 600 12.5px -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif !important;
+	letter-spacing: -0.02em;
 	cursor: pointer;
-	transition: background .15s, color .15s;
+	transition: background .15s, color .15s, box-shadow .15s, transform .15s;
 }
 
-.monaco-workbench .maut-dock-project:hover { background: color-mix(in srgb, var(--vscode-foreground) 15%, transparent); color: var(--vscode-foreground); }
-.monaco-workbench .maut-dock-project.closed { background: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vscode-foreground) 18%, transparent); color: color-mix(in srgb, var(--vscode-foreground) 50%, transparent); }
-.monaco-workbench .maut-dock-project.current {
-	background: color-mix(in srgb, var(--vscode-foreground) 16%, transparent);
+.monaco-workbench .maut-dock-project:hover {
+	background: linear-gradient(180deg, color-mix(in srgb, var(--vscode-foreground) 16%, transparent), color-mix(in srgb, var(--vscode-foreground) 9%, transparent));
 	color: var(--vscode-foreground);
-	box-shadow: 0 0 0 2px var(--vscode-activityBar-background), 0 0 0 3px color-mix(in srgb, var(--vscode-foreground) 55%, transparent);
+}
+.monaco-workbench .maut-dock-project:active { transform: scale(.96); }
+
+/* Where you are: a brighter tile and the accent bar on the activity bar's edge. */
+.monaco-workbench .maut-dock-project.current {
+	background: linear-gradient(180deg, color-mix(in srgb, var(--vscode-foreground) 20%, transparent), color-mix(in srgb, var(--vscode-foreground) 12%, transparent));
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vscode-foreground) 16%, transparent), inset 0 1px 0 color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	color: var(--vscode-foreground);
+}
+.monaco-workbench .maut-dock-project::before {
+	content: '';
+	position: absolute;
+	left: -7px;
+	top: 50%;
+	width: 4px;
+	height: 4px;
+	margin-top: -2px;
+	border-radius: 2px;
+	background: transparent;
+	transition: height .18s, margin-top .18s, background .18s;
+}
+/* Open in another window: a small dot on the edge. */
+.monaco-workbench .maut-dock-project:not(.closed):not(.current)::before { left: -6px; background: color-mix(in srgb, var(--vscode-foreground) 45%, transparent); }
+.monaco-workbench .maut-dock-project.current::before {
+	left: -7px;
+	width: 3px;
+	height: 18px;
+	margin-top: -9px;
+	border-radius: 0 3px 3px 0;
+	background: var(--vscode-activityBar-activeBorder, #f59e0b);
+}
+
+/* Starred but not open: just an outline. */
+.monaco-workbench .maut-dock-project.closed {
+	background: none;
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vscode-foreground) 16%, transparent);
+	color: color-mix(in srgb, var(--vscode-foreground) 48%, transparent);
 }
 
 /* The star: hidden until you hover a project, always shown once starred. */
 .monaco-workbench .maut-dock-star {
 	position: absolute;
-	top: -5px;
-	right: -5px;
-	width: 14px;
-	height: 14px;
+	top: -4px;
+	right: -4px;
+	width: 13px;
+	height: 13px;
 	display: grid;
 	place-items: center;
 	border-radius: 50%;
 	background: var(--vscode-activityBar-background);
-	color: color-mix(in srgb, var(--vscode-foreground) 60%, transparent);
-	font-size: 10px !important;
+	color: color-mix(in srgb, var(--vscode-foreground) 55%, transparent);
+	font-size: 9px !important;
 	opacity: 0;
 	transition: opacity .12s;
 }
 .monaco-workbench .maut-dock-project:hover .maut-dock-star { opacity: 1; }
-.monaco-workbench .maut-dock-project.starred .maut-dock-star { opacity: 1; color: var(--vscode-terminal-ansiYellow, #e2b25d); }
+.monaco-workbench .maut-dock-project.starred .maut-dock-star { opacity: 1; color: var(--vscode-activityBar-activeBorder, #f59e0b); }
 .monaco-workbench .maut-dock-star:hover { color: var(--vscode-foreground); }
 .monaco-workbench .maut-dock-project:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 3px; }
 
+/* Claude: a thin accent ring that turns while it works, a dot when it's waiting for you. */
 .monaco-workbench .maut-dock-status {
 	position: absolute;
-	right: -5px;
-	bottom: -5px;
-	width: 15px;
-	height: 15px;
-	display: grid;
-	place-items: center;
+	right: -4px;
+	bottom: -4px;
+	width: 13px;
+	height: 13px;
+	box-sizing: border-box;
 	border-radius: 50%;
 	background: var(--vscode-activityBar-background);
-	color: color-mix(in srgb, var(--vscode-foreground) 70%, transparent);
-	font-size: 11px !important;
+	font-size: 0 !important;
 }
-.monaco-workbench .maut-dock-status.needs { color: var(--vscode-errorForeground); }
+.monaco-workbench .maut-dock-status::before { display: none !important; }
+.monaco-workbench .maut-dock-status.working {
+	border: 2px solid color-mix(in srgb, var(--vscode-activityBar-activeBorder, #f59e0b) 25%, transparent);
+	border-top-color: var(--vscode-activityBar-activeBorder, #f59e0b);
+	animation: maut-dock-spin .9s linear infinite;
+}
+.monaco-workbench .maut-dock-status.needs::after {
+	content: '';
+	position: absolute;
+	inset: 2.5px;
+	border-radius: 50%;
+	background: var(--vscode-activityBar-activeBorder, #f59e0b);
+}
+@keyframes maut-dock-spin { to { transform: rotate(360deg); } }
 
 .monaco-workbench .maut-dock-add {
-	width: 32px;
-	height: 32px;
+	width: 34px;
+	height: 34px;
 	border-radius: 10px;
-	border: 1px dashed color-mix(in srgb, var(--vscode-foreground) 28%, transparent);
+	border: 1px dashed color-mix(in srgb, var(--vscode-foreground) 22%, transparent);
 	background: none;
-	color: color-mix(in srgb, var(--vscode-foreground) 60%, transparent);
-	font-size: 16px;
+	color: color-mix(in srgb, var(--vscode-foreground) 50%, transparent);
+	font: 400 17px -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
 	cursor: pointer;
+	transition: color .15s, border-color .15s;
 }
-.monaco-workbench .maut-dock-add:hover { color: var(--vscode-foreground); border-color: var(--vscode-foreground); }
+.monaco-workbench .maut-dock-add:hover { color: var(--vscode-foreground); border-color: color-mix(in srgb, var(--vscode-foreground) 50%, transparent); }
 
 @media (prefers-reduced-motion: reduce) {
-	.monaco-workbench .maut-dock-project, .monaco-workbench .maut-dock-star { transition: none; }
+	.monaco-workbench .maut-dock-project, .monaco-workbench .maut-dock-star, .monaco-workbench .maut-dock-project::before { transition: none; }
+	.monaco-workbench .maut-dock-status.working { animation: none; }
 }

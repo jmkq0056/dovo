@@ -7,7 +7,6 @@ import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import type { ITerminalInstance } from './terminal.js';
 
 export type MautClaudeLayoutMode = 'focus' | 'ide';
@@ -28,7 +27,6 @@ export interface IMautClaudeService {
 	readonly onDidRequestLayoutMode: Event<MautClaudeLayoutMode>;
 
 	readonly layoutMode: MautClaudeLayoutMode;
-	readonly view: MautClaudeView;
 	/** Claude's group is hidden (the slim strip shows instead); Claude keeps running. */
 	readonly hidden: boolean;
 	/** Fired when the user asks to hide or show Claude; the layout contribution applies it. */
@@ -42,13 +40,13 @@ export interface IMautClaudeService {
 	setClaude(instance: ITerminalInstance, running: boolean): void;
 	requestLayoutMode(mode: MautClaudeLayoutMode): void;
 	setLayoutMode(mode: MautClaudeLayoutMode): void;
-	setView(view: MautClaudeView): void;
+	/** Reader or Terminal, chosen per terminal: switching one never changes another. New ones start in the Reader. */
+	viewOf(instance: ITerminalInstance): MautClaudeView;
+	setView(instance: ITerminalInstance, view: MautClaudeView): void;
 	requestToggleHidden(): void;
 	setHidden(hidden: boolean): void;
 	setWorking(instance: ITerminalInstance, working: boolean): void;
 }
-
-const viewStorageKey = 'maut.claude.view';
 
 class MautClaudeService extends Disposable implements IMautClaudeService {
 	declare readonly _serviceBrand: undefined;
@@ -65,15 +63,9 @@ class MautClaudeService extends Disposable implements IMautClaudeService {
 	private readonly _working = new Set<ITerminalInstance>();
 	private _hidden = false;
 	private _layoutMode: MautClaudeLayoutMode = 'focus';
-	private _view: MautClaudeView;
-
-	constructor(@IStorageService private readonly _storageService: IStorageService) {
-		super();
-		this._view = this._storageService.get(viewStorageKey, StorageScope.PROFILE) === 'terminal' ? 'terminal' : 'reader';
-	}
+	private readonly _views = new WeakMap<ITerminalInstance, MautClaudeView>();
 
 	get layoutMode(): MautClaudeLayoutMode { return this._layoutMode; }
-	get view(): MautClaudeView { return this._view; }
 	get hidden(): boolean { return this._hidden; }
 	get working(): boolean { return this._working.size > 0; }
 	get hasClaude(): boolean { return this._running.size > 0; }
@@ -129,10 +121,13 @@ class MautClaudeService extends Disposable implements IMautClaudeService {
 		this._onDidChange.fire();
 	}
 
-	setView(view: MautClaudeView): void {
-		if (view !== this._view) {
-			this._view = view;
-			this._storageService.store(viewStorageKey, view, StorageScope.PROFILE, StorageTarget.USER);
+	viewOf(instance: ITerminalInstance): MautClaudeView {
+		return this._views.get(instance) ?? 'reader';
+	}
+
+	setView(instance: ITerminalInstance, view: MautClaudeView): void {
+		if (view !== this.viewOf(instance)) {
+			this._views.set(instance, view);
 			this._onDidChange.fire();
 		}
 	}

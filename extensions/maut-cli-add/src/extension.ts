@@ -16,9 +16,26 @@ function workspaceRelative(uri: vscode.Uri): string {
 	return rel || '.';
 }
 
+const imageExtension = /\.(?:png|jpe?g|gif|webp|heic|heif)$/i;
+
+/** A path escaped the way macOS Terminal pastes a dropped file, so Claude attaches it as an image. */
+function escapePathForClaude(p: string): string {
+	return p.replace(/[\s()'"&;$!*?[\]{}<>|\\`#~]/g, match => `\\${match}`);
+}
+
+/** Image paths ready for Claude (HEIC converted to JPEG by maut-claude-images), or undefined. */
+async function prepareImages(paths: string[]): Promise<string[] | undefined> {
+	try {
+		const prepared = await vscode.commands.executeCommand<(string | undefined)[]>('_maut.images.prepare', paths);
+		return prepared && prepared.length === paths.length && prepared.every(p => !!p) ? prepared as string[] : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 function findMautTerminal(): vscode.Terminal | undefined {
 	const all = vscode.window.terminals;
-	const maut = all.find(t => t.name.includes('DOVO') || t.name.includes('MAUT') || t.name.startsWith('Dovo') || t.name.startsWith('Maut'));
+	const maut = all.find(t => /^Agent \d+$/.test(t.name) || t.name.includes('DOVO') || t.name.includes('MAUT') || t.name.startsWith('Dovo') || t.name.startsWith('Maut'));
 	return maut ?? vscode.window.activeTerminal;
 }
 
@@ -38,7 +55,7 @@ async function addFiles(arg: vscode.Uri | undefined, allArgs: vscode.Uri[] | und
 		const list = fileOnly.slice(0, 12).map(u => `• ${workspaceRelative(u)}`).join('\n');
 		const more = fileOnly.length > 12 ? `\n… and ${fileOnly.length - 12} more` : '';
 		const choice = await vscode.window.showWarningMessage(
-			`Add ${fileOnly.length} items to Claude as @-mentions?`,
+			`Add ${fileOnly.length} items to Claude?`,
 			{ modal: true, detail: `${list}${more}` },
 			'Add',
 		);
@@ -51,8 +68,16 @@ async function addFiles(arg: vscode.Uri | undefined, allArgs: vscode.Uri[] | und
 		return;
 	}
 	terminal.show(false);
-	const mentions = fileOnly.map(u => `@${workspaceRelative(u)}`).join(' ') + ' ';
-	terminal.sendText(mentions, false);
+	// Images attach as images: their absolute paths as a bracketed paste, like a drop in Terminal.app.
+	const imageUris = fileOnly.filter(u => imageExtension.test(u.fsPath));
+	const images = imageUris.length ? await prepareImages(imageUris.map(u => u.fsPath)) : undefined;
+	const others = images ? fileOnly.filter(u => !imageUris.includes(u)) : fileOnly;
+	if (others.length) {
+		terminal.sendText(others.map(u => `@${workspaceRelative(u)}`).join(' ') + ' ', false);
+	}
+	if (images?.length) {
+		terminal.sendText(`\x1b[200~${images.map(escapePathForClaude).join(' ')}\x1b[201~ `, false);
+	}
 }
 
 async function addSelection(): Promise<void> {

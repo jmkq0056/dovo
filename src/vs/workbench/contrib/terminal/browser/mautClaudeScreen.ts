@@ -31,6 +31,8 @@ export interface IScreenDialog {
 }
 
 export interface IScreenState {
+	/** Claude's own UI is on screen: its prompt box, a question, or a picker. False for a plain shell. */
+	readonly claude: boolean;
 	/** The rows of Claude's screen the input frame shows. */
 	readonly frame: { readonly from: number; readonly to: number };
 	/** Where Claude's live area (spinner, queued messages) ends, above the prompt and its menu. */
@@ -125,6 +127,7 @@ export function readScreen(raw: IScreen): IScreenState {
 			}
 			const frameRow = Math.min(hintRow, last);
 			return {
+				claude: true,
 				frame: { from: frameRow, to: frameRow },
 				liveTop: Math.max(0, top - 1),
 				dialog: { question: text(questionRow).trim(), details: details.slice(0, 16), options, hint: hintRow <= last ? text(hintRow).trim() : '' },
@@ -204,10 +207,10 @@ export function readScreen(raw: IScreen): IScreenState {
 			}
 		}
 		const from = Math.min(promptTop + 1, rules[0] - 1);
-		return { frame: { from, to: Math.max(from, rules[0] - 1) }, liveTop, menu, notice, footer: footer.join(' \u00b7 ') };
+		return { claude: true, frame: { from, to: Math.max(from, rules[0] - 1) }, liveTop, menu, notice, footer: footer.join(' \u00b7 ') };
 	}
 
 	// Anything else Claude shows (a picker, a full-screen dialog): from its rule down, as it is.
 	const top = rules.length ? rules[0] : Math.max(0, last - 11);
-	return { frame: { from: top, to: last }, liveTop: top };
+	return { claude: rules.length > 0, frame: { from: top, to: last }, liveTop: top };
 }

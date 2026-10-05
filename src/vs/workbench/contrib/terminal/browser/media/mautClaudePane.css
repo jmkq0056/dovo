@@ -18,6 +18,8 @@
 	--mcp-subtle: color-mix(in srgb, var(--vscode-foreground) 50%, transparent);
 	--mcp-ok: var(--vscode-terminal-ansiGreen, #74d394);
 	--mcp-live: var(--vscode-terminal-ansiYellow, #e2b25d);
+	/* Code, paths and file links in the Reader: Ember amber, never red (red means errors and removals). */
+	--mcp-code: #fbbf24;
 	/* Chat typography, independent of the workbench font (which may be monospace). */
 	--mcp-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
 	--mcp-mono: var(--vscode-editor-font-family, 'JetBrains Mono', Menlo, monospace);
@@ -144,12 +146,15 @@
 .monaco-workbench .mcp-prose { margin: 0 0 10px; }
 .monaco-workbench .mcp-prose p { margin: 0 0 10px; }
 .monaco-workbench .mcp-prose p:last-child { margin-bottom: 0; }
+.monaco-workbench .vs .maut-claude-host,
+.monaco-workbench .hc-light .maut-claude-host { --mcp-code: #b45309; }
 .monaco-workbench .mcp-prose code {
+	color: var(--mcp-code);
 	font-family: var(--mcp-mono); font-size: 0.88em;
 	background: var(--mcp-surface); border: 1px solid var(--mcp-line); border-radius: 5px; padding: 1px 5px;
 }
 .monaco-workbench .mcp-prose pre { background: var(--mcp-surface); border: 1px solid var(--mcp-line); border-radius: 10px; padding: 10px 12px; overflow-x: auto; }
-.monaco-workbench .mcp-prose pre code { background: none; border: 0; padding: 0; }
+.monaco-workbench .mcp-prose pre code { background: none; border: 0; padding: 0; color: var(--vscode-foreground); }
 .monaco-workbench .mcp-prose table { border-collapse: collapse; margin: 6px 0 12px; font-size: 13.5px; }
 .monaco-workbench .mcp-prose th, .monaco-workbench .mcp-prose td { border: 1px solid var(--mcp-line-strong); padding: 4px 10px; text-align: left; }
 .monaco-workbench .mcp-prose ul, .monaco-workbench .mcp-prose ol { margin: 0 0 10px; padding-left: 22px; }
@@ -169,8 +174,8 @@
 .monaco-workbench .mcp-step { display: flex; gap: 10px; padding: 3px 14px; font-size: 13px; color: var(--mcp-muted); min-width: 0; }
 .monaco-workbench .mcp-verb { flex: none; width: 70px; color: var(--mcp-subtle); }
 .monaco-workbench .mcp-target { font-family: var(--mcp-mono); font-size: 12.5px; color: var(--vscode-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.monaco-workbench .mcp-file { cursor: pointer; }
-.monaco-workbench .mcp-file:hover { text-decoration: underline; text-underline-offset: 3px; }
+.monaco-workbench .mcp-file { cursor: pointer; color: var(--mcp-code); }
+.monaco-workbench .mcp-file:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--mcp-code) 70%, transparent); }
 
 .monaco-workbench .mcp-edit { border: 1px solid var(--mcp-line); border-radius: 12px; margin: 4px 0 12px; background: var(--mcp-surface); overflow: hidden; }
 .monaco-workbench .mcp-edit-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 12px; border-bottom: 1px solid var(--mcp-line); }
@@ -217,7 +222,7 @@
 	border-radius: 14px;
 	background: var(--vscode-terminal-background, var(--mcp-surface));
 	box-shadow: 0 0 0 4px color-mix(in srgb, var(--mcp-accent) 0%, transparent);
-	transition: border-color .15s, box-shadow .15s;
+	transition: border-color .15s, box-shadow .15s, height .14s ease;
 	overflow: hidden;
 }
 
@@ -375,7 +380,13 @@
 
 /* The composer shows the bottom of Claude's full-height screen: anchor the terminal to the bottom
 	of the frame and let the rest (the conversation, already in the Reader) sit above, clipped. */
-.monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer { position: relative; }
+.monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer {
+	position: relative;
+	/* Clip, not hide: a hidden overflow can still be scrolled, and typing scrolls it so the text
+		cursor (on Claude's bottom row) shows, sliding the frame onto the footer. Clip never scrolls. */
+	overflow: clip;
+}
+.monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer > .terminal-wrapper { overflow: clip; }
 .monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer > .terminal-wrapper {
 	position: absolute;
 	left: 14px;
@@ -389,25 +400,74 @@
 .monaco-workbench .mcp-live.visible { display: block; }
 .monaco-workbench .mcp-live-block {
 	/* Claude's output as it streams: quiet, so it doesn't compete with the conversation. */
+	position: relative;
 	margin-bottom: 10px;
-	padding: 9px 13px;
 	border: 1px solid var(--mcp-line);
 	border-radius: 10px;
 	background: color-mix(in srgb, var(--mcp-surface) 70%, transparent);
+}
+.monaco-workbench .mcp-live-text {
+	padding: 9px 40px 9px 13px;
 	color: var(--mcp-muted);
 	font-family: var(--mcp-mono);
 	font-size: 12px;
 	line-height: 1.55;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
-	max-height: 220px;
-	overflow: hidden;
-	display: flex;
-	flex-direction: column;
-	justify-content: flex-end;
-	/* Older lines fade out at the top; the newest stay crisp at the bottom. */
-	-webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 36px);
-	mask-image: linear-gradient(to bottom, transparent 0, #000 36px);
+	max-height: 240px;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: thin;
+	transition: min-height .25s ease-out;
+}
+/* When there is more above, the oldest visible lines fade so it reads as a window onto a longer log. */
+.monaco-workbench .mcp-live-block.scrolled .mcp-live-text {
+	-webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
+	mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
+}
+.monaco-workbench .mcp-live-expand {
+	position: absolute; top: 6px; right: 6px;
+	display: grid; place-items: center;
+	width: 26px; height: 26px; padding: 0;
+	border: 1px solid var(--mcp-line); border-radius: 7px;
+	background: var(--mcp-surface); color: var(--mcp-muted);
+	cursor: pointer; opacity: .75;
+}
+.monaco-workbench .mcp-live-expand:hover { opacity: 1; color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground); }
+
+/* The live output full screen over the Reader. */
+.monaco-workbench .mcp-live-full {
+	position: absolute; left: 0; right: 0; bottom: 0; z-index: 30;
+	display: flex; flex-direction: column;
+	background: var(--vscode-editor-background);
+	border-top: 1px solid var(--mcp-line);
+	outline: none;
+	animation: mcp-live-full-in .16s ease-out;
+}
+@keyframes mcp-live-full-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.monaco-workbench .mcp-live-full-bar {
+	flex: none; display: flex; align-items: center; gap: 9px;
+	padding: 10px 12px 10px 16px;
+	border-bottom: 1px solid var(--mcp-line);
+	font-family: var(--mcp-sans); font-size: 12.5px; color: var(--mcp-muted);
+}
+.monaco-workbench .mcp-live-full-bar > i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--mcp-live); animation: mcp-pulse 1.4s ease-in-out infinite; }
+.monaco-workbench .mcp-live-full.done .mcp-live-full-bar > i { animation: none; background: var(--mcp-ok); }
+.monaco-workbench .mcp-live-full-status { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.monaco-workbench .mcp-live-full-close {
+	flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0;
+	border: 0; border-radius: 6px; background: none; color: var(--mcp-muted); cursor: pointer;
+}
+.monaco-workbench .mcp-live-full-close:hover { color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground); }
+.monaco-workbench .mcp-live-full-text {
+	flex: 1; min-height: 0; overflow-y: auto;
+	padding: 16px 20px 24px;
+	font-family: var(--mcp-mono); font-size: 13px; line-height: 1.6;
+	color: var(--vscode-foreground);
+	white-space: pre-wrap; overflow-wrap: anywhere;
+}
+@media (prefers-reduced-motion: reduce) {
+	.monaco-workbench .mcp-live-full { animation: none; }
 }
 .monaco-workbench .mcp-live .mcp-user.mcp-queued { margin: 0 0 10px; }
 .monaco-workbench .mcp-user.mcp-queued .mcp-bubble { opacity: .7; border-style: dashed; }
@@ -415,8 +475,11 @@
 .monaco-workbench .mcp-live-status {
 	display: flex; align-items: center; gap: 8px;
 	font: 12.5px var(--mcp-mono);
+	font-variant-numeric: tabular-nums;
 	color: var(--mcp-muted);
+	min-height: 20px;
 }
+.monaco-workbench .mcp-live-status > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .monaco-workbench .mcp-live-status > i {
 	width: 7px; height: 7px; border-radius: 50%; flex: none;
 	background: var(--mcp-accent);
@@ -690,7 +753,7 @@
 .monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer::after { bottom: 0; }
 
 /* Claude's footer (its permission mode) under the input, in its own colors' spirit. */
-.monaco-workbench .mcp-live-note.mcp-footer .mcp-live-note-text { font-family: var(--mcp-mono); font-size: 11.5px; color: color-mix(in srgb, var(--vscode-terminal-ansiRed, #ff7a8e) 80%, var(--vscode-foreground)); }
+.monaco-workbench .mcp-live-note.mcp-footer .mcp-live-note-text { font-family: var(--mcp-mono); font-size: 11.5px; color: color-mix(in srgb, var(--mcp-code) 75%, var(--vscode-foreground)); }
 
 /* File suggestions are just paths: one column, the full width for them. */
 .monaco-workbench .mcp-menu-pop.mcp-menu-files .mcp-menu-item { grid-template-columns: 1fr; }
@@ -724,3 +787,66 @@
 }
 .monaco-workbench .mcp-copy:hover { color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground); }
 .monaco-workbench .mcp-copy.copied { color: var(--vscode-terminal-ansiGreen, #74d394); }
+
+/* Claude left this terminal: a slim bar instead of the header, and the plain terminal under it. */
+.monaco-workbench .mcp-header.mcp-gone { height: 44px; justify-content: center; }
+.monaco-workbench .mcp-gone-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.monaco-workbench .mcp-gone-text { color: var(--mcp-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.monaco-workbench .mcp-start-claude {
+	flex: none;
+	height: 26px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 6px;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	font: 600 12.5px var(--mcp-sans);
+	cursor: pointer;
+}
+.monaco-workbench .mcp-start-claude:hover { background: var(--vscode-button-hoverBackground); }
+
+/* The Reader and the input trade height smoothly when the input grows or shrinks. */
+.monaco-workbench .maut-claude-host.maut-claude-reader > .mcp-reader { transition: height .14s ease; }
+@media (prefers-reduced-motion: reduce) {
+	.monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer,
+	.monaco-workbench .maut-claude-host.maut-claude-reader > .mcp-reader { transition: none; }
+}
+
+/* Claude's own words while it works ("Booping\2026", "Clauding\2026"): orange with a slow shimmer, like Claude shows them. */
+.monaco-workbench .mcp-verb {
+	flex: none;
+	font-weight: 600;
+	color: #f59e0b;
+	background: linear-gradient(90deg, #ea580c 0%, #f59e0b 35%, #fde68a 50%, #f59e0b 65%, #ea580c 100%);
+	background-size: 220% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+	animation: mcp-verb-shimmer 2.4s linear infinite;
+}
+.monaco-workbench .mcp-verb:empty { display: none; }
+.monaco-workbench .mcp-verb-rest { margin-left: 6px; color: var(--mcp-muted); font-variant-numeric: tabular-nums; }
+.monaco-workbench .mcp-now > .mcp-now-verb { margin-right: 2px; }
+.monaco-workbench .vs .mcp-verb, .monaco-workbench .hc-light .mcp-verb {
+	background-image: linear-gradient(90deg, #c2410c 0%, #d97706 35%, #f59e0b 50%, #d97706 65%, #c2410c 100%);
+}
+@keyframes mcp-verb-shimmer { from { background-position: 110% 0; } to { background-position: -110% 0; } }
+@media (prefers-reduced-motion: reduce) {
+	.monaco-workbench .mcp-verb { animation: none; }
+}
+
+/* While Claude works on a first message, its live output replaces the empty-state hint. */
+.monaco-workbench .mcp-column:has(.mcp-live.visible) > .mcp-empty { display: none; }
+
+/* Calm by default: status dots and Claude's word stay steady instead of blinking or shimmering. */
+.monaco-workbench .maut-claude-host .mcp-now > i,
+.monaco-workbench .maut-claude-host .mcp-status.working i,
+.monaco-workbench .maut-claude-host .mcp-activity-button.busy > i,
+.monaco-workbench .maut-claude-host .mcp-task.running .mcp-task-dot,
+.monaco-workbench .maut-claude-host .mcp-live-full-bar > i,
+.monaco-workbench .maut-claude-host .mcp-live-status > i,
+.monaco-workbench .maut-claude-host .mcp-verb,
+.monaco-workbench .maut-claude-host .mcp-working {
+	animation: none !important;
+}
+.monaco-workbench .maut-claude-host .mcp-verb { background-position: 40% 0; }

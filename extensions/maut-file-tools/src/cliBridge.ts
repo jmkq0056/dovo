@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 
 export function findMautTerminal(): vscode.Terminal | undefined {
 	const all = vscode.window.terminals;
-	const maut = all.find(t => t.name.includes('DOVO') || t.name.includes('MAUT') || t.name.startsWith('Dovo') || t.name.startsWith('Maut'));
+	const maut = all.find(t => /^Agent \d+$/.test(t.name) || t.name.includes('DOVO') || t.name.includes('MAUT') || t.name.startsWith('Dovo') || t.name.startsWith('Maut'));
 	return maut ?? vscode.window.activeTerminal;
 }
 

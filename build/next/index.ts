@@ -292,6 +292,8 @@ const desktopResourcePatterns = [
 	'vs/workbench/services/extensionManagement/common/media/*.png',
 	'vs/workbench/browser/parts/editor/media/*.png',
 	'vs/workbench/contrib/debug/browser/media/*.png',
+	'vs/workbench/contrib/mautcode/browser/media/*.png',
+	'vs/code/electron-main/media/*.png',
 
 	// Sessions - built-in prompts and skills
 	'vs/sessions/prompts/*.prompt.md',

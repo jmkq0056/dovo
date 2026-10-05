@@ -423,7 +423,16 @@ export class ClaudeSessionReader {
 				state.contextReport = report;
 				return;
 			}
-			const prompt = promptText(entry);
+			let prompt = promptText(entry);
+			const opening = state.turns.length === 1 && !state.turns[0].prompt ? state.turns[0] : undefined;
+			if (prompt === undefined && state.sidechain && (!state.turns.length || opening)) {
+				// An agent forked from a conversation gets its task next to the result of the call that started it.
+				prompt = agentTaskText(entry);
+				if (prompt !== undefined && opening) {
+					state.turns[0] = { ...opening, prompt };
+					return;
+				}
+			}
 			if (prompt === undefined) {
 				return;
 			}
@@ -439,6 +448,10 @@ export class ClaudeSessionReader {
 		}
 		if (message.usage) {
 			state.contextTokens = (message.usage.input_tokens ?? 0) + (message.usage.cache_read_input_tokens ?? 0) + (message.usage.cache_creation_input_tokens ?? 0);
+		}
+		if (!state.turns.length && state.sidechain) {
+			// An agent's transcript can open with its own work before any prompt of its own.
+			state.turns.push({ prompt: '', images: [], time, end: time, items: [] });
 		}
 		const turn = state.turns.at(-1);
 		if (!turn || !Array.isArray(message.content)) {
@@ -556,6 +569,20 @@ function promptText(entry: ITranscriptEntry): string | undefined {
 	const text = content.filter(b => b.type === 'text' && b.text).map(b => b.text).join('\n');
 	const hasImage = content.some(b => b.type === 'image');
 	return text || hasImage ? cleanPrompt(text) : undefined;
+}
+
+/** The task text an agent got alongside a tool result (how a forked agent receives its prompt). */
+function agentTaskText(entry: ITranscriptEntry): string | undefined {
+	const content = entry.message?.content;
+	if (!Array.isArray(content)) {
+		return undefined;
+	}
+	const text = content.filter(b => b.type === 'text' && b.text).map(b => b.text).join('\n')
+		// A forked agent's task starts with instructions for the fork itself; show only its task.
+		.replace(/<fork-boilerplate>[\s\S]*?<\/fork-boilerplate>/g, '')
+		.replace(/^\s*Your directive:\s*/i, '')
+		.trim();
+	return text ? cleanPrompt(text) : undefined;
 }
 
 /** The note Claude logs when you press Esc: `[Request interrupted by user]` (or `… for tool use`). */

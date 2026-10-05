@@ -1,13 +1,17 @@
 /*---------------------------------------------------------------------------------------------
- *  Maut Activity: file-centric view of files Claude Code has changed in the current session.
- *  One row per file, expandable to see individual edits. Diff vs session-start, one-click
- *  undo via Claude's own pre-edit backups in ~/.claude/file-history/.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+// Maut Activity: file-centric view of files Claude Code has changed in the current session.
+//  One row per file, expandable to see individual edits. Diff vs session-start, one-click
+//  undo via Claude's own pre-edit backups in ~/.claude/file-history/.
 
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { registerSystemStats } from './systemStats';
 
 const CLAUDE_HOME = path.join(os.homedir(), '.claude');
 const PROJECTS_ROOT = path.join(CLAUDE_HOME, 'projects');
@@ -249,7 +253,7 @@ class FileGroupItem extends vscode.TreeItem {
 		const count = group.actions.length;
 		const lastAction = group.actions[group.actions.length - 1];
 		const lastTime = lastAction ? fmtRelativeTime(lastAction.timestamp) : '';
-		this.description = `${count} edit${count === 1 ? '' : 's'}  ·  ${lastTime}${hasRedo ? '  ·  ↺' : ''}`;
+		this.description = `${count} edit${count === 1 ? '' : 's'}  ·  ${lastTime}${hasRedo ? '  ·  \u21ba' : ''}`;
 		const tools = new Set(group.actions.map(a => a.tool));
 		const created = tools.has('Write') && !firstBackupExists(group);
 		this.iconPath = new vscode.ThemeIcon(hasRedo ? 'discard' : (created ? 'new-file' : 'edit'));
@@ -444,6 +448,7 @@ async function redoFile(filePath: string, watcher: SessionWatcher): Promise<void
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+	registerSystemStats(context);
 	const watcher = new SessionWatcher();
 	const provider = new ActivityProvider(watcher);
 	context.subscriptions.push(vscode.window.registerTreeDataProvider('maut.activity', provider));

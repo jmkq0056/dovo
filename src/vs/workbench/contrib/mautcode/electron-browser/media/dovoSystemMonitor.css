@@ -1,0 +1,46 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* Dovo system monitor: a quiet readout beside the search bar; amber only when something runs hot. */
+.monaco-workbench .dovo-sysmon {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	height: 22px;
+	padding: 0 8px;
+	margin: 0 10px 0 6px;
+	border-radius: 6px;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+	font-size: 11.5px;
+	font-variant-numeric: tabular-nums;
+	color: var(--vscode-descriptionForeground);
+	white-space: nowrap;
+	cursor: default;
+	-webkit-app-region: no-drag;
+}
+.monaco-workbench .dovo-sysmon:hover { background: var(--vscode-toolbar-hoverBackground); color: var(--vscode-foreground); }
+.monaco-workbench .dovo-sysmon-seg { display: inline-flex; align-items: center; gap: 5px; }
+.monaco-workbench .dovo-sysmon-seg.hidden { display: none; }
+.monaco-workbench .dovo-sysmon-key { font-weight: 600; opacity: .75; letter-spacing: .02em; }
+.monaco-workbench .dovo-sysmon-value { display: inline-block; text-align: right; }
+.monaco-workbench .dovo-sysmon-cpu { min-width: 3.3ch; }
+.monaco-workbench .dovo-sysmon-ram { min-width: 7.5ch; }
+.monaco-workbench .dovo-sysmon .hot { color: #f59e0b; }
+.monaco-workbench .dovo-sysmon-spark { width: 30px; height: 12px; overflow: visible; }
+.monaco-workbench .dovo-sysmon-spark polyline { fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; vector-effect: non-scaling-stroke; opacity: .8; }
+.monaco-workbench .dovo-sysmon-bar { width: 26px; height: 4px; border-radius: 2px; background: color-mix(in srgb, currentColor 22%, transparent); overflow: hidden; }
+.monaco-workbench .dovo-sysmon-bar > b { display: block; height: 100%; background: currentColor; opacity: .75; transition: width .4s ease; }
+.monaco-workbench .dovo-sysmon-bar > b.hot { background: #f59e0b; opacity: 1; }
+.monaco-workbench .dovo-sysmon-state > i { width: 6px; height: 6px; border-radius: 50%; background: var(--vscode-terminal-ansiGreen, #74d394); opacity: .85; }
+.monaco-workbench .dovo-sysmon-state.hot > i { background: #f59e0b; opacity: 1; }
+
+/* The hover: every metric in plain rows. */
+.dovo-sysmon-hover { min-width: 300px; max-width: 380px; font-size: 11.5px; line-height: 1.35; font-variant-numeric: tabular-nums; }
+.dovo-sysmon-hover-title { margin: 6px 0 2px; font-weight: 600; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; opacity: .7; }
+.dovo-sysmon-hover-title:first-child { margin-top: 0; }
+.dovo-sysmon-hover-row { display: flex; justify-content: space-between; gap: 16px; padding: 0; }
+.dovo-sysmon-hover-value { text-align: right; }
+.dovo-sysmon-hover-value.hot { color: #f59e0b; }
+.dovo-sysmon-hover-note { margin-top: 6px; font-size: 10.5px; opacity: .65; line-height: 1.35; }

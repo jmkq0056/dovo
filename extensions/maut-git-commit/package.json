@@ -1,6 +1,6 @@
 {
 	"name": "maut-git-commit",
-	"displayName": "Maut Git Commit",
+	"displayName": "Dovo Git Commit",
 	"description": "One-click `git add .` + commit + optional push, with branch-aware confirmation.",
 	"version": "1.0.0",
 	"publisher": "maut",
@@ -18,7 +18,7 @@
 			{
 				"command": "maut.git.commitAndPush",
 				"title": "Commit Everything (and optionally push)",
-				"category": "Maut",
+				"category": "Dovo",
 				"icon": "$(git-commit)"
 			}
 		]

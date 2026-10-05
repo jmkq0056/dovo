@@ -24,7 +24,7 @@ const reopenableSchemes = new Set<string>([Schemas.file, Schemas.vscodeRemote, S
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	id: 'maut.tabs',
-	title: localize('maut.tabs.title', "Maut tabs"),
+	title: localize('maut.tabs.title', "Dovo tabs"),
 	type: 'object',
 	properties: {
 		[closeAfterSetting]: {

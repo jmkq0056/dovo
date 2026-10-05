@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
-# Release Maut code to THIS Mac: build, quit every running copy, move the
+# Release Dovo to THIS Mac: build, quit every running copy, move the
 # installed app to the Trash (recoverable, never rm), install the fresh build
 # into /Applications, and open it. Modelled on closer/scripts/release-macos.sh.
 #
@@ -30,15 +30,17 @@ done
 # pgrep can miss app processes on macOS; match the executable path through ps instead.
 app_pids() { ps -axo pid=,command= | awk -v exe="$1" 'index($0, exe) && $2 != "awk" { print $1 }'; }
 
-log()  { echo "[maut $(date +%H:%M:%S)] $*"; }
+log()  { echo "[dovo $(date +%H:%M:%S)] $*"; }
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
-NAME="Maut code"
+NAME="Dovo"
+# Dovo's old name: its app is retired and its settings carried over on the first swap.
+OLD_NAME="Maut code"
 APP="$(cd .. && pwd)/VSCode-darwin-arm64/$NAME.app"
 DEST="/Applications/$NAME.app"
-STALE=("$HOME/Applications/$NAME.app" "$HOME/Developer/VSCode-darwin-arm64/$NAME.app")
+STALE=("$HOME/Applications/$NAME.app" "$HOME/Developer/VSCode-darwin-arm64/$NAME.app" "/Applications/$OLD_NAME.app" "$(cd .. && pwd)/VSCode-darwin-arm64/$OLD_NAME.app")
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
-LOG=/tmp/maut-release-build.log
+LOG=/tmp/dovo-release-build.log
 
 # -- build --------------------------------------------------------------------
 if [ "$BUILD" = 1 ]; then
@@ -62,15 +64,28 @@ log "built commit ${BUILT:0:10}"
 
 # -- swap ---------------------------------------------------------------------
 swap() {
-	log "quitting ${NAME}..."
-	osascript -e "quit app \"$NAME\"" >/dev/null 2>&1 || true
-	for _ in $(seq 1 20); do
-		[ -n "$(app_pids "$NAME.app/Contents/MacOS/")" ] || break
-		sleep 0.5
+	for running in "$NAME" "$OLD_NAME"; do
+		log "quitting ${running}..."
+		osascript -e "quit app \"$running\"" >/dev/null 2>&1 || true
+		for _ in $(seq 1 20); do
+			[ -n "$(app_pids "$running.app/Contents/MacOS/")" ] || break
+			sleep 0.5
+		done
+		app_pids "$running.app/Contents/MacOS/" | xargs kill -9 2>/dev/null || true
 	done
-	app_pids "$NAME.app/Contents/MacOS/" | xargs kill -9 2>/dev/null || true
 	sleep 1
 	[ -n "$(app_pids "$NAME.app/Contents/MacOS/")" ] && fail "$NAME is still running"
+
+	# Coming from Maut code: carry settings, state and extensions over once.
+	local old_data="$HOME/Library/Application Support/$OLD_NAME" new_data="$HOME/Library/Application Support/$NAME"
+	if [ -d "$old_data" ] && [ ! -d "$new_data" ]; then
+		ditto "$old_data" "$new_data"; log "copied $OLD_NAME settings to $NAME"
+	fi
+	if [ -d "$HOME/.maut-code" ] && [ ! -d "$HOME/.dovo" ]; then
+		ditto "$HOME/.maut-code" "$HOME/.dovo"
+		[ -f "$HOME/.dovo/extensions/extensions.json" ] && sed -i '' 's#/\.maut-code/#/.dovo/#g' "$HOME/.dovo/extensions/extensions.json"
+		log "copied ~/.maut-code to ~/.dovo"
+	fi
 
 	for old in "$DEST" "${STALE[@]}"; do
 		[ -d "$old" ] || continue
@@ -110,7 +125,7 @@ swap() {
 if [ "$DETACH" = 1 ]; then
 	# Run the swap in its own session, outside this terminal's process tree, so quitting
 	# Maut (which hangs up its terminals) can't kill it halfway.
-	SWAP_LOG=/tmp/maut-release-swap.log
+	SWAP_LOG=/tmp/dovo-release-swap.log
 	nohup python3 -c 'import os, sys
 if os.fork():
 	sys.exit(0)

@@ -1,7 +1,7 @@
 {
 	"name": "maut-focus",
-	"displayName": "Maut Focus",
-	"description": "Legacy Maut Mode commands (Focus File, Focus Terminal). Superseded by Maut's Claude layout (Focus and IDE, Hide Claude with Ctrl+Cmd+J); kept only so existing keybindings to these commands keep working.",
+	"displayName": "Dovo Focus",
+	"description": "Legacy Dovo Mode commands (Focus File, Focus Terminal). Superseded by Dovo's Claude layout (Focus and IDE, Hide Claude with Ctrl+Cmd+J); kept only so existing keybindings to these commands keep working.",
 	"version": "1.0.0",
 	"publisher": "maut",
 	"license": "MIT",
@@ -25,26 +25,26 @@
 		"commands": [
 			{
 				"command": "maut.focus.toggleFile",
-				"title": "Maut Mode (Focus File)",
-				"category": "Maut",
+				"title": "Dovo Mode (Focus File)",
+				"category": "Dovo",
 				"icon": "$(screen-full)"
 			},
 			{
 				"command": "maut.focus.toggleTerminal",
-				"title": "Maut Mode (Focus Terminal)",
-				"category": "Maut",
+				"title": "Dovo Mode (Focus Terminal)",
+				"category": "Dovo",
 				"icon": "$(screen-full)"
 			},
 			{
 				"command": "maut.focus.toggleSmart",
-				"title": "Maut Mode (Smart Focus / Unfocus)",
-				"category": "Maut",
+				"title": "Dovo Mode (Smart Focus / Unfocus)",
+				"category": "Dovo",
 				"icon": "$(screen-full)"
 			},
 			{
 				"command": "maut.focus.toggleSidebar",
 				"title": "Toggle File Tree",
-				"category": "Maut",
+				"category": "Dovo",
 				"icon": "$(layout-sidebar-left)"
 			}
 		]

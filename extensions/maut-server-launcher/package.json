@@ -1,6 +1,6 @@
 {
 	"name": "maut-server-launcher",
-	"displayName": "Maut Server Launcher",
+	"displayName": "Dovo Server Launcher",
 	"description": "Right-click a folder → Start Server. Detects Node, Python, Rust, Go, etc.",
 	"version": "1.0.0",
 	"publisher": "maut",
@@ -15,7 +15,7 @@
 	"devDependencies": { "@types/node": "22.x" },
 	"contributes": {
 		"commands": [
-			{ "command": "maut.server.start", "title": "Start Server", "category": "Maut", "icon": "$(play-circle)" }
+			{ "command": "maut.server.start", "title": "Start Server", "category": "Dovo", "icon": "$(play-circle)" }
 		],
 		"menus": {
 			"explorer/context": [

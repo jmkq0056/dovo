@@ -102,7 +102,7 @@ function nextNumber(): number {
 }
 
 function makeMautName(n: number): string {
-	return `${n} -- MAUT`;
+	return `${n} -- DOVO`;
 }
 
 function startClaudeInNewTerminal(opts?: { autoResume?: boolean }): vscode.Terminal {
@@ -208,7 +208,7 @@ async function claudeMissing(): Promise<string | undefined> {
 			}
 		}
 	}
-	return `The ${command} command isn't installed on this computer, so Maut can't start Claude for you.`;
+	return `The ${command} command isn't installed on this computer, so Dovo can't start Claude for you.`;
 }
 
 /** A file as it is in the last commit, or undefined when it isn't tracked (or there's no git). */
@@ -265,14 +265,14 @@ async function switchMautTerminal(): Promise<void> {
 			description: info.state === 'active' ? 'active' : 'idle',
 		});
 	}
-	entries.push({ label: '$(add) Start new MAUT', description: 'spawn a fresh numbered terminal' });
-	const pick = await vscode.window.showQuickPick(entries, { placeHolder: 'Switch Maut terminal' });
+	entries.push({ label: '$(add) Start new DOVO', description: 'spawn a fresh numbered terminal' });
+	const pick = await vscode.window.showQuickPick(entries, { placeHolder: 'Switch Dovo terminal' });
 	if (!pick) { return; }
 	if (pick.label.startsWith('$(add)')) {
 		startClaudeInNewTerminal();
 		return;
 	}
-	const m = /(\d+) -- MAUT/.exec(pick.label);
+	const m = /(\d+) -- (?:DOVO|MAUT)/.exec(pick.label);
 	if (!m) { return; }
 	const target = sorted.find(([, info]) => info.number === parseInt(m[1], 10));
 	if (target) {
@@ -339,7 +339,7 @@ function bindShellExecutionTracking(context: vscode.ExtensionContext): void {
 		}));
 	}
 
-	// On extension activation, mark any restored "N -- MAUT" terminals as CLOSED until a
+	// On extension activation, mark any restored "N -- DOVO" terminals as CLOSED until a
 	// shell-execution event proves them alive again.
 	void markRestoredTerminalsClosed();
 }
@@ -348,7 +348,7 @@ async function markRestoredTerminalsClosed(): Promise<void> {
 	// Defer to give VS Code time to restore terminal tabs.
 	await new Promise(r => setTimeout(r, 1500));
 	for (const t of vscode.window.terminals) {
-		if (!/^\d+ -- MAUT$/.test(t.name)) { continue; }
+		if (!/^\d+ -- (?:DOVO|MAUT)$/.test(t.name)) { continue; }
 		if (mautTerminals.has(t)) { continue; }
 		try {
 			t.show(false);
@@ -414,7 +414,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const autoFocus = cfg.get<boolean>('autoEnterFocusMode', false);
 	const autoResume = cfg.get<boolean>('autoResumeOnLaunch', true);
 
-	// A restored "N -- MAUT" tab is just a fresh shell with its old output replayed, so decide on
+	// A restored "N -- DOVO" tab is just a fresh shell with its old output replayed, so decide on
 	// whether Claude is actually running, not on tab names. Only in a real project folder.
 	const folder = projectFolder();
 	if (autoLaunch && folder) {

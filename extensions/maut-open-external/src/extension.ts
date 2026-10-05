@@ -1,19 +1,22 @@
 /*---------------------------------------------------------------------------------------------
- *  Maut Open External: file-type-aware right-click actions.
- *    - HTML/PDF/SVG  → Open in Firefox
- *    - DOCX/ODT/RTF  → Show in Word
- *    - XLSX/CSV/TSV  → Show in Excel
- *    - PPTX/ODP      → Show in PowerPoint
- *    - SH/BASH/ZSH   → Execute Script in Terminal
- *    - anything      → Open With System Default App
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+// Maut Open External: file-type-aware right-click actions.
+//    - HTML/PDF/SVG  → Open in Firefox
+//    - DOCX/ODT/RTF  → Show in Word
+//    - XLSX/CSV/TSV  → Show in Excel
+//    - PPTX/ODP      → Show in PowerPoint
+//    - SH/BASH/ZSH   → Execute Script in Terminal
+//    - anything      → Open With System Default App
 
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 
 async function resolveTarget(arg: unknown): Promise<vscode.Uri | undefined> {
 	if (arg instanceof vscode.Uri) { return arg; }
-	if (typeof arg === 'object' && arg && 'fsPath' in (arg as Record<string, unknown>)) {
+	if (typeof arg === 'object' && arg && typeof (arg as { fsPath?: unknown }).fsPath === 'string') {
 		const fsPath = String((arg as { fsPath: unknown }).fsPath ?? '');
 		if (fsPath) { return vscode.Uri.file(fsPath); }
 	}
@@ -25,7 +28,7 @@ async function resolveTarget(arg: unknown): Promise<vscode.Uri | undefined> {
 async function openWith(appName: string | undefined, arg: unknown): Promise<void> {
 	const uri = await resolveTarget(arg);
 	if (!uri || uri.scheme !== 'file') {
-		vscode.window.showWarningMessage('Maut: Could not resolve a local file path to open.');
+		vscode.window.showWarningMessage('Dovo: Could not resolve a local file path to open.');
 		return;
 	}
 	const args = appName ? ['-a', appName, uri.fsPath] : [uri.fsPath];
@@ -47,10 +50,10 @@ function shellQuote(s: string): string {
 async function runScript(arg: unknown): Promise<void> {
 	const uri = await resolveTarget(arg);
 	if (!uri || uri.scheme !== 'file') {
-		vscode.window.showWarningMessage('Maut: Could not resolve a local script path to run.');
+		vscode.window.showWarningMessage('Dovo: Could not resolve a local script path to run.');
 		return;
 	}
-	const terminal = vscode.window.activeTerminal ?? vscode.window.createTerminal({ name: 'Maut · run' });
+	const terminal = vscode.window.activeTerminal ?? vscode.window.createTerminal({ name: 'Dovo · run' });
 	terminal.show(true);
 	terminal.sendText(`bash ${shellQuote(uri.fsPath)}`, true);
 }
@@ -58,7 +61,7 @@ async function runScript(arg: unknown): Promise<void> {
 async function compileTexAndOpenInFirefox(arg: unknown): Promise<void> {
 	const uri = await resolveTarget(arg);
 	if (!uri || uri.scheme !== 'file' || !uri.fsPath.endsWith('.tex')) {
-		vscode.window.showWarningMessage('Maut: select a .tex file first.');
+		vscode.window.showWarningMessage('Dovo: select a .tex file first.');
 		return;
 	}
 	const path = await import('node:path');
@@ -66,7 +69,7 @@ async function compileTexAndOpenInFirefox(arg: unknown): Promise<void> {
 	const file = path.basename(uri.fsPath);
 	const base = path.basename(uri.fsPath, '.tex');
 
-	const terminal = vscode.window.createTerminal({ name: `Maut · tex · ${base}`, cwd: dir });
+	const terminal = vscode.window.createTerminal({ name: `Dovo · tex · ${base}`, cwd: dir });
 	terminal.show(true);
 	// Short single-line command operating in $PWD; `;` so each step runs even if pdflatex errors.
 	const cmd = `pdflatex -interaction=nonstopmode ${shellQuote(file)}; pdflatex -interaction=nonstopmode ${shellQuote(file)}; rm -f ${shellQuote(base)}.{aux,log,out,toc,fdb_latexmk,fls,synctex.gz,nav,snm,bbl,blg}; open -a Firefox ${shellQuote(base + '.pdf')}`;
@@ -85,11 +88,11 @@ class HandoffEditorProvider implements vscode.CustomReadonlyEditorProvider<vscod
 		const app = this.appName;
 		panel.webview.html = `<!doctype html>
 <html><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:var(--vscode-editor-background);color:var(--vscode-foreground);font-family:var(--vscode-font-family);text-align:center">
-  <div>
-    <div style="font-size:13px;opacity:0.6;margin-bottom:8px">Maut</div>
-    <div style="font-size:15px;font-weight:600">Opening <code>${fileName}</code> in ${app}…</div>
-    <div style="font-size:11px;opacity:0.5;margin-top:16px">Closing this tab automatically.</div>
-  </div>
+	<div>
+		<div style="font-size:13px;opacity:0.6;margin-bottom:8px">Dovo</div>
+		<div style="font-size:15px;font-weight:600">Opening <code>${fileName}</code> in ${app}…</div>
+		<div style="font-size:11px;opacity:0.5;margin-top:16px">Closing this tab automatically.</div>
+	</div>
 </body></html>`;
 		try {
 			const child = spawn('open', ['-a', this.appName, document.uri.fsPath], { detached: true, stdio: 'ignore' });

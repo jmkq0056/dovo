@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
- *  Maut Server Launcher: right-click a folder → detect runnable server, spawn it in a terminal.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+// Maut Server Launcher: right-click a folder → detect runnable server, spawn it in a terminal.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -116,7 +119,7 @@ function detectCandidates(dir: string): ServerCandidate[] {
 async function startServer(arg: vscode.Uri | undefined): Promise<void> {
 	const dir = arg?.fsPath ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 	if (!dir) {
-		vscode.window.showWarningMessage('Maut: select a folder first.');
+		vscode.window.showWarningMessage('Dovo: select a folder first.');
 		return;
 	}
 	let stat: fs.Stats;
@@ -125,7 +128,7 @@ async function startServer(arg: vscode.Uri | undefined): Promise<void> {
 
 	const candidates = detectCandidates(folder);
 	if (candidates.length === 0) {
-		vscode.window.showWarningMessage(`Maut: no runnable server detected in ${path.basename(folder)}.`);
+		vscode.window.showWarningMessage(`Dovo: no runnable server detected in ${path.basename(folder)}.`);
 		return;
 	}
 
@@ -139,7 +142,7 @@ async function startServer(arg: vscode.Uri | undefined): Promise<void> {
 		chosen = candidates.find(c => c.command === pick.command) ?? chosen;
 	}
 
-	const terminal = vscode.window.createTerminal({ name: `Maut · server · ${path.basename(folder)}`, cwd: folder });
+	const terminal = vscode.window.createTerminal({ name: `Dovo · server · ${path.basename(folder)}`, cwd: folder });
 	terminal.show(true);
 	terminal.sendText(chosen.command, true);
 }

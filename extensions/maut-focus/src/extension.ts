@@ -1,8 +1,11 @@
 /*---------------------------------------------------------------------------------------------
- *  Maut Focus: zen-mode toggles for the active file or the active terminal. Terminal focus
- *  moves the terminal into the editor area while in focus and back to the panel on unfocus,
- *  preserving the running process / Claude Code session.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+// Maut Focus: zen-mode toggles for the active file or the active terminal. Terminal focus
+//  moves the terminal into the editor area while in focus and back to the panel on unfocus,
+//  preserving the running process / Claude Code session.
 
 import * as vscode from 'vscode';
 
@@ -25,7 +28,7 @@ async function exitFileFocus(): Promise<void> {
 async function enterTerminalFocus(): Promise<void> {
 	const t = vscode.window.activeTerminal;
 	if (!t) {
-		vscode.window.showWarningMessage('Maut: no active terminal to focus.');
+		vscode.window.showWarningMessage('Dovo: no active terminal to focus.');
 		return;
 	}
 	t.show(false);
@@ -67,7 +70,7 @@ async function toggleSmart(): Promise<void> {
 	// Pick by where focus currently is. activeTextEditor wins over activeTerminal when both exist.
 	if (vscode.window.activeTextEditor) { return enterFileFocus(); }
 	if (vscode.window.activeTerminal) { return enterTerminalFocus(); }
-	vscode.window.showWarningMessage('Maut: no editor or terminal to focus.');
+	vscode.window.showWarningMessage('Dovo: no editor or terminal to focus.');
 }
 
 async function toggleSidebar(): Promise<void> {

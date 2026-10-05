@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
- *  Converters: docx/xlsx/csv/pdf/html  →  TXT or JSON.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+// Converters: docx/xlsx/csv/pdf/html  →  TXT or JSON.
 
 import { execFile } from 'child_process';
 import * as fs from 'fs';
@@ -27,7 +30,7 @@ export async function fileToTxt(uri: vscode.Uri): Promise<string | undefined> {
 		case '.htm':
 			return htmlToTxt(src);
 		default:
-			vscode.window.showWarningMessage(`Maut: no TXT converter for ${ext}.`);
+			vscode.window.showWarningMessage(`Dovo: no TXT converter for ${ext}.`);
 			return undefined;
 	}
 }
@@ -43,7 +46,7 @@ export async function fileToJson(uri: vscode.Uri): Promise<string | undefined> {
 		case '.tsv':
 			return csvToJson(src);
 		default:
-			vscode.window.showWarningMessage(`Maut: no JSON converter for ${ext}.`);
+			vscode.window.showWarningMessage(`Dovo: no JSON converter for ${ext}.`);
 			return undefined;
 	}
 }
@@ -248,6 +251,6 @@ export async function officeToPdf(uri: vscode.Uri): Promise<string | undefined> 
 		}
 	}
 
-	vscode.window.showErrorMessage('Maut: no converter available. Install LibreOffice.app, or Microsoft Word / PowerPoint, to convert this file to PDF.');
+	vscode.window.showErrorMessage('Dovo: no converter available. Install LibreOffice.app, or Microsoft Word / PowerPoint, to convert this file to PDF.');
 	return undefined;
 }

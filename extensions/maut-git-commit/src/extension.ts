@@ -1,12 +1,15 @@
 /*---------------------------------------------------------------------------------------------
- *  Maut Git Commit: status-bar button → quick-pick driven commit + optional push flow.
- *  Uses VS Code's native quick-pick UI (no macOS-style modals) for every confirmation.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+// Maut Git Commit: status-bar button → quick-pick driven commit + optional push flow.
+//  Uses VS Code's native quick-pick UI (no macOS-style modals) for every confirmation.
 
 import { exec } from 'child_process';
 import * as vscode from 'vscode';
 
-interface ExecResult { stdout: string; stderr: string; code: number; }
+interface ExecResult { stdout: string; stderr: string; code: number }
 
 function runGit(args: string, cwd: string): Promise<ExecResult> {
 	return new Promise((resolve) => {
@@ -33,7 +36,7 @@ async function getDirty(cwd: string): Promise<{ files: number; preview: string }
 	return { files: lines.length, preview };
 }
 
-interface ActionItem extends vscode.QuickPickItem { action: string; }
+interface ActionItem extends vscode.QuickPickItem { action: string }
 
 async function chooseAction(title: string, items: ActionItem[]): Promise<string | undefined> {
 	const pick = await vscode.window.showQuickPick(items, { placeHolder: title, ignoreFocusOut: true });
@@ -43,23 +46,23 @@ async function chooseAction(title: string, items: ActionItem[]): Promise<string 
 async function commitAndPush(): Promise<void> {
 	const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 	if (!folder) {
-		vscode.window.showWarningMessage('Maut: no workspace folder is open.');
+		vscode.window.showWarningMessage('Dovo: no workspace folder is open.');
 		return;
 	}
 
 	const branch = await getCurrentBranch(folder);
 	if (!branch) {
-		vscode.window.showErrorMessage('Maut: not inside a git repository.');
+		vscode.window.showErrorMessage('Dovo: not inside a git repository.');
 		return;
 	}
 	const { files, preview } = await getDirty(folder);
 	if (files === 0) {
-		vscode.window.showInformationMessage(`Maut: nothing to commit on \`${branch}\` — working tree is clean.`);
+		vscode.window.showInformationMessage(`Dovo: nothing to commit on \`${branch}\` — working tree is clean.`);
 		return;
 	}
 
 	// 1) Confirm commit
-	const commitAction = await chooseAction(`Maut · ${files} change${files === 1 ? '' : 's'} on  ${branch}`, [
+	const commitAction = await chooseAction(`Dovo · ${files} change${files === 1 ? '' : 's'} on  ${branch}`, [
 		{
 			label: `$(git-commit)  Stage all & commit on  ${branch}`,
 			description: `${files} change${files === 1 ? '' : 's'}`,
@@ -81,7 +84,7 @@ async function commitAndPush(): Promise<void> {
 	if (!message) { return; }
 
 	// 3) Run add + commit
-	const sb = vscode.window.setStatusBarMessage(`$(loading~spin)  Maut · committing on ${branch}…`);
+	const sb = vscode.window.setStatusBarMessage(`$(loading~spin)  Dovo · committing on ${branch}…`);
 	try {
 		const add = await runGit('add -A', folder);
 		if (add.code !== 0) {
@@ -95,7 +98,7 @@ async function commitAndPush(): Promise<void> {
 			return;
 		}
 		const summary = commit.stdout.split('\n')[0]?.trim();
-		vscode.window.showInformationMessage(`Maut · committed on  ${branch}  ${summary ? `· ${summary}` : ''}`);
+		vscode.window.showInformationMessage(`Dovo · committed on  ${branch}  ${summary ? `· ${summary}` : ''}`);
 	} finally {
 		sb.dispose();
 	}
@@ -114,7 +117,7 @@ async function commitAndPush(): Promise<void> {
 	]);
 	if (sure !== 'push') { return; }
 
-	const sbPush = vscode.window.setStatusBarMessage(`$(loading~spin)  Maut · pushing origin/${branch}…`);
+	const sbPush = vscode.window.setStatusBarMessage(`$(loading~spin)  Dovo · pushing origin/${branch}…`);
 	try {
 		const push = await runGit(`push origin ${branch}`, folder);
 		if (push.code !== 0) {
@@ -131,7 +134,7 @@ function setupStatusBarButton(context: vscode.ExtensionContext): void {
 	const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 10_000);
 	item.command = 'maut.git.commitAndPush';
 	item.text = '$(git-commit)  Commit all';
-	item.tooltip = 'Maut: git add -A + commit + optional push, all with confirmations';
+	item.tooltip = 'Dovo: git add -A + commit + optional push, all with confirmations';
 	item.show();
 	context.subscriptions.push(item);
 

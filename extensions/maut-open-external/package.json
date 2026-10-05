@@ -1,6 +1,6 @@
 {
 	"name": "maut-open-external",
-	"displayName": "Maut Open External",
+	"displayName": "Dovo Open External",
 	"description": "Right-click context actions for opening files in the right native app (Firefox / Word / Excel / PowerPoint) plus an Execute Script action for shell files.",
 	"version": "1.0.0",
 	"publisher": "maut",
@@ -23,43 +23,43 @@
 			{
 				"command": "maut.openIn.firefox",
 				"title": "Open in Firefox",
-				"category": "Maut"
+				"category": "Dovo"
 			},
 			{
 				"command": "maut.openIn.word",
 				"title": "Show in Word",
-				"category": "Maut"
+				"category": "Dovo"
 			},
 			{
 				"command": "maut.openIn.excel",
 				"title": "Show in Excel",
-				"category": "Maut"
+				"category": "Dovo"
 			},
 			{
 				"command": "maut.openIn.powerpoint",
 				"title": "Show in PowerPoint",
-				"category": "Maut"
+				"category": "Dovo"
 			},
 			{
 				"command": "maut.openIn.defaultApp",
 				"title": "Open With System Default App",
-				"category": "Maut"
+				"category": "Dovo"
 			},
 			{
 				"command": "maut.run.script",
 				"title": "Execute Script in Terminal",
-				"category": "Maut"
+				"category": "Dovo"
 			},
 			{
 				"command": "maut.tex.compileAndOpenFirefox",
 				"title": "Compile (twice) and Open PDF in Firefox",
-				"category": "Maut"
+				"category": "Dovo"
 			}
 		],
 		"customEditors": [
 			{
 				"viewType": "maut.openInWord",
-				"displayName": "Maut · Open in Word",
+				"displayName": "Dovo · Open in Word",
 				"selector": [
 					{ "filenamePattern": "*.docx" },
 					{ "filenamePattern": "*.doc" },
@@ -70,7 +70,7 @@
 			},
 			{
 				"viewType": "maut.openInExcel",
-				"displayName": "Maut · Open in Excel",
+				"displayName": "Dovo · Open in Excel",
 				"selector": [
 					{ "filenamePattern": "*.xlsx" },
 					{ "filenamePattern": "*.xls" },
@@ -80,7 +80,7 @@
 			},
 			{
 				"viewType": "maut.openInPowerPoint",
-				"displayName": "Maut · Open in PowerPoint",
+				"displayName": "Dovo · Open in PowerPoint",
 				"selector": [
 					{ "filenamePattern": "*.pptx" },
 					{ "filenamePattern": "*.ppt" },

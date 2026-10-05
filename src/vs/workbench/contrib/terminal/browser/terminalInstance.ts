@@ -1263,7 +1263,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		store.add(dndController.onDropFile(paths => this.insertDroppedFiles(paths)));
 		// Maut code: editor text-selection drop → `@path:start-end`.
 		store.add(dndController.onDropText(async droppedText => {
-			if (!this.title.includes('MAUT') && !this.title.startsWith('Maut')) {
+			if (!isDovoTerminalTitle(this.title)) {
 				// Default behaviour for non-Maut terminals: just paste the text.
 				await this.sendText(droppedText, false);
 				return;
@@ -1296,7 +1296,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		// Maut code: when the active terminal is a Maut Claude session, drag-drop files
 		// insert `@workspace/relative/path` references (matches Claude Code's @-mention
 		// convention) instead of shell-quoted absolute paths.
-		if (this.title.includes('MAUT') || this.title.startsWith('Maut')) {
+		if (isDovoTerminalTitle(this.title)) {
 			const mentions = paths.map(uri => {
 				const folder = this._workspaceContextService.getWorkspaceFolder(uri);
 				const path = folder ? uri.fsPath.substring(folder.uri.fsPath.length).replace(/^[\\/]+/, '') || '.' : uri.fsPath;
@@ -2940,6 +2940,14 @@ export class TerminalInstanceColorProvider implements IXtermColorProvider {
 		}
 		return theme.getColor(SIDE_BAR_BACKGROUND);
 	}
+}
+
+/**
+ * Whether a terminal is one of Dovo's Claude terminals ("1 -- DOVO"), including ones named
+ * before the rename ("1 -- MAUT").
+ */
+function isDovoTerminalTitle(title: string): boolean {
+	return title.includes('DOVO') || title.includes('MAUT') || title.startsWith('Dovo') || title.startsWith('Maut');
 }
 
 function guessShellTypeFromExecutable(os: OperatingSystem, executable: string): TerminalShellType | undefined {

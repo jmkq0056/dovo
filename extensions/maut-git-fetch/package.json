@@ -1,6 +1,6 @@
 {
 	"name": "maut-git-fetch",
-	"displayName": "Maut Git Fetch",
+	"displayName": "Dovo Git Fetch",
 	"description": "Bottom-bar fetch+pull button companion to the commit/push button. Picks remote → branch → fetches, then resolves conflicts via quick-pick (stash & pull / reset --hard / cancel).",
 	"version": "1.0.0",
 	"publisher": "maut",
@@ -18,7 +18,7 @@
 			{
 				"command": "maut.git.fetchAndPull",
 				"title": "Fetch + Pull (pick remote & branch)",
-				"category": "Maut",
+				"category": "Dovo",
 				"icon": "$(cloud-download)"
 			}
 		]

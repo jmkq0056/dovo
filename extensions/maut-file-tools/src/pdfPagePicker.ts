@@ -1,8 +1,11 @@
 /*---------------------------------------------------------------------------------------------
- *  PDF Page Picker: a webview that renders every page of a PDF as a thumbnail with a checkbox,
- *  then on submit extracts the selected pages into a fresh PDF in ~/.maut-tmp/ and posts an
- *  @-mention into the Maut CLI.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+// PDF Page Picker: a webview that renders every page of a PDF as a thumbnail with a checkbox,
+//  then on submit extracts the selected pages into a fresh PDF in ~/.maut-tmp/ and posts an
+//  @-mention into the Maut CLI.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -31,7 +34,7 @@ export async function openPdfPagePicker(extUri: vscode.Uri, sourceUri: vscode.Ur
 		if (msg?.type !== 'extract') { return; }
 		const pages: number[] = Array.isArray(msg.pages) ? msg.pages : [];
 		if (pages.length === 0) {
-			vscode.window.showWarningMessage('Maut: no pages selected.');
+			vscode.window.showWarningMessage('Dovo: no pages selected.');
 			return;
 		}
 		try {
@@ -39,7 +42,7 @@ export async function openPdfPagePicker(extUri: vscode.Uri, sourceUri: vscode.Ur
 			appendToMautCli([out]);
 			panel.dispose();
 		} catch (err) {
-			vscode.window.showErrorMessage(`Maut PDF extract failed: ${err}`);
+			vscode.window.showErrorMessage(`Dovo PDF extract failed: ${err}`);
 		}
 	});
 }
@@ -98,7 +101,7 @@ function renderHtml(webview: vscode.Webview, dataUrl: string, fileName: string):
 		<button class="secondary" id="applyRange">Apply</button>
 		<button class="secondary" id="all">All</button>
 		<button class="secondary" id="none">None</button>
-		<button id="extract" disabled>Add 0 pages to Maut CLI</button>
+		<button id="extract" disabled>Add 0 pages to Claude</button>
 	</div>
 </header>
 <div class="grid" id="grid"><div class="loading">Rendering pages…</div></div>
@@ -114,7 +117,7 @@ function renderHtml(webview: vscode.Webview, dataUrl: string, fileName: string):
 
 	function updateExtract() {
 		extractBtn.disabled = selected.size === 0;
-		extractBtn.textContent = 'Add ' + selected.size + ' page' + (selected.size === 1 ? '' : 's') + ' to Maut CLI';
+		extractBtn.textContent = 'Add ' + selected.size + ' page' + (selected.size === 1 ? '' : 's') + ' to Claude';
 	}
 
 	function toggle(n, node) {

@@ -1,10 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <rect width="48" height="48" rx="10" fill="#0c0c14"/>
-  <ellipse cx="24" cy="20" rx="14" ry="15" fill="#1a1a2e"/>
-  <ellipse cx="24" cy="20" rx="11" ry="12" fill="#0c0c14"/>
-  <circle cx="20" cy="21" r="2.5" fill="#c62a47"/>
-  <circle cx="28" cy="21" r="2.5" fill="#c62a47"/>
-  <path d="M10,32 Q24,29 38,32 L40,46 Q24,44 8,46 Z" fill="#1a1a2e"/>
-  <line x1="36" y1="4" x2="16" y2="46" stroke="#8888a0" stroke-width="2"/>
-  <path d="M36,4 Q44,9 40,18 Q35,12 36,4Z" fill="#c62a47"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+<style>.dark{display:none}@media (prefers-color-scheme: dark){.light{display:none}.dark{display:inline}}</style>
+<g class="light">
+<defs>
+ <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#ea580c"/></linearGradient>
+ <linearGradient id="lm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fcd34d"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
+ <radialGradient id="lglow" cx=".3" cy=".1" r=".9"><stop offset="0" stop-color="#ea580c" stop-opacity=".45"/><stop offset=".6" stop-color="#ea580c" stop-opacity="0"/></radialGradient>
+ <linearGradient id="lhl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+ 
+</defs>
+<g >
+ <rect x="0" y="0" width="1024" height="1024" rx="230" fill="url(#lg)"/>
+ 
+ <rect x="0" y="0" width="1024" height="1024" rx="230" fill="url(#lhl)" opacity="1"/>
+ 
+</g>
+<g transform="translate(110.3872 91.44319999999999) scale(7.5776)"><path d="M24 18 H50 A32 32 0 0 1 50 82 H38 L24 93 Z" fill="#ffffff"/><polyline points="38,38 52,50 38,62" fill="none" stroke="#ea580c" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><rect x="57" y="58" width="13" height="6" rx="3" fill="#fb7185"/></g>
+</g>
+<g class="dark">
+<defs>
+ <linearGradient id="dg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#ea580c"/></linearGradient>
+ <linearGradient id="dm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fcd34d"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
+ <radialGradient id="dglow" cx=".3" cy=".1" r=".9"><stop offset="0" stop-color="#ea580c" stop-opacity=".45"/><stop offset=".6" stop-color="#ea580c" stop-opacity="0"/></radialGradient>
+ <linearGradient id="dhl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+ 
+</defs>
+<g >
+ <rect x="0" y="0" width="1024" height="1024" rx="230" fill="#161214"/>
+ <rect x="0" y="0" width="1024" height="1024" rx="230" fill="url(#dglow)"/>
+ <rect x="0" y="0" width="1024" height="1024" rx="230" fill="url(#dhl)" opacity="0.35"/>
+ <rect x="2" y="2" width="1020" height="1020" rx="228" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="4"/>
+</g>
+<g transform="translate(110.3872 91.44319999999999) scale(7.5776)"><path d="M24 18 H50 A32 32 0 0 1 50 82 H38 L24 93 Z" fill="url(#dm)"/><polyline points="38,38 52,50 38,62" fill="none" stroke="#161214" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><rect x="57" y="58" width="13" height="6" rx="3" fill="#fb7185"/></g>
+</g>
 </svg>

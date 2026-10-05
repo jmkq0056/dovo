@@ -1,7 +1,7 @@
 {
 	"name": "maut-file-tools",
-	"displayName": "Maut File Tools",
-	"description": "PDF page picker, doc → text/json converters, docx/pptx → pdf — all routed to the Maut Claude CLI as @-mentions.",
+	"displayName": "Dovo File Tools",
+	"description": "PDF page picker, doc → text/json converters, docx/pptx → pdf — all routed to Claude as @-mentions.",
 	"version": "1.0.0",
 	"publisher": "maut",
 	"license": "MIT",
@@ -21,11 +21,11 @@
 	},
 	"contributes": {
 		"commands": [
-			{ "command": "maut.fileTools.pickPdfPages", "title": "Add Selected Pages to Maut CLI", "category": "Maut", "icon": "$(file-pdf)" },
-			{ "command": "maut.fileTools.toTxt", "title": "Add to Maut CLI as TXT", "category": "Maut" },
-			{ "command": "maut.fileTools.toJson", "title": "Add to Maut CLI as JSON", "category": "Maut" },
-			{ "command": "maut.fileTools.docxToPdf", "title": "Convert DOCX → PDF and add to Maut CLI", "category": "Maut" },
-			{ "command": "maut.fileTools.pptxToPdf", "title": "Convert PPTX → PDF and add to Maut CLI", "category": "Maut" }
+			{ "command": "maut.fileTools.pickPdfPages", "title": "Add Selected Pages to Claude", "category": "Dovo", "icon": "$(file-pdf)" },
+			{ "command": "maut.fileTools.toTxt", "title": "Add to Claude as TXT", "category": "Dovo" },
+			{ "command": "maut.fileTools.toJson", "title": "Add to Claude as JSON", "category": "Dovo" },
+			{ "command": "maut.fileTools.docxToPdf", "title": "Convert DOCX → PDF and add to Claude", "category": "Dovo" },
+			{ "command": "maut.fileTools.pptxToPdf", "title": "Convert PPTX → PDF and add to Claude", "category": "Dovo" }
 		],
 		"menus": {
 			"explorer/context": [

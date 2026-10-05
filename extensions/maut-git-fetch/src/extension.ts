@@ -79,7 +79,7 @@ async function chooseAction(title: string, items: ActionItem[]): Promise<string 
 async function pickRemote(cwd: string): Promise<string | undefined> {
 	const remotes = await getRemotes(cwd);
 	if (remotes.length === 0) {
-		vscode.window.showErrorMessage('Maut: no remotes configured for this repo.');
+		vscode.window.showErrorMessage('Dovo: no remotes configured for this repo.');
 		return undefined;
 	}
 	if (remotes.length === 1) { return remotes[0]; }
@@ -91,11 +91,11 @@ async function pickRemote(cwd: string): Promise<string | undefined> {
 }
 
 async function pickBranch(remote: string, currentBranch: string | undefined, cwd: string): Promise<string | undefined> {
-	const sb = vscode.window.setStatusBarMessage(`$(loading~spin)  Maut · listing ${remote} branches…`);
+	const sb = vscode.window.setStatusBarMessage(`$(loading~spin)  Dovo · listing ${remote} branches…`);
 	let branches: string[] = [];
 	try { branches = await getRemoteBranches(remote, cwd); } finally { sb.dispose(); }
 	if (branches.length === 0) {
-		vscode.window.showWarningMessage(`Maut: could not list branches on ${remote}.`);
+		vscode.window.showWarningMessage(`Dovo: could not list branches on ${remote}.`);
 		return undefined;
 	}
 	const items = branches.map(b => ({
@@ -146,7 +146,7 @@ async function resolveConflict(remote: string, branch: string, cwd: string): Pro
 	if (!choice || choice === 'cancel') { return; }
 
 	if (choice === 'stash') {
-		const sb = vscode.window.setStatusBarMessage(`$(loading~spin)  Maut · stashing + pulling…`);
+		const sb = vscode.window.setStatusBarMessage(`$(loading~spin)  Dovo · stashing + pulling…`);
 		try {
 			const dirty = await hasLocalChanges(cwd);
 			if (dirty) {
@@ -168,7 +168,7 @@ async function resolveConflict(remote: string, branch: string, cwd: string): Pro
 					return;
 				}
 			}
-			vscode.window.showInformationMessage(`Maut · pulled  ${remote}/${branch}  ${dirty ? '(stash popped)' : ''}`);
+			vscode.window.showInformationMessage(`Dovo · pulled  ${remote}/${branch}  ${dirty ? '(stash popped)' : ''}`);
 		} finally {
 			sb.dispose();
 		}
@@ -184,14 +184,14 @@ async function resolveConflict(remote: string, branch: string, cwd: string): Pro
 			],
 		);
 		if (sure !== 'go') { return; }
-		const sb = vscode.window.setStatusBarMessage(`$(loading~spin)  Maut · resetting --hard to ${remote}/${branch}…`);
+		const sb = vscode.window.setStatusBarMessage(`$(loading~spin)  Dovo · resetting --hard to ${remote}/${branch}…`);
 		try {
 			const reset = await runGit(`reset --hard ${remote}/${branch}`, cwd);
 			if (reset.code !== 0) {
 				vscode.window.showErrorMessage(`git reset failed:\n${(reset.stderr || reset.stdout).trim()}`);
 				return;
 			}
-			vscode.window.showInformationMessage(`Maut · reset  ${branch}  to  ${remote}/${branch}.`);
+			vscode.window.showInformationMessage(`Dovo · reset  ${branch}  to  ${remote}/${branch}.`);
 		} finally {
 			sb.dispose();
 		}
@@ -201,13 +201,13 @@ async function resolveConflict(remote: string, branch: string, cwd: string): Pro
 async function fetchAndPull(): Promise<void> {
 	const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 	if (!folder) {
-		vscode.window.showWarningMessage('Maut: no workspace folder is open.');
+		vscode.window.showWarningMessage('Dovo: no workspace folder is open.');
 		return;
 	}
 
 	const inRepo = await runGit('rev-parse --is-inside-work-tree', folder);
 	if (inRepo.code !== 0 || inRepo.stdout.trim() !== 'true') {
-		vscode.window.showErrorMessage('Maut: not inside a git repository.');
+		vscode.window.showErrorMessage('Dovo: not inside a git repository.');
 		return;
 	}
 
@@ -218,17 +218,17 @@ async function fetchAndPull(): Promise<void> {
 	const branch = await pickBranch(remote, currentBranch, folder);
 	if (!branch) { return; }
 
-	const sb = vscode.window.setStatusBarMessage(`$(loading~spin)  Maut · fetching ${remote}/${branch}…`);
+	const sb = vscode.window.setStatusBarMessage(`$(loading~spin)  Dovo · fetching ${remote}/${branch}…`);
 	let result: PullResult;
 	try { result = await tryPull(remote, branch, folder); } finally { sb.dispose(); }
 
 	if (result.ok) {
-		vscode.window.showInformationMessage(`Maut · ${result.output}`);
+		vscode.window.showInformationMessage(`Dovo · ${result.output}`);
 		return;
 	}
 
 	if (!result.conflict) {
-		vscode.window.showErrorMessage(`Maut · fetch/pull failed:\n${result.output}`);
+		vscode.window.showErrorMessage(`Dovo · fetch/pull failed:\n${result.output}`);
 		return;
 	}
 
@@ -241,7 +241,7 @@ function setupStatusBar(context: vscode.ExtensionContext): void {
 	const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 9_995);
 	item.command = 'maut.git.fetchAndPull';
 	item.text = '$(cloud-download)  Fetch';
-	item.tooltip = 'Maut: pick remote & branch → fetch + pull. Resolves conflicts via stash / reset.';
+	item.tooltip = 'Dovo: pick remote & branch → fetch + pull. Resolves conflicts via stash / reset.';
 	item.show();
 	context.subscriptions.push(item);
 

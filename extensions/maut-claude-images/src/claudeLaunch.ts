@@ -104,7 +104,7 @@ class ClaudeLaunchProvider implements vscode.TreeDataProvider<Row> {
 			case 'start': {
 				const item = new vscode.TreeItem('Start new Claude');
 				item.description = claudeCommand();
-				item.tooltip = `Opens a new MAUT terminal and runs: ${claudeCommand()}`;
+				item.tooltip = `Opens a new DOVO terminal and runs: ${claudeCommand()}`;
 				item.iconPath = new vscode.ThemeIcon('play');
 				item.command = { command: 'maut.chat.startClaude', title: 'Start New Claude' };
 				return item;
@@ -115,7 +115,7 @@ class ClaudeLaunchProvider implements vscode.TreeDataProvider<Row> {
 
 async function pick(key: string, choices: readonly IChoice[], title: string, fallback: string): Promise<void> {
 	const current = config().get<string>(key, fallback);
-	const picked = await vscode.window.showQuickPick(choices.map(choice => ({ label: choice.label, detail: choice.detail, value: choice.value, picked: choice.value === current, description: choice.value === current ? 'current' : undefined })), { title, placeHolder: 'Used the next time Maut starts Claude' });
+	const picked = await vscode.window.showQuickPick(choices.map(choice => ({ label: choice.label, detail: choice.detail, value: choice.value, picked: choice.value === current, description: choice.value === current ? 'current' : undefined })), { title, placeHolder: 'Used the next time Dovo starts Claude' });
 	if (picked) {
 		await config().update(key, picked.value, vscode.ConfigurationTarget.Global);
 	}
@@ -135,7 +135,7 @@ export function registerClaudeLaunch(context: vscode.ExtensionContext): void {
 		vscode.commands.registerCommand('maut.claude.editExtraArgs', async () => {
 			const value = await vscode.window.showInputBox({
 				title: 'Extra flags for claude',
-				prompt: 'Added to the command Maut runs, e.g. --add-dir ../shared',
+				prompt: 'Added to the command Dovo runs, e.g. --add-dir ../shared',
 				value: config().get<string>('extraArgs', ''),
 			});
 			if (value !== undefined) {

@@ -1,6 +1,6 @@
 {
 	"name": "maut-markdown-preview",
-	"displayName": "Maut Markdown Preview-by-Default",
+	"displayName": "Dovo Markdown Preview-by-Default",
 	"description": "Open .md files in the rendered preview by default. Editor button toggles to source.",
 	"version": "1.0.0",
 	"publisher": "maut",
@@ -23,7 +23,7 @@
 	},
 	"contributes": {
 		"commands": [
-			{ "command": "maut.markdown.toggle", "title": "Toggle Markdown Preview / Source", "category": "Maut", "icon": "$(file-text)" }
+			{ "command": "maut.markdown.toggle", "title": "Toggle Markdown Preview / Source", "category": "Dovo", "icon": "$(file-text)" }
 		],
 		"keybindings": [
 			{ "command": "maut.markdown.toggle", "key": "cmd+shift+v", "mac": "cmd+shift+v", "when": "editorLangId == markdown || activeWebviewPanelId == 'mainThreadWebview-markdown.preview'" }
@@ -34,7 +34,7 @@
 			]
 		},
 		"configuration": {
-			"title": "Maut Markdown Preview",
+			"title": "Dovo Markdown Preview",
 			"properties": {
 				"maut.markdown.previewByDefault": {
 					"type": "boolean",

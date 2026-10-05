@@ -1,6 +1,6 @@
 {
 	"name": "maut-activity",
-	"displayName": "Maut Activity",
+	"displayName": "Dovo Activity",
 	"description": "Live view of every action Claude Code is taking in this session, with per-action diff and undo.",
 	"version": "1.0.0",
 	"publisher": "maut",
@@ -24,7 +24,7 @@
 			"activitybar": [
 				{
 					"id": "maut",
-					"title": "Maut",
+					"title": "Dovo",
 					"icon": "$(eye)"
 				}
 			]
@@ -35,7 +35,7 @@
 					"id": "maut.activity",
 					"name": "Activity",
 					"icon": "$(history)",
-					"contextualTitle": "Maut Activity"
+					"contextualTitle": "Dovo Activity"
 				}
 			]
 		},
@@ -49,43 +49,43 @@
 			{
 				"command": "maut.activity.refresh",
 				"title": "Refresh",
-				"category": "Maut Activity",
+				"category": "Dovo Activity",
 				"icon": "$(refresh)"
 			},
 			{
 				"command": "maut.activity.openFileDiff",
 				"title": "Diff Session-Start vs Current",
-				"category": "Maut Activity",
+				"category": "Dovo Activity",
 				"icon": "$(diff)"
 			},
 			{
 				"command": "maut.activity.openActionDiff",
 				"title": "Diff Pre-Edit vs Current",
-				"category": "Maut Activity",
+				"category": "Dovo Activity",
 				"icon": "$(diff)"
 			},
 			{
 				"command": "maut.activity.undoFile",
 				"title": "Undo All Claude Edits to This File",
-				"category": "Maut Activity",
+				"category": "Dovo Activity",
 				"icon": "$(discard)"
 			},
 			{
 				"command": "maut.activity.undoAction",
 				"title": "Undo This Edit",
-				"category": "Maut Activity",
+				"category": "Dovo Activity",
 				"icon": "$(discard)"
 			},
 			{
 				"command": "maut.activity.openFile",
 				"title": "Open File",
-				"category": "Maut Activity",
+				"category": "Dovo Activity",
 				"icon": "$(go-to-file)"
 			},
 			{
 				"command": "maut.activity.redoFile",
 				"title": "Redo (Restore Post-Claude State)",
-				"category": "Maut Activity",
+				"category": "Dovo Activity",
 				"icon": "$(redo)"
 			}
 		],

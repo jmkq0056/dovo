@@ -1,6 +1,6 @@
 {
 	"name": "maut-themes",
-	"displayName": "Maut Theme Studio",
+	"displayName": "Dovo Theme Studio",
 	"description": "Visual theme + font customiser with live preview, presets, save/load. Includes a polished light mode.",
 	"version": "1.3.2",
 	"publisher": "maut",
@@ -23,14 +23,14 @@
 					"id": "maut.themeStudio",
 					"name": "Theme Studio",
 					"icon": "$(symbol-color)",
-					"contextualTitle": "Maut Theme Studio",
+					"contextualTitle": "Dovo Theme Studio",
 					"type": "webview"
 				}
 			]
 		},
 		"commands": [
-			{ "command": "maut.theme.toggle", "title": "Toggle Maut Light / Dark", "category": "Maut", "icon": "$(color-mode)" },
-			{ "command": "maut.theme.studio", "title": "Open Theme Studio", "category": "Maut", "icon": "$(symbol-color)" }
+			{ "command": "maut.theme.toggle", "title": "Toggle Dovo Light / Dark", "category": "Dovo", "icon": "$(color-mode)" },
+			{ "command": "maut.theme.studio", "title": "Open Theme Studio", "category": "Dovo", "icon": "$(symbol-color)" }
 		],
 		"keybindings": [
 			{ "command": "maut.theme.toggle", "key": "cmd+shift+l", "mac": "cmd+shift+l" },
@@ -42,17 +42,17 @@
 			]
 		},
 		"configuration": {
-			"title": "Maut",
+			"title": "Dovo",
 			"properties": {
 				"maut.workbenchFontFamily": {
 					"type": "string",
 					"default": "",
-					"description": "Override the workbench UI font family (sidebar, tabs, menus, palette). Empty string = use VS Code default. Set by the Maut Theme Studio when you pick a font."
+					"description": "Override the workbench UI font family (sidebar, tabs, menus, palette). Empty string = use VS Code default. Set by the Dovo Theme Studio when you pick a font."
 				},
 				"maut.workbenchFontSize": {
 					"type": "number",
 					"default": 0,
-					"description": "Override the workbench UI font size in pixels. 0 = use VS Code default. Set by the Maut Theme Studio when you pick a font size."
+					"description": "Override the workbench UI font size in pixels. 0 = use VS Code default. Set by the Dovo Theme Studio when you pick a font size."
 				}
 			}
 		}

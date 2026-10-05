@@ -1,7 +1,10 @@
 /*---------------------------------------------------------------------------------------------
- *  Maut Add to CLI: append `@<workspace-relative-path>` references for one or many selected
- *  files/folders to the running Maut Claude terminal.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+// Maut Add to CLI: append `@<workspace-relative-path>` references for one or many selected
+//  files/folders to the running Maut Claude terminal.
 
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -15,7 +18,7 @@ function workspaceRelative(uri: vscode.Uri): string {
 
 function findMautTerminal(): vscode.Terminal | undefined {
 	const all = vscode.window.terminals;
-	const maut = all.find(t => t.name.includes('MAUT') || t.name.startsWith('Maut'));
+	const maut = all.find(t => t.name.includes('DOVO') || t.name.includes('MAUT') || t.name.startsWith('Dovo') || t.name.startsWith('Maut'));
 	return maut ?? vscode.window.activeTerminal;
 }
 
@@ -24,7 +27,7 @@ async function addFiles(arg: vscode.Uri | undefined, allArgs: vscode.Uri[] | und
 		? allArgs
 		: (arg ? [arg] : []);
 	if (uris.length === 0) {
-		vscode.window.showWarningMessage('Maut: no file selected.');
+		vscode.window.showWarningMessage('Dovo: no file selected.');
 		return;
 	}
 	const fileOnly = uris.filter(u => u.scheme === 'file');
@@ -35,7 +38,7 @@ async function addFiles(arg: vscode.Uri | undefined, allArgs: vscode.Uri[] | und
 		const list = fileOnly.slice(0, 12).map(u => `• ${workspaceRelative(u)}`).join('\n');
 		const more = fileOnly.length > 12 ? `\n… and ${fileOnly.length - 12} more` : '';
 		const choice = await vscode.window.showWarningMessage(
-			`Add ${fileOnly.length} items to the Maut Claude CLI as @-mentions?`,
+			`Add ${fileOnly.length} items to Claude as @-mentions?`,
 			{ modal: true, detail: `${list}${more}` },
 			'Add',
 		);
@@ -44,7 +47,7 @@ async function addFiles(arg: vscode.Uri | undefined, allArgs: vscode.Uri[] | und
 
 	const terminal = findMautTerminal();
 	if (!terminal) {
-		vscode.window.showWarningMessage('Maut: no terminal running. Start `clsp` first.');
+		vscode.window.showWarningMessage('Dovo: no terminal running. Start `clsp` first.');
 		return;
 	}
 	terminal.show(false);
@@ -55,13 +58,13 @@ async function addFiles(arg: vscode.Uri | undefined, allArgs: vscode.Uri[] | und
 async function addSelection(): Promise<void> {
 	const editor = vscode.window.activeTextEditor;
 	if (!editor) {
-		vscode.window.showWarningMessage('Maut: no active editor.');
+		vscode.window.showWarningMessage('Dovo: no active editor.');
 		return;
 	}
 	const sel = editor.selection;
 	const uri = editor.document.uri;
 	if (uri.scheme !== 'file') {
-		vscode.window.showWarningMessage('Maut: file must be on disk.');
+		vscode.window.showWarningMessage('Dovo: file must be on disk.');
 		return;
 	}
 	const rel = workspaceRelative(uri);
@@ -72,7 +75,7 @@ async function addSelection(): Promise<void> {
 		: (start === end ? `@${rel}:${start} ` : `@${rel}:${start}-${end} `);
 	const terminal = findMautTerminal();
 	if (!terminal) {
-		vscode.window.showWarningMessage('Maut: no terminal running. Start `clsp` first.');
+		vscode.window.showWarningMessage('Dovo: no terminal running. Start `clsp` first.');
 		return;
 	}
 	terminal.show(false);

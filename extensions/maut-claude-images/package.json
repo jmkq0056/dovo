@@ -1,6 +1,6 @@
 {
 	"name": "maut-claude-images",
-	"displayName": "Maut Claude Images",
+	"displayName": "Dovo Claude Images",
 	"description": "Sidebar gallery and terminal link integration for Claude Code image cache",
 	"version": "1.0.0",
 	"publisher": "maut",
@@ -26,29 +26,29 @@
 			{
 				"command": "maut.chat.startClaude",
 				"title": "Start New Claude",
-				"category": "Maut",
+				"category": "Dovo",
 				"icon": "$(flame)"
 			},
 			{
 				"command": "maut.terminals.switch",
-				"title": "Switch Maut Terminal",
-				"category": "Maut",
+				"title": "Switch Dovo Terminal",
+				"category": "Dovo",
 				"icon": "$(list-tree)"
 			},
 			{
 				"command": "maut.claude.pickPermissionMode",
 				"title": "Choose How Claude Asks for Permission",
-				"category": "Maut"
+				"category": "Dovo"
 			},
 			{
 				"command": "maut.claude.pickModel",
 				"title": "Choose Claude's Model",
-				"category": "Maut"
+				"category": "Dovo"
 			},
 			{
 				"command": "maut.claude.editExtraArgs",
 				"title": "Edit Extra Flags for Claude",
-				"category": "Maut"
+				"category": "Dovo"
 			}
 		],
 		"menus": {
@@ -72,7 +72,7 @@
 			]
 		},
 		"configuration": {
-			"title": "Maut",
+			"title": "Dovo",
 			"properties": {
 				"maut.autoLaunchClsp": {
 					"type": "boolean",
@@ -82,7 +82,7 @@
 				"maut.autoEnterFocusMode": {
 					"type": "boolean",
 					"default": false,
-					"description": "After auto-launching clsp on app open, also enter Maut Focus Mode (zen-style)."
+					"description": "After auto-launching clsp on app open, also enter Dovo Focus Mode (zen-style)."
 				},
 				"maut.autoResumeOnLaunch": {
 					"type": "boolean",
@@ -108,22 +108,22 @@
 						"Plans first and changes nothing until you approve.",
 						"Never asks: anything not already allowed is refused."
 					],
-					"description": "How Claude asks before acting, every time Maut starts Claude."
+					"description": "How Claude asks before acting, every time Dovo starts Claude."
 				},
 				"maut.claude.model": {
 					"type": "string",
 					"default": "",
-					"description": "The model Maut starts Claude with: opus, sonnet, haiku or a full model name. Empty uses Claude Code's default."
+					"description": "The model Dovo starts Claude with: opus, sonnet, haiku or a full model name. Empty uses Claude Code's default."
 				},
 				"maut.claude.extraArgs": {
 					"type": "string",
 					"default": "",
-					"description": "More flags for claude when Maut starts it, like --add-dir ../shared."
+					"description": "More flags for claude when Dovo starts it, like --add-dir ../shared."
 				},
 				"maut.claude.command": {
 					"type": "string",
 					"default": "claude",
-					"description": "The Claude Code executable Maut starts: claude, or a full path or wrapper script."
+					"description": "The Claude Code executable Dovo starts: claude, or a full path or wrapper script."
 				}
 			}
 		},
@@ -133,7 +133,7 @@
 					"id": "maut.claude.launch",
 					"name": "Claude",
 					"icon": "$(sparkle)",
-					"contextualTitle": "Maut Claude"
+					"contextualTitle": "Dovo Claude"
 				}
 			]
 		}

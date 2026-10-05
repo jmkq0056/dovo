@@ -45,15 +45,15 @@ interface ThemeState {
 
 const DEFAULT_DARK: Snapshot = {
 	mode: 'dark',
-	accent: '#c62a47',
-	tint: '#2a181c',
+	accent: '#f59e0b',
+	tint: '#1f1a1d',
 	fontFamily: 'JetBrains Mono, Menlo, Monaco, monospace',
 	fontSize: 13,
 };
 
 const DEFAULT_LIGHT: Snapshot = {
 	mode: 'light',
-	accent: '#c62a47',
+	accent: '#ea580c',
 	tint: '#fbf6ec',
 	fontFamily: 'JetBrains Mono, Menlo, Monaco, monospace',
 	fontSize: 13,
@@ -66,7 +66,7 @@ const DEFAULT_STATE: ThemeState = {
 };
 
 const PRESETS: NamedSnapshot[] = [
-	{ name: 'Crimson dark', mode: 'dark', accent: '#c62a47', tint: '#2a181c', fontFamily: DEFAULT_DARK.fontFamily, fontSize: 13 },
+	{ name: 'Ember dark', mode: 'dark', accent: '#f59e0b', tint: '#1f1a1d', fontFamily: DEFAULT_DARK.fontFamily, fontSize: 13 },
 	{ name: 'Midnight blue', mode: 'dark', accent: '#5b8def', tint: '#161b22', fontFamily: DEFAULT_DARK.fontFamily, fontSize: 13 },
 	{ name: 'Forest', mode: 'dark', accent: '#8ac926', tint: '#1a1f1a', fontFamily: DEFAULT_DARK.fontFamily, fontSize: 13 },
 	{ name: 'Sand light', mode: 'light', accent: '#b6541f', tint: '#faf6ef', fontFamily: DEFAULT_LIGHT.fontFamily, fontSize: 13 },
@@ -120,7 +120,7 @@ function buildPalette(snap: Snapshot): Record<string, string> {
 	const accentHover = isLight ? darken(accent, 0.10) : lighten(accent, 0.10);
 
 	// Mix a tiny bit of accent into the chrome surfaces so light mode reads as
-	// "Maut light" rather than "VS Code Light with a red border". Keep it subtle
+	// "Dovo light" rather than "VS Code Light with a red border". Keep it subtle
 	// (~2%) so the cream doesn't tip into pink. Borders carry slightly more accent
 	// so edges show the brand all the way through the UI.
 	const base = snap.tint;
@@ -331,17 +331,29 @@ const STATE_KEY = 'maut.theme.state';
 const STATE_NAMED = 'maut.theme.named';
 const STATE_LEGACY = 'maut.theme.current';
 
+/** The crimson defaults of the Maut days; a theme still on them moves to Dovo's Ember. */
+const LEGACY_ACCENT = '#c62a47';
+const LEGACY_DARK_TINT = '#2a181c';
+
+function toEmber(snap: Snapshot): Snapshot {
+	if (snap.accent.toLowerCase() !== LEGACY_ACCENT) {
+		return snap;
+	}
+	const defaults = snap.mode === 'light' ? DEFAULT_LIGHT : DEFAULT_DARK;
+	return { ...snap, accent: defaults.accent, tint: snap.tint.toLowerCase() === LEGACY_DARK_TINT ? defaults.tint : snap.tint };
+}
+
 function loadState(context: vscode.ExtensionContext): ThemeState {
 	const existing = context.globalState.get<ThemeState>(STATE_KEY);
 	if (existing && existing.light && existing.dark) {
-		return existing;
+		return { ...existing, light: toEmber(existing.light), dark: toEmber(existing.dark) };
 	}
 	const legacy = context.globalState.get<Snapshot>(STATE_LEGACY);
 	if (legacy) {
 		const fresh: ThemeState = {
 			active: legacy.mode,
-			light: legacy.mode === 'light' ? legacy : DEFAULT_LIGHT,
-			dark: legacy.mode === 'dark' ? legacy : DEFAULT_DARK,
+			light: legacy.mode === 'light' ? toEmber(legacy) : DEFAULT_LIGHT,
+			dark: legacy.mode === 'dark' ? toEmber(legacy) : DEFAULT_DARK,
 		};
 		return fresh;
 	}
@@ -408,7 +420,7 @@ async function activateMode(context: vscode.ExtensionContext, mode: Mode): Promi
 	state.active = mode;
 	await applySnapshot(state[mode]);
 	await saveState(context, state);
-	vscode.window.setStatusBarMessage(`Maut · ${mode === 'light' ? 'Light' : 'Dark'}`, 2000);
+	vscode.window.setStatusBarMessage(`Dovo · ${mode === 'light' ? 'Light' : 'Dark'}`, 2000);
 	provider?.refresh();
 }
 
@@ -514,9 +526,9 @@ class StudioViewProvider implements vscode.WebviewViewProvider {
 							await saveNamed(this.context, parsed.named);
 						}
 						this.refresh();
-						vscode.window.showInformationMessage('Maut: theme imported.');
+						vscode.window.showInformationMessage('Dovo: theme imported.');
 					} catch (e) {
-						vscode.window.showErrorMessage(`Maut: import failed — ${e instanceof Error ? e.message : 'bad JSON'}`);
+						vscode.window.showErrorMessage(`Dovo: import failed — ${e instanceof Error ? e.message : 'bad JSON'}`);
 					}
 					return;
 				}
@@ -556,7 +568,7 @@ function setupStatusBar(context: vscode.ExtensionContext): void {
 	const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 9_500);
 	item.command = 'maut.theme.studio';
 	item.text = '$(symbol-color)  Theme';
-	item.tooltip = 'Maut Theme Studio — colour, font, light/dark (Shift+Cmd+T)';
+	item.tooltip = 'Dovo Theme Studio — colour, font, light/dark (Shift+Cmd+T)';
 	item.show();
 	context.subscriptions.push(item);
 }
@@ -589,7 +601,7 @@ async function maybeWelcome(context: vscode.ExtensionContext): Promise<void> {
 	await context.globalState.update(FIRST_RUN_FLAG, true);
 	const open = 'Open Theme Studio';
 	const pick = await vscode.window.showInformationMessage(
-		'Maut Theme Studio is in the Maut sidebar (eye icon, left). Customise light & dark independently — Shift+Cmd+L swaps between them.',
+		'Dovo Theme Studio is in the Dovo sidebar (eye icon, left). Customise light & dark independently — Shift+Cmd+L swaps between them.',
 		open,
 	);
 	if (pick === open) {

@@ -1,8 +1,11 @@
 /*---------------------------------------------------------------------------------------------
- *  Maut code: inline `@` button on every row in the file explorer that runs
- *  `maut.cli.add` with that row's resource — adds the file/folder to the active
- *  Maut Claude terminal as an @-mention without needing a right-click.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
+// Maut code: inline `@` button on every row in the file explorer that runs
+//  `maut.cli.add` with that row's resource — adds the file/folder to the active
+//  Maut Claude terminal as an @-mention without needing a right-click.
 
 import * as DOM from '../../../../base/browser/dom.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -22,7 +25,7 @@ class MautExplorerInlineAddContribution extends Disposable implements IExplorerF
 		super();
 		const button = document.createElement('a');
 		button.className = 'maut-explorer-inline-add codicon codicon-mention';
-		button.title = 'Add to Maut CLI';
+		button.title = 'Add to Claude';
 		button.setAttribute('role', 'button');
 		button.style.display = 'none';
 		container.appendChild(button);

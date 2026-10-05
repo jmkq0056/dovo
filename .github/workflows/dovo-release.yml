@@ -1,4 +1,4 @@
-name: Maut Release
+name: Dovo Release
 on:
   push:
     tags: ['v*']
@@ -54,39 +54,39 @@ jobs:
         run: |
           $setup = Get-ChildItem .build/win32-x64/user-setup -Filter *.exe | Select-Object -First 1
           if (-not $setup) { throw "no installer in .build/win32-x64/user-setup" }
-          Copy-Item $setup.FullName Maut-code-Setup-x64.exe
-          Compress-Archive -Path "..\VSCode-win32-x64\*" -DestinationPath Maut-code-win-x64.zip
-          Get-Item Maut-code-Setup-x64.exe, Maut-code-win-x64.zip | Format-Table Name, Length
+          Copy-Item $setup.FullName Dovo-Setup-x64.exe
+          Compress-Archive -Path "..\VSCode-win32-x64\*" -DestinationPath Dovo-win-x64.zip
+          Get-Item Dovo-Setup-x64.exe, Dovo-win-x64.zip | Format-Table Name, Length
 
       # Install exactly the way users do (docs/install.ps1), then check the app and CLI landed.
       - name: Test the one-line installer
         shell: pwsh
         env:
-          MAUT_INSTALLER: Maut-code-Setup-x64.exe
-          MAUT_NO_OPEN: "1"
+          DOVO_INSTALLER: Dovo-Setup-x64.exe
+          DOVO_NO_OPEN: "1"
         run: |
           ./docs/install.ps1
-          $app = Join-Path $env:LOCALAPPDATA 'Programs\Maut code'
-          if (-not (Test-Path "$app\Maut code.exe")) { throw "Maut code.exe not installed" }
-          if (-not (Test-Path "$app\bin\maut-code.cmd")) { throw "maut-code CLI not installed" }
+          $app = Join-Path $env:LOCALAPPDATA 'Programs\Dovo'
+          if (-not (Test-Path "$app\Dovo.exe")) { throw "Dovo.exe not installed" }
+          if (-not (Test-Path "$app\bin\dovo.cmd")) { throw "dovo CLI not installed" }
           $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-          if ($userPath -notlike "*Maut code\bin*") { throw "maut-code is not on PATH" }
-          & "$app\bin\maut-code.cmd" --version
-          if ($LASTEXITCODE -ne 0) { throw "maut-code --version failed" }
+          if ($userPath -notlike "*Dovo\bin*") { throw "dovo is not on PATH" }
+          & "$app\bin\dovo.cmd" --version
+          if ($LASTEXITCODE -ne 0) { throw "dovo --version failed" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: maut-code-windows-x64
+          name: dovo-windows-x64
           path: |
-            Maut-code-Setup-x64.exe
-            Maut-code-win-x64.zip
+            Dovo-Setup-x64.exe
+            Dovo-win-x64.zip
 
       - if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            Maut-code-Setup-x64.exe
-            Maut-code-win-x64.zip
+            Dovo-Setup-x64.exe
+            Dovo-win-x64.zip
 
   mac-arm64:
     runs-on: macos-14
@@ -111,10 +111,10 @@ jobs:
       - name: Sign and build DMG
         run: |
           cd "${GITHUB_WORKSPACE}/../VSCode-darwin-arm64"
-          codesign --force --deep --sign - "Maut code.app"
-          hdiutil create -volname "Maut code" -srcfolder "Maut code.app" -ov -format UDZO "${GITHUB_WORKSPACE}/Maut-code-arm64.dmg"
+          codesign --force --deep --sign - "Dovo.app"
+          hdiutil create -volname "Dovo" -srcfolder "Dovo.app" -ov -format UDZO "${GITHUB_WORKSPACE}/Dovo-arm64.dmg"
 
       - if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: Maut-code-arm64.dmg
+          files: Dovo-arm64.dmg

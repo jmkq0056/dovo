@@ -40,7 +40,7 @@ const minimumClaudeWidth = 360;
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	id: 'maut.claudeLayout',
-	title: localize('maut.claudeLayout.title', "Maut Claude layout"),
+	title: localize('maut.claudeLayout.title', "Dovo Claude layout"),
 	type: 'object',
 	properties: {
 		[enabledSetting]: {
@@ -454,7 +454,7 @@ registerAction2(class extends Action2 {
 		super({
 			id: toggleHiddenCommandId,
 			title: localize2('maut.claude.toggleHidden', "Hide or Show Claude"),
-			category: localize2('maut.claude.category', "Maut"),
+			category: localize2('maut.claude.category', "Dovo"),
 			f1: true,
 			keybinding: {
 				weight: KeybindingWeight.WorkbenchContrib,

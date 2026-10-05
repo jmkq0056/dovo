@@ -12,6 +12,8 @@ import { CommandsRegistry, ICommandService } from '../../../../platform/commands
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
+import { isDark } from '../../../../platform/theme/common/theme.js';
+import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { IWorkspaceContextService, WorkbenchState } from '../../../../platform/workspace/common/workspace.js';
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
 import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
@@ -26,7 +28,7 @@ const giveUpAfter = 20_000;
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	id: 'maut.window',
-	title: localize('maut.window.title', "Maut window"),
+	title: localize('maut.window.title', "Dovo window"),
 	type: 'object',
 	properties: {
 		'maut.window.openFullScreen': {
@@ -37,7 +39,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 		'maut.startup.splash': {
 			type: 'boolean',
 			default: true,
-			markdownDescription: localize('maut.startup.splash', "When a project opens and Maut starts Claude for it, show the Maut splash until Claude is ready."),
+			markdownDescription: localize('maut.startup.splash', "When a project opens and Dovo starts Claude for it, show the Dovo splash until Claude is ready."),
 		},
 	},
 });
@@ -65,6 +67,7 @@ class MautStartupSplash extends Disposable implements IWorkbenchContribution {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IMautClaudeService private readonly _claudeService: IMautClaudeService,
 		@ICommandService private readonly _commandService: ICommandService,
+		@IThemeService private readonly _themeService: IThemeService,
 	) {
 		super();
 		const folder = workspaceContextService.getWorkbenchState() !== WorkbenchState.EMPTY;
@@ -89,7 +92,9 @@ class MautStartupSplash extends Disposable implements IWorkbenchContribution {
 		splash.setAttribute('aria-live', 'polite');
 		const center = dom.append(splash, dom.$('.maut-splash-center'));
 		const logo = dom.append(center, dom.$<HTMLImageElement>('img.maut-splash-logo'));
-		logo.src = FileAccess.asBrowserUri('vs/workbench/contrib/mautcode/browser/media/maut-logo.png').toString(true);
+		// The dark icon on dark themes, the bright one on light themes.
+		const logoFile = isDark(this._themeService.getColorTheme().type) ? 'maut-logo-dark.png' : 'maut-logo.png';
+		logo.src = FileAccess.asBrowserUri(`vs/workbench/contrib/mautcode/browser/media/${logoFile}`).toString(true);
 		logo.alt = '';
 		this._status = dom.append(center, dom.$('.maut-splash-status', undefined, localize('maut.splash.getting', "Getting Claude ready")));
 		this._actions = dom.append(center, dom.$('.maut-splash-actions'));
@@ -137,7 +142,7 @@ class MautStartupSplash extends Disposable implements IWorkbenchContribution {
 		splash.classList.add('failed');
 		dom.clearNode(this._status);
 		dom.append(this._status, dom.$('b', undefined, localize('maut.splash.notSetUp', "Claude Code isn't set up")));
-		dom.append(this._status, dom.$('span', undefined, message || localize('maut.splash.notFound', "Maut couldn't find the claude command.")));
+		dom.append(this._status, dom.$('span', undefined, message || localize('maut.splash.notFound', "Dovo couldn't find the claude command.")));
 		dom.clearNode(actions);
 		const install = dom.append(actions, dom.$<HTMLButtonElement>('button.maut-splash-primary', { type: 'button' }, localize('maut.splash.install', "Install Claude Code")));
 		const skip = dom.append(actions, dom.$<HTMLButtonElement>('button', { type: 'button' }, localize('maut.splash.continue', "Continue to the Editor")));

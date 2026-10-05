@@ -1,7 +1,7 @@
 {
 	"name": "maut-cli-add",
-	"displayName": "Maut Add to CLI",
-	"description": "Right-click (or inline icon) → add file(s) to the active Maut Claude terminal as @paths.",
+	"displayName": "Dovo Add to CLI",
+	"description": "Right-click (or inline icon) → add file(s) to the active Claude terminal as @paths.",
 	"version": "1.0.0",
 	"publisher": "maut",
 	"license": "MIT",
@@ -17,14 +17,14 @@
 		"commands": [
 			{
 				"command": "maut.cli.add",
-				"title": "Add to Maut CLI",
-				"category": "Maut",
+				"title": "Add to Claude",
+				"category": "Dovo",
 				"icon": "$(mention)"
 			},
 			{
 				"command": "maut.cli.addSelection",
-				"title": "Add Selection to Maut CLI",
-				"category": "Maut",
+				"title": "Add Selection to Claude",
+				"category": "Dovo",
 				"icon": "$(mention)"
 			}
 		],

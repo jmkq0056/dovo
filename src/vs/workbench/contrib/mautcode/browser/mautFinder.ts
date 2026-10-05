@@ -617,7 +617,7 @@ registerAction2(class extends Action2 {
 		super({
 			id: openFinderCommandId,
 			title: localize2('maut.finder.title', "Find Files and Folders"),
-			category: localize2('maut.finder.category', "Maut"),
+			category: localize2('maut.finder.category', "Dovo"),
 			f1: true,
 			keybinding: {
 				// Above the Search view's own binding: names first, Contents is one Tab away.

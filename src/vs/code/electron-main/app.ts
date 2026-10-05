@@ -142,6 +142,7 @@ import { NativeWebContentExtractorService } from '../../platform/webContentExtra
 import { AgentNetworkFilterService, IAgentNetworkFilterService } from '../../platform/networkFilter/common/networkFilterService.js';
 import { ITerminalSandboxService, NullTerminalSandboxService } from '../../platform/sandbox/common/terminalSandboxService.js';
 import ErrorTelemetry from '../../platform/telemetry/electron-main/errorTelemetry.js';
+import { ThemeAwareAppIcon } from './themeAwareAppIcon.js';
 
 /**
  * The main VS Code application. There will only ever be one instance,
@@ -632,6 +633,9 @@ export class CodeApplication extends Disposable {
 
 		// Signal phase: after window open
 		this.lifecycleMainService.phase = LifecycleMainPhase.AfterWindowOpen;
+
+		// Dovo: the Dock / taskbar icon follows light and dark mode
+		this._register(new ThemeAwareAppIcon());
 
 		// Post Open Windows Tasks
 		this.afterWindowOpen(appInstantiationService);

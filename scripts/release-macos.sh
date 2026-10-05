@@ -56,7 +56,12 @@ if [ "$BUILD" = 1 ]; then
 		|| { grep -E "error|Error|ERR!" "$LOG" | head -20; fail "build failed - nothing installed (full log: $LOG)"; }
 fi
 [ -d "$APP" ] || fail "no build at $APP"
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || fail "ad-hoc signing failed"
+# Sign with a stable identity when there is one (your Apple Development certificate), so macOS
+# sees the same app after every swap and keeps permissions such as Accessibility. Ad hoc
+# otherwise: then every build is a new app to macOS.
+SIGN_ID=$(security find-identity -p codesigning -v 2>/dev/null | awk -F'"' '/Apple Development|Developer ID Application|Dovo Local/ { print $2; exit }')
+SIGN_ID=${SIGN_ID:--}
+codesign --force --deep --sign "$SIGN_ID" "$APP" >/dev/null 2>&1 || fail "signing with $SIGN_ID failed"
 # The build output is a second copy of the app; keep it out of Spotlight/Launchpad.
 "$LSREGISTER" -u "$APP" >/dev/null 2>&1 || true
 BUILT=$(plutil -extract commit raw "$APP/Contents/Resources/app/product.json" 2>/dev/null || echo unknown)
@@ -99,7 +104,7 @@ swap() {
 
 	ditto "$APP" "$DEST"
 	xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
-	codesign --force --deep --sign - "$DEST" >/dev/null 2>&1 || fail "signing the installed copy failed"
+	codesign --force --deep --sign "$SIGN_ID" "$DEST" >/dev/null 2>&1 || fail "signing the installed copy failed"
 	"$LSREGISTER" -f "$DEST" >/dev/null 2>&1 || true
 	"$LSREGISTER" -u "$APP" >/dev/null 2>&1 || true
 	INSTALLED=$(plutil -extract commit raw "$DEST/Contents/Resources/app/product.json" 2>/dev/null || echo unknown)

@@ -12,12 +12,15 @@ import { CommandsRegistry, ICommandService } from '../../../../platform/commands
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
+import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { isDark } from '../../../../platform/theme/common/theme.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { IWorkspaceContextService, WorkbenchState } from '../../../../platform/workspace/common/workspace.js';
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
+import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
 import { IMautClaudeService } from '../../terminal/browser/mautClaude.js';
+import { isDovoWelcomePending } from './dovoOnboarding.js';
 import './media/mautStartup.css';
 
 /** The extension reports what it's doing while it gets Claude ready. */
@@ -68,8 +71,14 @@ class MautStartupSplash extends Disposable implements IWorkbenchContribution {
 		@IMautClaudeService private readonly _claudeService: IMautClaudeService,
 		@ICommandService private readonly _commandService: ICommandService,
 		@IThemeService private readonly _themeService: IThemeService,
+		@IStorageService storageService: IStorageService,
+		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
 	) {
 		super();
+		// The first-run welcome comes first; Claude starts once it closes, without the splash.
+		if (isDovoWelcomePending(storageService, environmentService)) {
+			return;
+		}
 		const folder = workspaceContextService.getWorkbenchState() !== WorkbenchState.EMPTY;
 		const autoLaunch = configurationService.getValue<boolean>('maut.autoLaunchClsp') !== false;
 		if (!folder || !autoLaunch || configurationService.getValue<boolean>('maut.startup.splash') === false || _claudeService.hasClaude) {

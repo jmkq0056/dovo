@@ -193,13 +193,23 @@ function hasConversation(folder: string): boolean {
 	}
 }
 
+/** The program in the `maut.claude.command` setting, without its arguments. */
+function claudeProgram(): string {
+	return (vscode.workspace.getConfiguration('maut.claude').get<string>('command', 'claude').trim() || 'claude').split(/\s+/)[0];
+}
+
+/** PATH plus the places Claude Code's installers use, which a GUI app's PATH often lacks. */
+function claudeSearchPath(): string[] {
+	return [...(process.env.PATH ?? '').split(path.delimiter), path.join(os.homedir(), '.local', 'bin'), path.join(os.homedir(), '.claude', 'local'), '/opt/homebrew/bin', '/usr/local/bin'];
+}
+
 /** Why Claude can't start, if it can't: its command isn't installed or isn't found. */
 async function claudeMissing(): Promise<string | undefined> {
-	const command = (vscode.workspace.getConfiguration('maut.claude').get<string>('command', 'claude').trim() || 'claude').split(/\s+/)[0];
+	const command = claudeProgram();
 	if (command.includes('/') || command.includes('\\')) {
 		return fs.existsSync(command.replace(/^~/, os.homedir())) ? undefined : `${command} doesn't exist. Check the maut.claude.command setting.`;
 	}
-	const places = [...(process.env.PATH ?? '').split(path.delimiter), path.join(os.homedir(), '.local', 'bin'), path.join(os.homedir(), '.claude', 'local'), '/opt/homebrew/bin', '/usr/local/bin'];
+	const places = claudeSearchPath();
 	const names = process.platform === 'win32' ? [`${command}.exe`, `${command}.cmd`, command] : [command];
 	for (const dir of places) {
 		for (const name of names) {
@@ -218,11 +228,47 @@ function gitOriginal(fsPath: string): Promise<string | undefined> {
 	});
 }
 
+/** Anthropic's official one-line installer for Claude Code. */
+const claudeInstallCommand = process.platform === 'win32' ? 'irm https://claude.ai/install.ps1 | iex' : 'curl -fsSL https://claude.ai/install.sh | bash';
+
 /** Installs Claude Code in a terminal, with Anthropic's official installer. */
 function installClaude(): void {
 	const terminal = vscode.window.createTerminal({ name: 'Install Claude Code' });
 	terminal.show();
-	terminal.sendText(process.platform === 'win32' ? 'irm https://claude.ai/install.ps1 | iex' : 'curl -fsSL https://claude.ai/install.sh | bash', true);
+	terminal.sendText(claudeInstallCommand, true);
+}
+
+interface ClaudeStatus {
+	readonly installed: boolean;
+	readonly version?: string;
+	readonly problem?: string;
+	readonly installCommand: string;
+}
+
+/** For the Dovo welcome: is Claude Code installed, which version, and how to install it. Never throws. */
+async function claudeStatus(): Promise<ClaudeStatus> {
+	try {
+		const problem = await claudeMissing();
+		if (problem) {
+			return { installed: false, problem, installCommand: claudeInstallCommand };
+		}
+		const version = await new Promise<string | undefined>(resolve => {
+			const env = { ...process.env, PATH: claudeSearchPath().join(path.delimiter) };
+			cp.execFile(claudeProgram().replace(/^~/, os.homedir()), ['--version'], { timeout: 5000, env, windowsHide: true }, (error, stdout) => resolve(error ? undefined : stdout.trim().split(/\r?\n/)[0] || undefined));
+		});
+		return { installed: true, version, installCommand: claudeInstallCommand };
+	} catch (error) {
+		return { installed: false, problem: error instanceof Error ? error.message : String(error), installCommand: claudeInstallCommand };
+	}
+}
+
+/** Waits while the Dovo welcome is open, so Claude starts with the choices made there. */
+async function untilWelcomeDone(): Promise<void> {
+	try {
+		await vscode.commands.executeCommand('_dovo.onboarding.whenDone');
+	} catch {
+		// no welcome in this build, or it failed: start as usual
+	}
 }
 
 /** True if a Claude Code process is running under any of this window's terminals. */
@@ -373,6 +419,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('_maut.claude.session', (shellPid: number | undefined) => sessionReader.read(shellPid)),
 		vscode.commands.registerCommand('_maut.claude.agent', (shellPid: number | undefined, agentId: string) => sessionReader.readAgent(shellPid, agentId)),
 		vscode.commands.registerCommand('_maut.claude.install', () => installClaude()),
+		vscode.commands.registerCommand('_maut.claude.check', () => claudeStatus()),
 		vscode.commands.registerCommand('_maut.git.original', (fsPath: string) => gitOriginal(fsPath)),
 		vscode.commands.registerCommand('_maut.files.changed', (cwd: string) => sessionReader.changedFiles(cwd)),
 		vscode.commands.registerCommand('_maut.claude.stopShell', (shellPid: number | undefined, taskId: string) => sessionReader.stopShell(shellPid, taskId)),
@@ -419,6 +466,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const folder = projectFolder();
 	if (autoLaunch && folder) {
 		setTimeout(async () => {
+			await untilWelcomeDone();
 			if (await isClaudeRunningHere()) {
 				reportStartup('skip');
 				return;

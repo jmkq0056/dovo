@@ -17,6 +17,7 @@ import './mautTabTidy.js';
 import './mautFinder.js';
 import './mautStartup.js';
 import './mautChangeHighlight.js';
+import './dovoOnboarding.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';

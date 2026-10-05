@@ -587,8 +587,6 @@ function setupStatusBar(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(item);
 }
 
-const FIRST_RUN_FLAG = 'maut.theme.welcomed';
-
 async function applyFirstRunDefaults(context: vscode.ExtensionContext): Promise<void> {
 	// On a truly fresh install (no STATE_KEY, no STATE_LEGACY), seed sensible defaults
 	// and apply them immediately so the user sees the JetBrains-flavoured Maut palette
@@ -608,40 +606,37 @@ async function applyFirstRunDefaults(context: vscode.ExtensionContext): Promise<
 	await applySnapshot(initial.dark);
 }
 
-async function maybeWelcome(context: vscode.ExtensionContext): Promise<void> {
-	if (context.globalState.get<boolean>(FIRST_RUN_FLAG)) {
-		return;
-	}
-	await context.globalState.update(FIRST_RUN_FLAG, true);
-	const open = 'Open Theme Studio';
-	const pick = await vscode.window.showInformationMessage(
-		'Dovo Theme Studio is in the Dovo sidebar (eye icon, left). Customise light & dark independently — Shift+Cmd+L swaps between them.',
-		open,
-	);
-	if (pick === open) {
-		void openStudio();
-	}
-}
-
 export function activate(context: vscode.ExtensionContext): void {
 	provider = new StudioViewProvider(context);
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider('maut.themeStudio', provider),
 		vscode.commands.registerCommand('maut.theme.toggle', () => toggleMode(context)),
 		vscode.commands.registerCommand('maut.theme.studio', () => { void openStudio(); }),
+		// For the Dovo welcome: read and pick light or dark. Both wait for the startup re-apply
+		// below, so a choice made while Dovo is still starting isn't overwritten by it.
+		vscode.commands.registerCommand('_maut.theme.activeMode', async () => { await ready; return loadState(context).active; }),
+		vscode.commands.registerCommand('_maut.theme.setMode', async (mode: unknown) => {
+			await ready;
+			if (mode === 'light' || mode === 'dark') {
+				await activateMode(context, mode);
+			}
+			return loadState(context).active;
+		}),
 	);
 	setupStatusBar(context);
 
-	void (async () => {
-		await applyFirstRunDefaults(context);
+	const ready = (async () => {
+		try {
+			await applyFirstRunDefaults(context);
 
-		// Re-apply the active snapshot every startup. This re-asserts our palette
-		// against any settings.json drift and re-sets the workbench font in case the
-		// workbench config-change listener missed it.
-		const state = loadState(context);
-		await applySnapshot(state[state.active]);
-
-		void maybeWelcome(context);
+			// Re-apply the active snapshot every startup. This re-asserts our palette
+			// against any settings.json drift and re-sets the workbench font in case the
+			// workbench config-change listener missed it.
+			const state = loadState(context);
+			await applySnapshot(state[state.active]);
+		} catch {
+			// a setting that won't write shouldn't keep the commands above waiting forever
+		}
 	})();
 }
 

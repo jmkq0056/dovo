@@ -46,3 +46,7 @@ dist
 .github/prompts/*.local.prompt.md
 .agents/skills/.local/
 .github/skills/.local/
+
+# Community extensions bundled prebuilt (no source here to compile): their out/ IS the extension.
+!/extensions/vscode-icons-mac/out/
+!/extensions/tomoki1207-pdf/out/

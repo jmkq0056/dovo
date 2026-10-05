@@ -316,15 +316,14 @@ export function useWindowControlsOverlay(configurationService: IConfigurationSer
 
 export function useNativeFullScreen(configurationService: IConfigurationService): boolean {
 	const windowConfig = configurationService.getValue<IWindowSettings | undefined>('window');
-	if (!windowConfig || typeof windowConfig.nativeFullScreen !== 'boolean') {
-		return true; // default
-	}
-
-	if (windowConfig.nativeTabs) {
+	if (windowConfig?.nativeTabs) {
 		return true; // https://github.com/electron/electron/issues/16142
 	}
 
-	return windowConfig.nativeFullScreen !== false;
+	// Dovo: simple full screen by default. It keeps Dovo in the current Space (native full screen
+	// makes a Space of its own that no other app's window can enter), so the browser Dovo docks
+	// can sit above it; the menu bar and Dock still hide.
+	return windowConfig?.nativeFullScreen === true;
 }
 
 

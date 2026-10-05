@@ -38,6 +38,35 @@ export interface ICPUProperties {
 	speed: number;
 }
 
+/** Why Dovo's browser tab can or can't show the docked browser window. */
+export type DovoBrowserDockStatus = 'ok' | 'unsupported' | 'missing' | 'notRunning' | 'noWindow' | 'permission' | 'nativeFullScreen' | 'error';
+
+/** One of the docked browser app's windows (index = its front-to-back order). */
+export interface IDovoBrowserWindow {
+	readonly index: number;
+	readonly title: string;
+	readonly x: number;
+	readonly y: number;
+	readonly width: number;
+	readonly height: number;
+	readonly docked: boolean;
+}
+
+/** Where the browser tab's body is, relative to the Dovo window's content (in points). */
+export interface IDovoBrowserDockRequest {
+	readonly app: string;
+	readonly visible: boolean;
+	readonly rect?: IRectangle;
+	/** A window the user picked: matched by title, and position when several share a title. */
+	readonly pick?: { readonly title: string; readonly x: number; readonly y: number };
+}
+
+export interface IDovoBrowserDockResult {
+	readonly status: DovoBrowserDockStatus;
+	readonly title?: string;
+	readonly windows?: IDovoBrowserWindow[];
+}
+
 export interface IOSProperties {
 	type: string;
 	release: string;
@@ -142,6 +171,15 @@ export interface ICommonNativeHostService {
 	minimizeWindow(options?: INativeHostOptions): Promise<void>;
 	moveWindowTop(options?: INativeHostOptions): Promise<void>;
 	positionWindow(position: IRectangle, options?: INativeHostOptions): Promise<void>;
+
+	// Dovo: the user's own browser window docked over the browser tab (macOS)
+	dovoBrowserDock(request: IDovoBrowserDockRequest, options?: INativeHostOptions): Promise<IDovoBrowserDockResult>;
+	dovoBrowserWindows(app: string): Promise<IDovoBrowserDockResult>;
+	dovoBrowserAction(app: string, action: 'raise' | 'focus' | 'newTab', options?: INativeHostOptions): Promise<IDovoBrowserDockResult>;
+	dovoBrowserOpenUrl(app: string, url: string): Promise<boolean>;
+	dovoBrowserIsInstalled(app: string): Promise<boolean>;
+	/** Leaves macOS native full screen (its own Space) for simple full screen, where a docked window can sit above Dovo. */
+	dovoUseSimpleFullScreen(options?: INativeHostOptions): Promise<void>;
 
 	isWindowAlwaysOnTop(options?: INativeHostOptions): Promise<boolean>;
 	toggleWindowAlwaysOnTop(options?: INativeHostOptions): Promise<void>;

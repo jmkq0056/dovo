@@ -6,6 +6,7 @@
 import * as dom from '../../../../base/browser/dom.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { IntervalTimer } from '../../../../base/common/async.js';
+import { getZoomFactor } from '../../../../base/browser/browser.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
@@ -16,7 +17,6 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
@@ -27,6 +27,7 @@ import { SyncDescriptor } from '../../../../platform/instantiation/common/descri
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator, IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
+import { DovoBrowserDockStatus, IDovoBrowserDockResult, IDovoBrowserWindow, INativeHostService } from '../../../../platform/native/common/native.js';
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IQuickInputService, IQuickPickItem } from '../../../../platform/quickinput/common/quickInput.js';
@@ -51,8 +52,9 @@ import './media/dovoBrowserDock.css';
 
 // Dovo's browser: Gecko can't run inside Electron, so the user's real Firefox (its passwords,
 // Inspector, Console, extensions) is docked: a "Firefox" editor tab sits beside the files, and its
-// window is placed exactly over that tab's body and kept there. The extension host moves the window
-// (maut-open-external/src/browserDock.ts); this side knows where the tab is on screen.
+// window is placed exactly over that tab's body and kept there. This side reports where the tab's
+// body is inside the window; the main process (platform/native/electron-main/dovoBrowserDock.ts)
+// follows the window itself as it moves, resizes, minimizes or comes to the front.
 
 const appSetting = 'dovo.browser.app';
 const openLinksSetting = 'dovo.browser.openLinksInDovo';
@@ -63,23 +65,7 @@ const terminalEditorTypeId = 'workbench.editors.terminal';
 const accessibilitySettingsUrl = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility';
 const downloadUrl = 'https://www.mozilla.org/firefox/new/';
 
-type DockStatus = 'ok' | 'unsupported' | 'missing' | 'notRunning' | 'noWindow' | 'permission' | 'error';
-
-interface IBrowserWindow {
-	readonly index: number;
-	readonly title: string;
-	readonly x: number;
-	readonly y: number;
-	readonly width: number;
-	readonly height: number;
-	readonly docked: boolean;
-}
-
-interface IDockResult {
-	readonly status: DockStatus;
-	readonly title?: string;
-	readonly windows?: IBrowserWindow[];
-}
+type DockStatus = DovoBrowserDockStatus;
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	id: 'dovo.browser',
@@ -99,8 +85,6 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 	},
 });
 
-// A docked window can only sit over Dovo if full screen doesn't move Dovo to a Space of its own.
-Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerDefaultConfigurations([{ overrides: { 'window.nativeFullScreen': false } }]);
 
 export const IDovoBrowserService = createDecorator<IDovoBrowserService>('dovoBrowserService');
 
@@ -119,6 +103,7 @@ export interface IDovoBrowserService {
 	pickWindow(): Promise<void>;
 	newTab(): Promise<void>;
 	toggleFullScreen(): void;
+	useSimpleFullScreen(): Promise<void>;
 	openAccessibilitySettings(): void;
 	openDownloadPage(): void;
 }
@@ -188,20 +173,14 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 	private _status: DockStatus | undefined;
 	private _body: HTMLElement | undefined;
 	private _visible = false;
-	/** The last rectangle sent, so the window only moves when the tab does. */
-	private _placedKey = '';
-	private _pick: { title?: string; x?: number; y?: number } | undefined;
-	private _busy = false;
-	/** Set after a failure (no permission, browser missing): no more tries until the user acts. */
-	private _halted = false;
+	/** The rectangle last reported, so the main process only hears about real changes. */
+	private _reportedKey = '';
 	private _installed: boolean | undefined;
 	private _fullScreen: { sideBar: boolean; auxiliaryBar: boolean; panel: boolean } | undefined;
-	private readonly _loop = this._register(new MutableDisposable<IntervalTimer>());
+	private readonly _whileVisible = this._register(new MutableDisposable<DisposableStore>());
 	private readonly _raise = this._register(new MutableDisposable());
-	private _ticks = 0;
 
 	constructor(
-		@ICommandService private readonly _commandService: ICommandService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IEditorService private readonly _editorService: IEditorService,
 		@IEditorGroupsService private readonly _editorGroupsService: IEditorGroupsService,
@@ -209,19 +188,22 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 		@IWorkbenchLayoutService private readonly _layoutService: IWorkbenchLayoutService,
 		@IOpenerService private readonly _openerService: IOpenerService,
 		@IQuickInputService private readonly _quickInputService: IQuickInputService,
+		@INativeHostService private readonly _nativeHostService: INativeHostService,
 	) {
 		super();
 		this._register(toDisposable(() => this._input?.dispose()));
-		// Coming back to Dovo, or clicking anywhere in it, puts Dovo's window over the browser:
-		// raise the browser again (without taking focus) while its tab is showing.
+		// The main process raises the browser when Dovo comes to the front. Coming back is also when
+		// a permission granted in System Settings, or a left native full screen, starts to count.
 		this._register(this._hostService.onDidChangeFocus(focused => {
-			if (focused) {
-				this._raiseSoon();
+			if (focused && this._visible && this._status !== 'ok') {
+				this._report(true);
 			}
 		}));
+		// A click inside an already focused Dovo puts its window over the browser: raise it again.
 		this._register(dom.addDisposableListener(mainWindow, dom.EventType.MOUSE_DOWN, e => {
-			if (this._visible && !(this._body && dom.isAncestor(e.target as Node, this._body))) {
-				this._raiseSoon();
+			if (this._visible && this._status === 'ok' && !(this._body && dom.isAncestor(e.target as Node, this._body))) {
+				const timer = mainWindow.setTimeout(() => void this._nativeHostService.dovoBrowserAction(this.appName, 'raise'), 120);
+				this._raise.value = toDisposable(() => mainWindow.clearTimeout(timer));
 			}
 		}, true));
 		if (isMacintosh) {
@@ -254,18 +236,16 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 	}
 
 	async open(url?: string): Promise<void> {
-		this._halted = false;
 		if (url) {
-			await this._commandService.executeCommand('_dovo.browser.openUrl', this.appName, url).catch(() => undefined);
+			await this._nativeHostService.dovoBrowserOpenUrl(this.appName, url).catch(() => false);
 		}
 		await this._editorService.openEditor(this.input, { pinned: true }, this._filesGroup());
-		this._placedKey = '';
-		this._dock();
+		this._report(true);
 	}
 
 	attach(body: HTMLElement): IDisposable {
 		this._body = body;
-		this._placedKey = '';
+		this._reportedKey = '';
 		return toDisposable(() => {
 			if (this._body === body) {
 				this._body = undefined;
@@ -275,40 +255,65 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 	}
 
 	setVisible(visible: boolean): void {
-		this._visible = visible;
-		if (!visible) {
-			this._loop.clear();
+		if (visible === this._visible) {
 			return;
 		}
-		this._placedKey = '';
-		this._halted = false;
+		this._visible = visible;
+		this._reportedKey = '';
+		if (!visible) {
+			this._whileVisible.clear();
+			void this._nativeHostService.dovoBrowserDock({ app: this.appName, visible: false });
+			return;
+		}
+		const store = new DisposableStore();
+		// Where the tab's body is changes with the layout; the window itself is followed by main.
+		const body = this._body;
+		if (body) {
+			const observer = new (dom.getWindow(body).ResizeObserver)(() => this._report(false));
+			observer.observe(body);
+			store.add(toDisposable(() => observer.disconnect()));
+		}
+		store.add(this._layoutService.onDidLayoutMainContainer(() => this._report(false)));
+		store.add(this._layoutService.onDidChangePartVisibility(() => this._report(false)));
 		const timer = new IntervalTimer();
-		timer.cancelAndSet(() => this._tick(), 250, mainWindow);
-		this._loop.value = timer;
-		this._dock();
+		let ticks = 0;
+		timer.cancelAndSet(() => {
+			// A cheap local check (nothing is sent unless the body moved), and the page title now and then.
+			this._report(false);
+			if (++ticks % 6 === 0 && this._status === 'ok') {
+				void this._nativeHostService.dovoBrowserWindows(this.appName).then(result => {
+					const docked = result.windows?.find(window => window.docked);
+					if (docked) {
+						this.input.setTitle(docked.title);
+					}
+				});
+			}
+		}, 500, mainWindow);
+		store.add(timer);
+		this._whileVisible.value = store;
+		this._report(true);
 	}
 
 	focusBrowser(): void {
 		if (this._status !== 'ok') {
 			// Clicking the tab is the way to try again after a failure.
-			this._halted = false;
-			this._placedKey = '';
-			this._dock();
+			this._report(true);
 			return;
 		}
-		void this._call('_dovo.browser.raise', this.appName, true);
+		void this._nativeHostService.dovoBrowserAction(this.appName, 'focus');
 	}
 
 	async pickWindow(): Promise<void> {
 		if (!isMacintosh) {
 			return;
 		}
-		const result = await this._call('_dovo.browser.windows', this.appName);
-		const windows = result?.windows ?? [];
+		const result = await this._nativeHostService.dovoBrowserWindows(this.appName);
+		this._setStatusFrom(result);
+		const windows = result.windows ?? [];
 		if (!windows.length) {
 			return;
 		}
-		const items: (IQuickPickItem & { window: IBrowserWindow })[] = windows.map(window => ({
+		const items: (IQuickPickItem & { window: IDovoBrowserWindow })[] = windows.map(window => ({
 			window,
 			label: window.title || localize('dovo.browser.untitled', "Untitled Window"),
 			description: localize('dovo.browser.windowSize', "{0} \u00d7 {1}", window.width, window.height),
@@ -316,14 +321,17 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 		}));
 		const picked = await this._quickInputService.pick(items, { placeHolder: localize('dovo.browser.pickWindow', "Which {0} window to show in Dovo", this.appName) });
 		if (picked) {
-			this._pick = { title: picked.window.title, x: picked.window.x, y: picked.window.y };
-			this._placedKey = '';
-			this._dock();
+			this._report(true, { title: picked.window.title, x: picked.window.x, y: picked.window.y });
 		}
 	}
 
 	async newTab(): Promise<void> {
-		await this._call('_dovo.browser.newTab', this.appName);
+		this._setStatusFrom(await this._nativeHostService.dovoBrowserAction(this.appName, 'newTab'));
+	}
+
+	async useSimpleFullScreen(): Promise<void> {
+		await this._nativeHostService.dovoUseSimpleFullScreen();
+		this._report(true);
 	}
 
 	toggleFullScreen(): void {
@@ -353,7 +361,6 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 				this._editorGroupsService.toggleMaximizeGroup(group);
 			}
 		}
-		this._placedKey = '';
 	}
 
 	openAccessibilitySettings(): void {
@@ -382,93 +389,50 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 		return this._editorGroupsService.groups.find(group => group.editors.some(editor => editor === this.input));
 	}
 
-	private _tick(): void {
-		this._dock();
-		// The page title changes as the user browses; refresh it every couple of seconds.
-		if (this._status === 'ok' && ++this._ticks % 8 === 0) {
-			void this._call('_dovo.browser.windows', this.appName).then(result => {
-				const docked = result?.windows?.find(window => window.docked);
-				if (docked) {
-					this.input.setTitle(docked.title);
-				}
-			});
-		}
-	}
-
-	/** Places the browser window over the tab's body, if it moved since last time. */
-	private _dock(): void {
+	/**
+	 * Tells the main process where the tab's body is (in points, relative to the window's content)
+	 * when it changed, or always when `force` (showing the tab, retrying, picking a window).
+	 */
+	private _report(force: boolean, pick?: { title: string; x: number; y: number }): void {
 		const body = this._body;
-		if (!isMacintosh || !this._visible || !body || this._busy || this._halted) {
+		if (!isMacintosh || !this._visible || !body) {
 			return;
 		}
-		const rect = body.getBoundingClientRect();
-		if (rect.width < 40 || rect.height < 40) {
+		const bounds = body.getBoundingClientRect();
+		if (bounds.width < 40 || bounds.height < 40) {
 			return;
 		}
-		const targetWindow = dom.getWindow(body);
-		// Screen points: the window's position, its native title bar (if any), then the body.
-		const chrome = Math.max(0, targetWindow.outerHeight - targetWindow.innerHeight);
-		const screenRect = {
-			x: Math.round(targetWindow.screenX + rect.left),
-			y: Math.round(targetWindow.screenY + chrome + rect.top),
-			width: Math.round(rect.width),
-			height: Math.round(rect.height),
+		const zoom = getZoomFactor(dom.getWindow(body));
+		const rect = {
+			x: Math.round(bounds.left * zoom),
+			y: Math.round(bounds.top * zoom),
+			width: Math.round(bounds.width * zoom),
+			height: Math.round(bounds.height * zoom),
 		};
-		const key = `${screenRect.x},${screenRect.y},${screenRect.width},${screenRect.height}`;
-		if (key === this._placedKey && !this._pick) {
+		const key = `${rect.x},${rect.y},${rect.width},${rect.height}`;
+		if (!force && !pick && key === this._reportedKey) {
 			return;
 		}
-		this._busy = true;
-		const pick = this._pick;
-		this._pick = undefined;
-		void this._call('_dovo.browser.dock', this.appName, screenRect, pick).then(result => {
-			this._busy = false;
-			this._setStatus(result?.status ?? 'error');
-			if (result?.status === 'ok') {
-				this._placedKey = key;
+		this._reportedKey = key;
+		void this._nativeHostService.dovoBrowserDock({ app: this.appName, visible: true, rect, pick }).then(result => {
+			this._setStatusFrom(result);
+			if (result.status === 'ok' && result.title) {
 				this.input.setTitle(result.title);
-			} else {
-				this._halted = true;
 			}
 		});
 	}
 
-	private _raiseSoon(): void {
-		if (!this._visible) {
-			return;
-		}
-		const timer = mainWindow.setTimeout(() => {
-			if (this._visible && this._status === 'ok') {
-				void this._call('_dovo.browser.raise', this.appName, false);
-			}
-		}, 140);
-		this._raise.value = toDisposable(() => mainWindow.clearTimeout(timer));
-	}
-
 	private async _isInstalled(): Promise<boolean> {
 		if (this._installed === undefined) {
-			this._installed = !!await this._commandService.executeCommand<boolean>('_dovo.browser.installed', this.appName).catch(() => false);
+			this._installed = await this._nativeHostService.dovoBrowserIsInstalled(this.appName).catch(() => false);
 		}
 		return this._installed;
 	}
 
-	private async _call(command: string, ...args: unknown[]): Promise<IDockResult | undefined> {
-		try {
-			const result = await this._commandService.executeCommand<IDockResult>(command, ...args);
-			if (result?.status === 'permission' || result?.status === 'missing') {
-				this._setStatus(result.status);
-			}
-			return result;
-		} catch {
-			// The extension host isn't up yet.
-			return undefined;
-		}
-	}
-
-	private _setStatus(status: DockStatus): void {
-		if (status !== this._status) {
-			this._status = status;
-			if (status === 'missing') {
+	private _setStatusFrom(result: IDovoBrowserDockResult): void {
+		if (result.status !== this._status) {
+			this._status = result.status;
+			if (result.status === 'missing') {
 				this._installed = false;
 			}
 			this._onDidChange.fire();
@@ -503,6 +467,11 @@ function renderPlaceholder(container: HTMLElement, service: IDovoBrowserService,
 				title.textContent = localize('dovo.browser.permission', "Let Dovo place {0} here", service.appName);
 				detail.textContent = localize('dovo.browser.permissionDetail', "macOS needs your OK once: turn on Dovo under Privacy & Security > Accessibility, then click the tab again.");
 				button(localize('dovo.browser.openSettings', "Open Accessibility Settings"), () => service.openAccessibilitySettings(), true);
+				break;
+			case 'nativeFullScreen':
+				title.textContent = localize('dovo.browser.nativeFullScreen', "Dovo is in macOS full screen");
+				detail.textContent = localize('dovo.browser.nativeFullScreenDetail', "macOS keeps other apps out of that full screen, so {0} can't be shown here. Dovo's own full screen looks the same and lets it in.", service.appName);
+				button(localize('dovo.browser.useDovoFullScreen', "Switch to Dovo Full Screen"), () => void service.useSimpleFullScreen(), true);
 				break;
 			case 'missing':
 				title.textContent = localize('dovo.browser.missing', "{0} isn't installed", service.appName);

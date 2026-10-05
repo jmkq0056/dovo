@@ -179,6 +179,25 @@ export abstract class BaseWindow extends Disposable implements IBaseWindow {
 
 			this._lastFocusTime = Date.now();
 		}));
+		// Dovo: with simple full screen (the default), macOS turns the green button into Zoom. Make it
+		// full screen again, as people expect, but simple full screen: it stays in the current Space,
+		// so another app's window (Dovo's docked browser) can sit above it, and the menu bar and Dock
+		// still hide. Dovo's own maximize calls (restore, title double-click) stay a plain zoom.
+		if (isMacintosh && !win.isFullScreenable()) {
+			let maximizedByCodeAt = 0;
+			const maximize = win.maximize;
+			win.maximize = () => {
+				maximizedByCodeAt = Date.now();
+				maximize.call(win);
+			};
+			this._register(Event.fromNodeEventEmitter(win, 'maximize')(() => {
+				if (Date.now() - maximizedByCodeAt < 1500 || useNativeFullScreen(this.configurationService) || this.isFullScreen) {
+					return;
+				}
+				win.unmaximize();
+				this.setFullScreen(true, false);
+			}));
+		}
 		this._register(Event.fromNodeEventEmitter(this._win, 'enter-full-screen')(() => this._onDidEnterFullScreen.fire()));
 		this._register(Event.fromNodeEventEmitter(this._win, 'leave-full-screen')(() => this._onDidLeaveFullScreen.fire()));
 		this._register(Event.fromNodeEventEmitter(this._win, 'always-on-top-changed', (_, alwaysOnTop) => alwaysOnTop)(alwaysOnTop => this._onDidChangeAlwaysOnTop.fire(alwaysOnTop)));
@@ -580,7 +599,18 @@ export abstract class BaseWindow extends Disposable implements IBaseWindow {
 			this.doSetNativeFullScreen(false, false);
 		}
 
+		// Dovo: on a display with a camera notch, keep below it like macOS full screen does, so the
+		// middle of the title bar isn't hidden behind the camera. Measured before entering: the menu
+		// bar there is 30+ points tall (elsewhere about 24), and full screen hides it.
+		const display = fullscreen && win && isMacintosh ? electron.screen.getDisplayMatching(win.getBounds()) : undefined;
+		const notch = display ? display.workArea.y - display.bounds.y : 0;
+
 		win?.setSimpleFullScreen(fullscreen);
+
+		if (display && win && notch > 30) {
+			win.setBounds({ x: display.bounds.x, y: display.bounds.y + notch, width: display.bounds.width, height: display.bounds.height - notch });
+		}
+
 		win?.webContents.focus(); // workaround issue where focus is not going into window
 	}
 

@@ -27,7 +27,8 @@ import { IEnvironmentMainService } from '../../environment/electron-main/environ
 import { createDecorator, IInstantiationService } from '../../instantiation/common/instantiation.js';
 import { ILifecycleMainService, IRelaunchOptions } from '../../lifecycle/electron-main/lifecycleMainService.js';
 import { ILogService } from '../../log/common/log.js';
-import { FocusMode, ICommonNativeHostService, INativeHostOptions, IOSProperties, IOSStatistics, IToastOptions, IToastResult, PowerSaveBlockerType, SystemIdleState, ThermalState } from '../common/native.js';
+import { DovoBrowserDock } from './dovoBrowserDock.js';
+import { FocusMode, ICommonNativeHostService, IDovoBrowserDockRequest, IDovoBrowserDockResult, INativeHostOptions, IOSProperties, IOSStatistics, IToastOptions, IToastResult, PowerSaveBlockerType, SystemIdleState, ThermalState } from '../common/native.js';
 import { IProductService } from '../../product/common/productService.js';
 import { IPartsSplash } from '../../theme/common/themeService.js';
 import { IThemeMainService } from '../../theme/electron-main/themeMainService.js';
@@ -58,6 +59,8 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 
 	declare readonly _serviceBrand: undefined;
 
+	private readonly dovoBrowserDockDriver: DovoBrowserDock;
+
 	constructor(
 		@IWindowsMainService private readonly windowsMainService: IWindowsMainService,
 		@IAuxiliaryWindowsMainService private readonly auxiliaryWindowsMainService: IAuxiliaryWindowsMainService,
@@ -74,6 +77,8 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) {
 		super();
+
+		this.dovoBrowserDockDriver = this._register(new DovoBrowserDock(logService));
 
 		// Events
 		{
@@ -370,6 +375,35 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 	async setWindowAlwaysOnTop(windowId: number | undefined, alwaysOnTop: boolean, options?: INativeHostOptions): Promise<void> {
 		const window = this.windowById(options?.targetWindowId, windowId);
 		window?.win?.setAlwaysOnTop(alwaysOnTop);
+	}
+
+	async dovoBrowserDock(windowId: number | undefined, request: IDovoBrowserDockRequest, options?: INativeHostOptions): Promise<IDovoBrowserDockResult> {
+		const window = this.windowById(options?.targetWindowId, windowId);
+		return window?.win ? this.dovoBrowserDockDriver.dock(window.win, request) : { status: 'error' };
+	}
+
+	async dovoBrowserWindows(windowId: number | undefined, app: string): Promise<IDovoBrowserDockResult> {
+		return this.dovoBrowserDockDriver.windows(app);
+	}
+
+	async dovoBrowserAction(windowId: number | undefined, app: string, action: 'raise' | 'focus' | 'newTab', options?: INativeHostOptions): Promise<IDovoBrowserDockResult> {
+		const window = this.windowById(options?.targetWindowId, windowId);
+		return window?.win ? this.dovoBrowserDockDriver.action(window.win, app, action) : { status: 'error' };
+	}
+
+	async dovoBrowserOpenUrl(windowId: number | undefined, app: string, url: string): Promise<boolean> {
+		return this.dovoBrowserDockDriver.openUrl(app, url);
+	}
+
+	async dovoBrowserIsInstalled(windowId: number | undefined, app: string): Promise<boolean> {
+		return this.dovoBrowserDockDriver.isInstalled(app);
+	}
+
+	async dovoUseSimpleFullScreen(windowId: number | undefined, options?: INativeHostOptions): Promise<void> {
+		const window = this.windowById(options?.targetWindowId, windowId);
+		if (window?.win) {
+			await this.dovoBrowserDockDriver.useSimpleFullScreen(window.win, () => window.toggleFullScreen());
+		}
 	}
 
 	async positionWindow(windowId: number | undefined, position: IRectangle, options?: INativeHostOptions): Promise<void> {

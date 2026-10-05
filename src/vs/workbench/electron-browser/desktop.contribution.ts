@@ -303,7 +303,7 @@ import product from '../../platform/product/common/product.js';
 			},
 			'window.nativeFullScreen': {
 				'type': 'boolean',
-				'default': true,
+				'default': false,
 				'description': localize('window.nativeFullScreen', "Controls if native full-screen should be used on macOS. Disable this option to prevent macOS from creating a new space when going full-screen."),
 				'scope': ConfigurationScope.APPLICATION,
 				'included': isMacintosh

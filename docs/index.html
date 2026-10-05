@@ -3,290 +3,344 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Maut code · Claude-Code-CLI-aware fork of VS Code</title>
-<meta name="description" content="A fork of VS Code, branded Maut, with first-class Claude Code CLI integration. One-line install on macOS and Windows.">
+<title>Maut code · The Claude Code editor</title>
+<meta name="description" content="A fork of VS Code built around the Claude Code CLI: a Reader for the conversation, live change highlights, a file finder, and a one-line install on macOS and Windows.">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
 <style>
-  /* Layout: centered column; hero with product mock, icon-tile feature grid, two-up install cards. */
+  /* Layout: sticky nav; hero over a glyph field with a download card and a framed product mock;
+     alternating text/mock feature rows; a three-card row; a gradient call-to-action; a compact
+     grid of the rest; install cards; footer. Maut colors: deep maroon surfaces, crimson accent. */
   :root {
-    --bg: #241519;
-    --bg-deep: #1a0f12;
-    --bg-card: #2f1b20;
-    --bg-raised: #3a2228;
-    --line: rgba(255, 220, 228, 0.08);
-    --line-strong: rgba(255, 220, 228, 0.16);
-    --fg: #f4eef0;
-    --muted: #c3b6ba;
-    --subtle: #8c7d82;
+    --bg: #160c0f;
+    --bg-2: #1d1014;
+    --card: #241519;
+    --card-2: #2c1a1f;
+    --line: rgba(255, 220, 228, 0.09);
+    --line-strong: rgba(255, 220, 228, 0.17);
+    --fg: #f6eff1;
+    --muted: #c9babe;
+    --subtle: #918085;
     --accent: #d23a57;
     --accent-hover: #ec5873;
-    --accent-soft: rgba(210, 58, 87, 0.14);
-    --accent-glow: rgba(210, 58, 87, 0.32);
-    --display: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
-    --body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --accent-soft: rgba(210, 58, 87, 0.16);
+    --green: #74d394;
+    --red: #e8465f;
+    --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
     --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --wrap: 1240px;
     color-scheme: dark;
   }
-
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   html, body { margin: 0; padding: 0; }
   body {
     background: var(--bg);
     color: var(--fg);
-    font-family: var(--body);
-    font-size: 15px;
+    font-family: var(--sans);
+    font-size: 17px;
     line-height: 1.6;
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
   }
-  /* Faint grid behind the hero, fading out downward */
-  body::before {
-    content: '';
-    position: absolute; inset: 0 0 auto 0; height: 900px;
-    background-image:
-      linear-gradient(var(--line) 1px, transparent 1px),
-      linear-gradient(90deg, var(--line) 1px, transparent 1px);
-    background-size: 48px 48px;
-    mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
-    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
-    pointer-events: none; z-index: 0;
-  }
   ::selection { background: var(--accent); color: #fff; }
   a { color: inherit; }
-  code, kbd, pre { font-family: var(--mono); }
-  :focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 2px; border-radius: 6px; }
+  code, kbd { font-family: var(--mono); font-size: .86em; }
+  kbd { padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; background: var(--card-2); color: var(--fg); white-space: nowrap; }
+  p code { padding: 1px 6px; border-radius: 5px; background: var(--card-2); border: 1px solid var(--line); }
+  svg { width: 1em; height: 1em; }
+  .wrap { width: 100%; max-width: var(--wrap); margin: 0 auto; padding: 0 32px; }
+  .link { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  .link:hover { color: #ff7d93; }
 
-  .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 24px; position: relative; z-index: 1; }
-
-  /* ----- Nav ----- */
+  /* ---------- Nav ---------- */
   nav {
-    position: sticky; top: 0; z-index: 20;
-    backdrop-filter: blur(14px) saturate(140%);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
-    background: rgba(36, 21, 25, 0.72);
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(22, 12, 15, 0.82);
+    backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px);
     border-bottom: 1px solid var(--line);
   }
-  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
-  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; font-weight: 700; font-size: 19px; letter-spacing: -.2px; white-space: nowrap; }
   .brand img { width: 28px; height: 28px; border-radius: 7px; }
-  .brand-text { font-family: var(--display); font-weight: 800; font-size: 18px; letter-spacing: -0.3px; }
-  .brand-tag { font-family: var(--mono); font-size: 9.5px; color: var(--accent); letter-spacing: 0.18em; text-transform: uppercase; margin-left: 6px; }
-  .nav-links { display: flex; gap: 6px; align-items: center; font-size: 14px; }
-  .nav-links a { color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: 8px; transition: color .15s, background .15s; }
-  .nav-links a:hover { color: var(--fg); background: rgba(255, 255, 255, 0.05); }
-  .nav-links .gh { display: inline-flex; align-items: center; gap: 7px; color: var(--fg); border: 1px solid var(--line-strong); }
-  .nav-links .gh svg { width: 16px; height: 16px; }
-
-  /* ----- Hero ----- */
-  .hero { position: relative; text-align: center; padding-block: 88px 64px; }
-  .hero::before {
-    content: '';
-    position: absolute; inset: -60px 0 auto 0; height: 520px;
-    background: radial-gradient(ellipse 55% 50% at 50% 0%, var(--accent-glow), transparent 70%);
-    pointer-events: none;
-  }
-  .hero > * { position: relative; }
-  .eyebrow {
-    display: inline-flex; align-items: center; gap: 8px;
-    font-size: 13px; font-weight: 600; color: var(--muted);
-    padding: 6px 14px 6px 8px; border-radius: 999px;
-    border: 1px solid var(--line-strong); background: rgba(26, 15, 18, 0.6);
-    margin-bottom: 28px; text-decoration: none;
-  }
-  .eyebrow .pill { font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); padding: 2px 8px; border-radius: 999px; }
-  .eyebrow:hover { border-color: var(--accent); color: var(--fg); }
-  h1 {
-    font-family: var(--display);
-    font-size: clamp(42px, 7vw, 76px);
-    font-weight: 800;
-    letter-spacing: -0.035em;
-    line-height: 1.02;
-    margin: 0 0 20px;
-    text-wrap: balance;
-  }
-  h1 .accent { color: var(--accent); }
-  .hero-sub { font-size: clamp(16px, 1.9vw, 19px); color: var(--muted); margin: 0 auto 36px; max-width: 640px; text-wrap: balance; }
-
-  .download-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 18px; }
+  .nav-links { display: flex; gap: 22px; flex: 1; }
+  .nav-links a { text-decoration: none; color: var(--muted); font-size: 15.5px; font-weight: 500; }
+  .nav-links a:hover { color: var(--fg); }
+  .nav-right { display: flex; align-items: center; gap: 14px; }
+  .nav-gh { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); text-decoration: none; font-size: 15px; font-weight: 500; }
+  .nav-gh:hover { color: var(--fg); }
+  .nav-gh svg { width: 19px; height: 19px; }
   .btn {
-    display: inline-flex; align-items: center; gap: 10px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 9px 18px; border-radius: 6px; border: 0;
     background: var(--accent); color: #fff;
-    border: 1px solid transparent; border-radius: 12px;
-    padding: 14px 22px;
-    font: 600 15px/1 var(--body);
-    cursor: pointer; text-decoration: none;
-    box-shadow: 0 10px 30px -10px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.18);
-    transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+    font: 600 15.5px var(--sans); text-decoration: none; cursor: pointer; white-space: nowrap;
+    transition: background .15s ease;
   }
-  .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
-  .btn svg { width: 18px; height: 18px; flex: none; }
-  .btn .arch { font-size: 12px; font-weight: 500; opacity: 0.72; }
-  .btn.secondary { background: rgba(255, 255, 255, 0.04); color: var(--fg); border-color: var(--line-strong); box-shadow: none; }
-  .btn.secondary:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.28); }
+  .btn:hover { background: var(--accent-hover); }
 
-  /* Quick install */
-  .quick-install { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; text-align: left; }
-  .qi-row {
-    display: flex; align-items: center; gap: 12px;
-    background: rgba(26, 15, 18, 0.75); border: 1px solid var(--line-strong);
-    border-radius: 12px; padding: 8px 8px 8px 14px; min-width: 0;
-    transition: border-color .2s, box-shadow .2s;
+  /* ---------- Hero ---------- */
+  .hero { position: relative; padding: 88px 0 0; text-align: center; isolation: isolate; }
+  .glyphs {
+    position: absolute; inset: 0 0 auto 0; height: 760px; z-index: -1; pointer-events: none;
+    mask-image: radial-gradient(ellipse 85% 70% at 50% 30%, #000 20%, transparent 78%);
+    -webkit-mask-image: radial-gradient(ellipse 85% 70% at 50% 30%, #000 20%, transparent 78%);
   }
-  .qi-row.detected { border-color: rgba(210, 58, 87, 0.7); box-shadow: 0 0 0 4px var(--accent-soft); }
-  .qi-os { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; width: 96px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--subtle); }
-  .qi-os svg { width: 15px; height: 15px; color: var(--muted); }
-  .qi-cmd { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 13px; color: var(--fg); scrollbar-width: none; }
-  .qi-cmd .p { color: var(--accent); user-select: none; margin-right: 8px; }
-  .qi-copy {
-    flex: none; display: inline-flex; align-items: center; gap: 6px;
-    font: 600 13px/1 var(--body); color: var(--fg);
-    background: var(--bg-raised); border: 1px solid var(--line); border-radius: 8px;
-    padding: 8px 12px; cursor: pointer; transition: background .15s, border-color .15s;
+  .glyphs canvas { width: 100%; height: 100%; display: block; }
+  .hero h1 {
+    margin: 0 auto; max-width: 980px;
+    font-size: clamp(42px, 7.2vw, 76px); font-weight: 800; line-height: 1.08; letter-spacing: -.035em;
   }
-  .qi-copy svg { width: 14px; height: 14px; }
-  .qi-copy:hover { background: var(--accent); border-color: var(--accent); }
-  .qi-note { margin: 6px 2px 0; font-size: 13px; color: var(--subtle); text-align: center; }
-  .hero-version { margin-top: 18px; font-family: var(--mono); font-size: 11.5px; color: var(--subtle); letter-spacing: 0.04em; }
-  .hero-version a { color: var(--muted); text-decoration: underline dotted; text-underline-offset: 3px; }
-  .hero-version a:hover { color: var(--accent); }
+  .hero h1 .accent { background: linear-gradient(100deg, #ff6f8a, var(--accent) 60%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero .lede { margin: 22px auto 0; max-width: 700px; font-size: clamp(19px, 2.3vw, 26px); font-weight: 600; letter-spacing: -.01em; color: var(--fg); line-height: 1.35; }
+  .hero .lede-sub { margin: 14px auto 0; max-width: 640px; color: var(--muted); font-size: 17px; }
 
-  /* Product mock: a Claude prompt in Maut's terminal with an image thumbnail */
-  .mock {
-    max-width: 760px; margin: 56px auto 0; text-align: left;
-    border-radius: 14px; overflow: hidden;
-    background: var(--bg-deep);
-    border: 1px solid var(--line-strong);
-    box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(210, 58, 87, 0.08);
+  .dl-card {
+    margin: 38px auto 0; width: min(420px, 100%);
+    padding: 18px 18px 14px; border-radius: 12px;
+    background: rgba(36, 21, 25, 0.88); border: 1px solid var(--line-strong);
+    box-shadow: 0 24px 60px -30px rgba(0, 0, 0, .8);
+    backdrop-filter: blur(6px);
   }
-  .mock-bar { display: flex; align-items: center; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--line); background: rgba(255, 255, 255, 0.02); }
-  .mock-bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--bg-raised); }
-  .mock-bar span { margin-left: 12px; font: 600 12px var(--mono); color: var(--muted); }
-  .mock-body { padding: 18px 20px 20px; font: 13px/1.75 var(--mono); color: var(--muted); overflow-x: auto; }
-  .mock-body .row { white-space: pre; }
-  .mock-body .ok { color: #7fc48a; }
-  .mock-body .dim { color: var(--subtle); }
-  .mock-body .you { color: var(--fg); background: rgba(255, 255, 255, 0.06); display: inline-block; padding-right: 10px; border-radius: 3px; }
-  .mock-body .tok { color: #fff; text-decoration: underline dashed rgba(255, 255, 255, 0.4); text-underline-offset: 4px; }
-  .thumb-wrap { position: relative; display: inline-block; height: 44px; margin: 4px 0 2px 2ch; }
-  .thumb {
-    height: 44px; width: 70px; border-radius: 5px; border: 1px solid var(--accent);
+  .dl-main {
+    display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%;
+    padding: 15px 18px; border-radius: 8px;
+    background: #f6eff1; color: #1a0f12; text-decoration: none;
+    font: 700 19px var(--sans); letter-spacing: -.01em;
+    transition: transform .15s ease, background .15s ease;
+  }
+  .dl-main:hover { background: #fff; transform: translateY(-1px); }
+  .dl-main svg { width: 22px; height: 22px; }
+  .dl-main small { font-weight: 500; font-size: 14px; color: #6b5a5f; }
+  .dl-alt { margin: 13px 0 0; font-size: 14.5px; color: var(--muted); }
+  .dl-alt a { color: var(--fg); text-underline-offset: 3px; }
+  .dl-fine { margin: 8px 0 0; font-size: 12.5px; color: var(--subtle); }
+
+  /* ---------- Product mock ---------- */
+  .frame {
+    position: relative; margin: 64px auto 0; max-width: 1140px;
+    padding: 46px 46px 0; border-radius: 16px 16px 0 0;
     background:
-      linear-gradient(#e8e2dc 0 0) 8px 10px / 26px 14px no-repeat,
-      linear-gradient(#d9a96b 0 0) 38px 10px / 24px 14px no-repeat,
-      linear-gradient(#9cc5a1 0 0) 8px 28px / 54px 6px no-repeat,
-      linear-gradient(#2f6f5e 0 0) 0 0 / 100% 6px no-repeat,
-      #f5f2ef;
-    box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.6);
+      radial-gradient(120% 90% at 15% 0%, #ff6f8a 0%, transparent 55%),
+      radial-gradient(90% 80% at 100% 20%, #8e2a55 0%, transparent 60%),
+      linear-gradient(160deg, #d23a57, #6d1d3a 70%);
+    overflow: hidden;
   }
-  .thumb-badge { position: absolute; top: -7px; left: -9px; font: 700 10px/16px var(--body); color: #fff; background: var(--accent); padding: 0 6px; border-radius: 8px; }
+  .frame.round { border-radius: 16px; padding-bottom: 46px; }
+  .app {
+    display: grid; grid-template-columns: 46px minmax(0, 1fr) minmax(0, 400px);
+    height: 560px; border-radius: 10px 10px 0 0; overflow: hidden;
+    background: #241519; border: 1px solid rgba(0, 0, 0, .45);
+    box-shadow: 0 30px 80px -20px rgba(20, 0, 8, .7);
+    font-family: var(--mono); font-size: 13px; text-align: left; color: #e9dfe2;
+  }
+  .frame.round .app { border-radius: 10px; }
+  .app-title { grid-column: 1 / -1; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #2b191e; border-bottom: 1px solid rgba(0, 0, 0, .35); }
+  .app-title i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+  .app-title i:nth-child(2) { background: #febc2e; }
+  .app-title i:nth-child(3) { background: #28c840; }
+  .app-title span { margin: 0 auto; padding: 3px 80px; border-radius: 6px; background: rgba(255, 255, 255, .05); color: var(--subtle); font-size: 12px; transform: translateX(-24px); }
+  .app.has-title { grid-template-rows: 34px minmax(0, 1fr); }
+  .rail { background: #1e1115; border-right: 1px solid rgba(0, 0, 0, .3); display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 10px 0; }
+  .rail b { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; font: 700 11px var(--sans); color: #cdbfc3; background: #33202a; }
+  .rail b.on { box-shadow: 0 0 0 1.5px #e9dfe2; color: #fff; background: #3c2530; }
+  .rail b.add { background: none; border: 1.5px dashed #5a454b; color: #8c7d82; font-size: 15px; }
+  .rail hr { width: 24px; border: 0; border-top: 1px solid #3a2a2f; margin: 4px 0; }
+  .rail em { width: 18px; height: 18px; border-radius: 4px; border: 1.6px solid #7d6a70; opacity: .8; }
 
-  /* ----- Sections ----- */
-  section { padding-block: 72px; }
-  .section-head { max-width: 640px; margin-bottom: 36px; }
-  .kicker { font: 600 12px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
-  h2 { font-family: var(--display); font-size: clamp(30px, 4vw, 40px); font-weight: 800; letter-spacing: -0.025em; line-height: 1.1; margin: 0 0 12px; text-wrap: balance; }
-  .section-sub { color: var(--muted); margin: 0; font-size: 16px; }
+  .ed { position: relative; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid rgba(0, 0, 0, .3); }
+  .tabs { display: flex; height: 36px; background: #1e1115; flex: none; }
+  .tab { display: flex; align-items: center; gap: 8px; padding: 0 14px; color: #a99a9e; font-size: 12.5px; border-right: 1px solid rgba(0, 0, 0, .25); white-space: nowrap; }
+  .tab.on { background: #241519; color: #f2eaec; box-shadow: inset 0 1px 0 var(--accent); }
+  .tab .ts { color: #4ea1ff; font-weight: 600; font-size: 10.5px; }
+  .code { padding: 10px 0; overflow: hidden; flex: 1; line-height: 21px; }
+  .ln { display: grid; grid-template-columns: 44px minmax(0, 1fr); white-space: pre; }
+  .ln > i { font-style: normal; text-align: right; padding-right: 16px; color: #6d5c61; }
+  .ln > span { overflow: hidden; text-overflow: ellipsis; padding-left: 4px; }
+  .ln.add { background: rgba(116, 211, 148, .14); }
+  .ln.add > span { box-shadow: inset 3px 0 0 rgba(116, 211, 148, .95); }
+  .ln.del { background: rgba(232, 70, 95, .14); }
+  .ln.del > span { box-shadow: inset 3px 0 0 rgba(232, 70, 95, .9); color: #b9a8ad; text-decoration: line-through; text-decoration-color: rgba(232, 70, 95, .6); }
+  .ln.del > i { color: transparent; }
+  .code .k { color: #ff7ab2; } .code .f { color: #7fd1ff; } .code .s { color: #ffb37a; } .code .c { color: #7f9f74; } .code .n { color: #c8a6ff; } .code .t { color: #ffd479; }
+  .bar {
+    position: absolute; top: 46px; right: 14px; display: flex; align-items: center; gap: 7px;
+    padding: 5px 6px 5px 11px; border-radius: 8px; background: #2f1c22; border: 1px solid #4a333a;
+    box-shadow: 0 10px 26px rgba(0, 0, 0, .45); font: 500 12px var(--sans); color: #efe6e8; white-space: nowrap;
+  }
+  .bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+  .bar .ct { color: #9d8c91; font-variant-numeric: tabular-nums; }
+  .bar u { text-decoration: none; display: inline-grid; place-items: center; min-width: 23px; height: 21px; padding: 0 6px; border-radius: 5px; border: 1px solid #4a333a; }
 
-  /* Features */
-  .feature-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
-  .feature {
-    position: relative;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 60%), var(--bg-card);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 22px;
-    transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
-  }
-  .feature:hover { transform: translateY(-2px); border-color: rgba(210, 58, 87, 0.45); box-shadow: 0 18px 40px -22px var(--accent-glow); }
-  .icon-tile {
-    width: 40px; height: 40px; border-radius: 10px; margin-bottom: 16px;
-    display: grid; place-items: center;
-    color: var(--accent-hover);
-    background: var(--accent-soft);
-    border: 1px solid rgba(210, 58, 87, 0.25);
-  }
-  .icon-tile svg { width: 20px; height: 20px; }
-  .feature h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .feature h3 .tag { font: 600 10.5px var(--mono); color: var(--subtle); border: 1px solid var(--line-strong); border-radius: 6px; padding: 1px 6px; }
-  .feature h3 .tag.new { color: #fff; background: var(--accent); border-color: var(--accent); }
-  .feature p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
-  .feature kbd, .feature code, .install code {
-    font-size: 12px; padding: 1px 6px; border-radius: 5px;
-    background: var(--bg-deep); border: 1px solid var(--line-strong);
-  }
-  .feature kbd { color: var(--fg); border-bottom-width: 2px; }
-  .feature code, .install code { color: var(--accent-hover); }
+  .cl { display: flex; flex-direction: column; min-width: 0; background: #22141a; font-family: var(--sans); }
+  .cl-head { flex: none; padding: 10px 14px 9px; border-bottom: 1px solid rgba(255, 255, 255, .06); }
+  .cl-top { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 13.5px; }
+  .cl-top img { width: 22px; height: 22px; border-radius: 6px; }
+  .cl-top .seg { margin-left: auto; display: flex; border: 1px solid #45313a; border-radius: 6px; overflow: hidden; }
+  .cl-top .seg em { font-style: normal; font-size: 11px; padding: 2px 8px; color: #a99a9e; }
+  .cl-top .seg em.on { background: #3a2530; color: #fff; }
+  .cl-now { margin-top: 7px; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #c9babe; }
+  .spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid rgba(236, 88, 115, .3); border-top-color: var(--accent-hover); animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .cl-now .el { margin-left: auto; color: #8c7d82; font-variant-numeric: tabular-nums; }
+  .meter { width: 46px; height: 4px; border-radius: 3px; background: #3e2a31; overflow: hidden; }
+  .meter b { display: block; height: 100%; width: 34%; background: #c9babe; }
+  .reader { flex: 1; overflow: hidden; padding: 14px 16px 6px; display: flex; flex-direction: column; gap: 12px; font-size: 13.5px; line-height: 1.55; }
+  .you { align-self: flex-end; max-width: 86%; padding: 8px 13px; border-radius: 14px 14px 4px 14px; background: #3a2530; color: #f6eff1; }
+  .re { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; }
+  .re img { width: 22px; height: 22px; border-radius: 6px; }
+  .re p { margin: 0 0 8px; color: #eadfe2; }
+  .re p:last-child { margin: 0; }
+  .re code { font-size: 12px; padding: 1px 5px; border-radius: 4px; background: #33202a; }
+  .steps { font-size: 12.5px; color: #9d8c91; margin: 0 0 8px; }
+  .steps div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .steps b { color: #c9babe; font-weight: 500; }
+  .edit { border: 1px solid #45313a; border-radius: 9px; overflow: hidden; margin: 0 0 8px; font-family: var(--mono); font-size: 12px; }
+  .edit-h { display: flex; align-items: center; gap: 8px; padding: 6px 9px; background: #2a1920; }
+  .edit-h .p { color: var(--green); margin-left: auto; } .edit-h .m { color: var(--red); }
+  .edit-h u { text-decoration: none; padding: 1px 8px; border: 1px solid #4a333a; border-radius: 5px; font-family: var(--sans); font-size: 11px; }
+  .edit div.a { background: rgba(116, 211, 148, .12); padding: 1px 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .edit div.d { background: rgba(232, 70, 95, .12); padding: 1px 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #c9b4b9; }
+  .foot { display: flex; align-items: center; gap: 8px; color: #8c7d82; font-size: 12px; }
+  .foot .cp { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px; color: #b4a4a9; }
+  .foot .cp svg { width: 14px; height: 14px; }
+  .foot .cp.hot { background: #3a2530; color: var(--green); }
+  .input { flex: none; margin: 8px 12px 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid #4a333a; font-family: var(--mono); font-size: 12.5px; color: #eadfe2; min-height: 44px; }
+  .input .caret { display: inline-block; width: 7px; height: 15px; vertical-align: -3px; background: var(--accent-hover); animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .input-foot { flex: none; padding: 0 14px 10px; font: 11.5px var(--mono); color: #8c7d82; display: flex; gap: 8px; }
+  .input-foot b { color: var(--green); font-weight: 500; }
+  .menu { position: absolute; z-index: 2; min-width: 190px; padding: 5px; border-radius: 8px; background: #2f1c22; border: 1px solid #4a333a; box-shadow: 0 14px 34px rgba(0, 0, 0, .5); font: 13px var(--sans); }
+  .menu div { padding: 5px 12px; border-radius: 5px; }
+  .menu div.on { background: var(--accent); color: #fff; }
 
-  /* Install */
-  .install-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
-  .install {
-    background: var(--bg-deep); border: 1px solid var(--line); border-radius: 16px; padding: 26px;
-    display: flex; flex-direction: column; gap: 14px; min-width: 0;
+  /* ---------- Sections ---------- */
+  section { padding: 120px 0 0; }
+  .row { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; align-items: center; }
+  .row.flip { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+  .row.flip .copy { order: 2; }
+  .copy h2 { margin: 0 0 18px; font-size: clamp(30px, 3.6vw, 40px); line-height: 1.15; letter-spacing: -.025em; font-weight: 750; }
+  .copy p { margin: 0 0 16px; color: var(--muted); }
+  .copy .tag { display: inline-block; margin-bottom: 14px; padding: 2px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-hover); font-size: 13px; font-weight: 600; }
+  .copy ul { margin: 0 0 16px; padding: 0; list-style: none; color: var(--muted); }
+  .copy li { position: relative; padding-left: 22px; margin: 0 0 8px; }
+  .copy li::before { content: ''; position: absolute; left: 2px; top: .62em; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
+  .shot { border-radius: 16px; padding: 34px; background: radial-gradient(110% 90% at 0% 0%, #ff6f8a, transparent 55%), linear-gradient(150deg, #c23350, #5c1832 80%); }
+  .shot .app { height: auto; grid-template-columns: minmax(0, 1fr); border-radius: 10px; }
+  .shot .app.split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+
+  .head { text-align: center; max-width: 780px; margin: 0 auto 48px; }
+  .head h2 { margin: 0 0 14px; font-size: clamp(32px, 4vw, 46px); letter-spacing: -.03em; line-height: 1.1; font-weight: 750; }
+  .head p { margin: 0; color: var(--muted); font-size: 18px; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
+  .card { padding: 28px 26px; border-radius: 12px; border: 1px solid var(--line-strong); background: linear-gradient(180deg, var(--card), var(--bg-2)); }
+  .card h3 { margin: 14px 0 12px; font-size: 22px; letter-spacing: -.015em; line-height: 1.25; }
+  .card p { margin: 0 0 12px; color: var(--muted); font-size: 16px; }
+  .ic { width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-hover); border: 1px solid rgba(210, 58, 87, .3); }
+  .ic svg { width: 22px; height: 22px; }
+
+  .cta {
+    margin-top: 120px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 40px; align-items: center;
+    padding: 46px 44px; border-radius: 14px; border: 1px solid var(--line-strong);
+    background:
+      radial-gradient(60% 140% at 0% 100%, rgba(255, 111, 138, .55), transparent 60%),
+      radial-gradient(50% 120% at 35% 0%, rgba(142, 42, 85, .65), transparent 65%),
+      linear-gradient(110deg, #3a1622, #1d0d14 70%);
   }
-  .install-head { display: flex; align-items: center; gap: 12px; }
-  .install-head .icon-tile { margin: 0; }
-  .install h3 { margin: 0; font-size: 18px; font-weight: 700; }
-  .install h3 small { display: block; font-size: 13px; font-weight: 500; color: var(--subtle); }
-  .install p { color: var(--muted); margin: 0; font-size: 14px; }
-  .install .qi-row { background: var(--bg); }
+  .cta h2 { margin: 0; font-size: clamp(28px, 3.3vw, 38px); letter-spacing: -.025em; line-height: 1.15; }
+  .cta p { margin: 0 0 14px; color: #ead9de; }
+  .qi { display: flex; flex-direction: column; gap: 10px; }
+  .qi-row { display: flex; align-items: center; gap: 10px; padding: 7px 7px 7px 14px; border-radius: 9px; background: rgba(16, 7, 10, .62); border: 1px solid var(--line-strong); min-width: 0; }
+  .qi-row.detected { border-color: rgba(236, 88, 115, .6); box-shadow: 0 0 0 3px rgba(210, 58, 87, .15); }
+  .qi-os { display: inline-flex; align-items: center; gap: 6px; flex: none; width: 88px; font-size: 13px; color: var(--muted); }
+  .qi-cmd { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 13.5px; scrollbar-width: none; }
+  .qi-cmd::-webkit-scrollbar { display: none; }
+  .qi-cmd .p { color: var(--accent-hover); margin-right: 8px; user-select: none; }
+  .qi-copy { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 6px; border: 1px solid var(--line-strong); background: rgba(255, 255, 255, .06); color: var(--fg); font: 600 13px var(--sans); cursor: pointer; }
+  .qi-copy:hover { background: var(--accent); border-color: var(--accent); }
+  .qi-copy svg { width: 14px; height: 14px; }
+
+  .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 40px 36px; }
+  .mini h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 17.5px; letter-spacing: -.01em; }
+  .mini h3 svg { width: 20px; height: 20px; color: var(--accent-hover); flex: none; }
+  .mini p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
+
+  .install-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+  .install { padding: 28px 26px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--card); min-width: 0; }
+  .install h3 { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; font-size: 21px; }
+  .install h3 small { color: var(--subtle); font-weight: 500; font-size: 14px; }
+  .install p { margin: 14px 0 0; color: var(--muted); font-size: 15.5px; }
   .install.wide { grid-column: 1 / -1; }
 
-  /* Footer */
-  footer { border-top: 1px solid var(--line); margin-top: 24px; }
-  footer .wrap { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-block: 28px; color: var(--subtle); font-size: 13px; }
-  footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
-  footer a { color: var(--muted); text-decoration: none; }
-  footer a:hover { color: var(--accent-hover); }
+  footer { margin-top: 120px; border-top: 1px solid var(--line); padding: 34px 0 46px; color: var(--subtle); font-size: 14px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  footer .links { display: flex; gap: 22px; flex-wrap: wrap; }
+  footer a { text-decoration: none; color: var(--muted); }
+  footer a:hover { color: var(--fg); }
 
-  /* Entrance: visible at rest; only animates once JS marks the page ready */
-  .js .fade-up { opacity: 0; transform: translateY(16px); transition: opacity .55s ease, transform .55s ease; }
-  .js .fade-up.in { opacity: 1; transform: none; }
-  @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-    .js .fade-up { opacity: 1; transform: none; transition: none; }
-    .btn, .feature { transition: none; }
+  .js .fade { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s ease; }
+  .js .fade.in { opacity: 1; transform: none; }
+
+  /* ---------- Narrow screens ---------- */
+  @media (max-width: 1020px) {
+    .app { grid-template-columns: 46px minmax(0, 1fr) minmax(0, 330px); }
+    .row, .row.flip { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+    .row.flip .copy { order: 0; }
+    .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cta { grid-template-columns: minmax(0, 1fr); }
   }
-
-  @media (max-width: 640px) {
-    .nav-links a:not(.gh) { display: none; }
-    .brand-tag { display: none; }
-    .hero { padding-block: 56px 40px; }
-    section { padding-block: 48px; }
-    .qi-row { flex-wrap: wrap; }
-    .qi-os { width: 100%; }
-    .qi-cmd { flex-basis: calc(100% - 90px); }
-    .mock-body { font-size: 12px; }
+  @media (max-width: 760px) {
+    .wrap { padding: 0 16px; }
+    .nav-links, .nav-gh span { display: none; }
+    nav .wrap { gap: 12px; justify-content: space-between; }
+    .hero { padding-top: 56px; }
+    .frame { padding: 18px 12px 0; margin-top: 44px; }
+    .app { grid-template-columns: minmax(0, 1fr); height: 520px; }
+    .app .rail, .app .ed { display: none; }
+    .app-title span { display: none; }
+    .shot { padding: 14px; }
+    .shot .app .ed { display: flex; }
+    .shot .app.split { grid-template-columns: minmax(0, 1fr) !important; }
+    .shot .app.split .rail, .shot .app.split .ed { display: none; }
+    .cards, .install-grid, .grid4 { grid-template-columns: minmax(0, 1fr); }
+    .cta { padding: 30px 20px; }
+    .qi-os { width: auto; }
+    .qi-os span { display: none; }
+    section { padding-top: 84px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .spin, .input .caret { animation: none; }
+    .js .fade { opacity: 1; transform: none; transition: none; }
   }
 </style>
 </head>
 <body>
 
-<!-- Icon set: single-stroke 24px glyphs, referenced with <use> -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
-    <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></symbol>
-    <symbol id="i-keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M10 13h4M7 16h10"/></symbol>
-    <symbol id="i-at" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.9 7.9"/></symbol>
-    <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></symbol>
-    <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
-    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
-    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+    <symbol id="i-at" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></symbol>
     <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/></symbol>
-    <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/></symbol>
-    <symbol id="i-focus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/><circle cx="12" cy="12" r="2.5"/></symbol>
-    <symbol id="i-commit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.5"/><path d="M3 12h5.5M15.5 12H21"/></symbol>
-    <symbol id="i-pull" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
-    <symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-1.8a2 2 0 0 0-1.5 3.3A1.9 1.9 0 0 1 12 22z"/><circle cx="7.5" cy="10.5" r=".8" fill="currentColor"/><circle cx="10.5" cy="6.8" r=".8" fill="currentColor"/><circle cx="15" cy="7" r=".8" fill="currentColor"/></symbol>
-    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h7M8.5 14h4"/></symbol>
-    <symbol id="i-layout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M9 12h12"/></symbol>
-    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></symbol>
-    <symbol id="i-stack" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/></symbol>
-    <symbol id="i-tabs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9zM3 9V5a1 1 0 0 1 1-1h6l2 5M12 9l1.5-4H20a1 1 0 0 1 1 1v3"/></symbol>
-    <symbol id="i-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18a9 9 0 1 1 16 0"/><path d="m12 14 4-5"/><circle cx="12" cy="14" r="1.2" fill="currentColor"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21 12-8.5 8.5a5.5 5.5 0 0 1-8-8L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a1.5 1.5 0 0 1-2-2L15 8"/></symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-commit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M2 12h6M16 12h6"/></symbol>
+    <symbol id="i-pull" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-2a2 2 0 0 0-1.5 3.3A1.6 1.6 0 0 1 12 22z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-layout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M14 3v18"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+    <symbol id="i-stack" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></symbol>
+    <symbol id="i-tabs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M3 11h18M8 7V4h8v3"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14 16 9"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
@@ -298,240 +352,321 @@
 
 <nav>
   <div class="wrap">
-    <a class="brand" href="#">
-      <img src="icon.svg" alt="">
-      <span class="brand-text">Maut code</span><span class="brand-tag">manden med leen</span>
-    </a>
+    <a class="brand" href="#"><img src="icon.svg" alt="">Maut code</a>
     <div class="nav-links">
       <a href="#features">Features</a>
+      <a href="#reader">Reader</a>
+      <a href="#everything">Everything else</a>
       <a href="#install">Install</a>
-      <a class="gh" href="https://github.com/jmkq0056/maut-code"><svg><use href="#i-github"/></svg>GitHub</a>
+      <a href="https://github.com/jmkq0056/maut-code/releases">Releases</a>
+    </div>
+    <div class="nav-right">
+      <a class="nav-gh" href="https://github.com/jmkq0056/maut-code"><svg><use href="#i-github"/></svg><span>GitHub</span></a>
+      <a class="btn" href="#install">Download</a>
     </div>
   </div>
 </nav>
 
-<header class="hero wrap">
-  <a class="eyebrow" href="#features"><span class="pill">New</span> Image previews in Claude's terminal, one-line Windows install</a>
-  <h1>Code with <span class="accent">Claude</span>,<br>not around it.</h1>
-  <p class="hero-sub">A fork of VS Code with the Claude Code CLI built into the IDE. Your last session resumes on launch, files drag in as <code>@-mentions</code>, Claude's edits undo per file, and pasted images preview right in the terminal.</p>
+<header class="hero">
+  <div class="glyphs" aria-hidden="true"><canvas id="glyphs"></canvas></div>
+  <div class="wrap">
+    <h1>The <span class="accent">Claude Code</span> editor</h1>
+    <p class="lede">Code with Claude, not around it.</p>
+    <p class="lede-sub">A fork of VS Code built around the Claude Code CLI. Read the conversation like a chat, watch every change land in your files, and keep the full editor one keystroke away.</p>
 
-  <div class="download-row">
-    <a class="btn" id="dl-mac-arm" href="https://github.com/jmkq0056/maut-code/releases/latest/download/Maut-code-arm64.dmg">
-      <svg><use href="#i-apple"/></svg>Download for macOS <span class="arch">Apple Silicon</span>
-    </a>
-    <a class="btn secondary" id="dl-win" href="https://github.com/jmkq0056/maut-code/releases/latest/download/Maut-code-Setup-x64.exe">
-      <svg><use href="#i-windows"/></svg>Download for Windows <span class="arch">x64</span>
-    </a>
-  </div>
-
-  <div class="quick-install">
-    <div class="qi-row" data-os="mac">
-      <span class="qi-os"><svg><use href="#i-apple"/></svg>macOS</span>
-      <code class="qi-cmd"><span class="p">$</span><span class="c">curl -fsSL https://jmkq0056.github.io/maut-code/install.sh | bash</span></code>
-      <button class="qi-copy" type="button" aria-label="Copy the macOS install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
+    <div class="dl-card">
+      <a class="dl-main" id="dl-main" href="https://github.com/jmkq0056/maut-code/releases/latest/download/Maut-code-arm64.dmg">
+        <svg><use id="dl-main-icon" href="#i-apple"/></svg><span id="dl-main-label">Download for macOS</span>
+      </a>
+      <p class="dl-alt"><a id="dl-other" href="https://github.com/jmkq0056/maut-code/releases/latest/download/Maut-code-Setup-x64.exe">Windows</a>, <a href="#install">one-line install</a>, or <a href="https://github.com/jmkq0056/maut-code/releases/latest">all downloads</a></p>
+      <p class="dl-fine"><span id="ver">v1.3.0</span> · Free and open source (MIT) · Apple Silicon and Windows x64</p>
     </div>
-    <div class="qi-row" data-os="win">
-      <span class="qi-os"><svg><use href="#i-windows"/></svg>Windows</span>
-      <code class="qi-cmd"><span class="p">&gt;</span><span class="c">irm https://jmkq0056.github.io/maut-code/install.ps1 | iex</span></code>
-      <button class="qi-copy" type="button" aria-label="Copy the Windows install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
-    </div>
-    <p class="qi-note">Paste into Terminal or PowerShell. One step, no security prompts, and it offers to set up Claude Code if you don't have it.</p>
-  </div>
-  <div class="hero-version"><span id="ver">v1.3.0</span> · <a href="https://github.com/jmkq0056/maut-code/releases">all releases</a></div>
 
-  <div class="mock" aria-hidden="true">
-    <div class="mock-bar"><i></i><i></i><i></i><span>1 -- MAUT</span></div>
-    <div class="mock-body">
-      <div class="row"><span class="ok">●</span> The editor only writes drafts, so live items never change.</div>
-      <div class="row">  Adding a publish step and inline editing.</div>
-      <div class="row"> </div>
-      <div class="thumb-wrap"><div class="thumb"></div><span class="thumb-badge">#3</span></div>
-      <div class="row"><span class="you">› <span class="tok">[Image #3]</span> the cards overflow on my phone</span></div>
-      <div class="row dim">  ▸▸ auto mode on (shift+tab to cycle)</div>
+    <div class="frame fade" aria-hidden="true">
+      <div class="app has-title">
+        <div class="app-title"><i></i><i></i><i></i><span>maut-code</span></div>
+        <div class="rail"><b class="on">MC</b><b>WE</b><b>AP</b><b class="add">+</b><hr><em></em><em></em><em></em></div>
+        <div class="ed">
+          <div class="tabs"><div class="tab on"><span class="ts">TS</span>session.ts</div><div class="tab"><span class="ts">TS</span>app.ts</div></div>
+          <div class="code">
+            <div class="ln"><i>38</i><span><span class="k">export</span> <span class="k">async</span> <span class="k">function</span> <span class="f">readSession</span>(id: <span class="t">string</span>) {</span></div>
+            <div class="ln"><i>39</i><span>  <span class="k">const</span> file = <span class="f">findTranscript</span>(id);</span></div>
+            <div class="ln del"><i></i><span>  <span class="k">if</span> (!file) <span class="k">throw</span> <span class="k">new</span> <span class="f">Error</span>(<span class="s">'missing'</span>);</span></div>
+            <div class="ln add"><i>40</i><span>  <span class="k">if</span> (!file) {</span></div>
+            <div class="ln add"><i>41</i><span>    <span class="k">return</span> <span class="n">undefined</span>; <span class="c">// a new chat has no transcript yet</span></span></div>
+            <div class="ln add"><i>42</i><span>  }</span></div>
+            <div class="ln"><i>43</i><span>  <span class="k">const</span> lines = <span class="k">await</span> <span class="f">readLines</span>(file);</span></div>
+            <div class="ln"><i>44</i><span>  <span class="k">const</span> turns: <span class="t">Turn</span>[] = [];</span></div>
+            <div class="ln"><i>45</i><span>  <span class="k">for</span> (<span class="k">const</span> line <span class="k">of</span> lines) {</span></div>
+            <div class="ln add"><i>46</i><span>    <span class="k">if</span> (!line.<span class="f">trim</span>()) { <span class="k">continue</span>; }</span></div>
+            <div class="ln"><i>47</i><span>    turns.<span class="f">push</span>(<span class="f">parseTurn</span>(line));</span></div>
+            <div class="ln"><i>48</i><span>  }</span></div>
+            <div class="ln"><i>49</i><span>  <span class="k">return</span> { id, turns };</span></div>
+            <div class="ln"><i>50</i><span>}</span></div>
+            <div class="ln"><i>51</i><span> </span></div>
+            <div class="ln"><i>52</i><span><span class="k">function</span> <span class="f">parseTurn</span>(line: <span class="t">string</span>): <span class="t">Turn</span> {</span></div>
+            <div class="ln"><i>53</i><span>  <span class="k">const</span> record = <span class="t">JSON</span>.<span class="f">parse</span>(line);</span></div>
+            <div class="ln"><i>54</i><span>  <span class="k">return</span> { role: record.type, text: record.message };</span></div>
+            <div class="ln"><i>55</i><span>}</span></div>
+          </div>
+          <div class="bar"><span class="dot"></span>Claude changed 3 places <span class="ct">1/3</span><u>&uarr;</u><u>&darr;</u><u>Done</u></div>
+        </div>
+        <div class="cl">
+          <div class="cl-head">
+            <div class="cl-top"><img src="icon.svg" alt="">maut-code<span class="seg"><em class="on">Reader</em><em>Terminal</em></span></div>
+            <div class="cl-now"><span class="spin"></span>Editing session.ts<span class="meter"><b></b></span><span class="el">14s</span></div>
+          </div>
+          <div class="reader">
+            <div class="you">a brand new chat crashes the Reader, fix it</div>
+            <div class="re"><img src="icon.svg" alt="">
+              <div>
+                <div class="steps"><div><b>Read</b> session.ts, reader.ts</div><div><b>Ran</b> npm test -- session</div></div>
+                <div class="edit"><div class="edit-h">session.ts<span class="p">+4</span><span class="m">&minus;1</span><u>Open</u></div><div class="d">- if (!file) throw new Error('missing');</div><div class="a">+ if (!file) {</div><div class="a">+   return undefined;</div></div>
+                <p>A new chat has no transcript until the first reply, so <code>readSession</code> now returns nothing instead of throwing.</p>
+                <div class="foot"><span class="cp hot"><svg><use href="#i-check"/></svg></span>Worked for 42s</div>
+              </div>
+            </div>
+          </div>
+          <div class="input">&#x276f; also skip blank lines<span class="caret"></span></div>
+          <div class="input-foot"><b>&#x25cf;</b> opus &middot; &#x25b8;&#x25b8; bypass permissions</div>
+        </div>
+      </div>
     </div>
   </div>
 </header>
 
-<section id="features" class="wrap">
-  <div class="section-head fade-up">
-    <p class="kicker">Features</p>
-    <h2>Built for vibecoders.</h2>
-    <p class="section-sub">Every feature exists because clicking through menus for Claude Code workflows got annoying. None of it pretends to be AI; it makes the CLI feel like part of the IDE.</p>
-  </div>
+<main class="wrap">
 
-  <div class="feature-grid">
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-file"/></svg></div>
-      <h3>See what Claude changed <span class="tag new">v1.3</span></h3>
-      <p>When Claude edits a file you have open, its new lines light up green and removed lines show in red right where they were, like Claude shows a diff. The editor jumps to the first change; step through the rest with the arrows. Opening a file shows what changed since the last commit.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-zap"/></svg></div>
-      <h3>Find files by name <span class="tag new">v1.3</span></h3>
-      <p><kbd>⌘⇧F</kbd> finds files and folders by name, fuzzy and instant, instead of searching inside them. Open one, or add it to Claude in one click.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-copy"/></svg></div>
-      <h3>Copy from the Reader <span class="tag new">v1.3</span></h3>
-      <p>Every reply has a copy button, and you can mark any text and press <kbd>⌘C</kbd>. Right-click to copy one response or the whole conversation as Markdown.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-zap"/></svg></div>
-      <h3>Opens straight into Claude <span class="tag new">v1.3</span></h3>
-      <p>Windows open full screen with a short splash while Claude gets ready: it continues your last conversation, or starts a new one if there is none. If Claude Code isn't installed, Maut says so and offers to install it. No Copilot sign-in prompts in the way.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-chat"/></svg></div>
-      <h3>Claude Reader <span class="tag new">v1.2</span></h3>
-      <p>When <code>claude</code> runs, the conversation reads like a chat: your messages as bubbles, tool steps folded, diffs as cards, images Claude read as thumbnails. Claude's live output streams in as it writes, a "Now" line says what it's doing ("Editing app.ts · 14s"), and the prompt rail with fuzzy search jumps to any earlier prompt.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-layout"/></svg></div>
-      <h3>Focus and IDE layouts <span class="tag new">v1.2</span></h3>
-      <p>Claude takes the window by itself; a file you open lands on the right half. Press <kbd>⌘B</kbd> for the IDE layout: files in the middle, Claude in a resizable column on the right, the tree pinned only when you want it. Claude's <code>/</code> menus and questions show as cards above the input, never clipped. Pick the model, permission mode and extra flags Claude starts with in the Maut panel.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-send"/></svg></div>
-      <h3>Queue and send now <span class="tag new">v1.2</span></h3>
-      <p>Messages you type while Claude works show up queued, exactly as Claude sees them. <kbd>Ctrl ↵</kbd> sends one right away. Esc shows a clear "interrupted" mark, and Larger Input gives long prompts and Claude's menus room to read.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-server"/></svg></div>
-      <h3>Background shells and agents <span class="tag new">v1.2</span></h3>
-      <p>The Activity panel lists every command Claude runs in the background and every agent it starts, live. Read a shell's output or stop it, and open an agent to read its own conversation.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-gauge"/></svg></div>
-      <h3>True context meter <span class="tag new">v1.2</span></h3>
-      <p>The header shows how much of Claude's context is used, read from the session itself and matching <code>/context</code>, 1M windows included. Nothing is typed into Claude to get it.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-stack"/></svg></div>
-      <h3>Project dock <span class="tag new">v1.2</span></h3>
-      <p>Your open and starred projects, one click away at the top of the activity bar, each in its own window. A quiet icon shows its Claude: spinning while it works, a bell when it needs you. Right-click to star or remove one.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-tabs"/></svg></div>
-      <h3>Tabs that tidy themselves <span class="tag new">v1.2</span></h3>
-      <p>At most eight tabs, and files you haven't looked at for 20 minutes close by themselves (with a Reopen). Images Claude shows open as previews, never piling up. Claude's terminal is never closed.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-image"/></svg></div>
-      <h3>Image previews <span class="tag">v1.1</span></h3>
-      <p>Every <code>[Image #N]</code> gets a numbered thumbnail right at it, a large hover preview and cmd-click to open. Image paths and <code>file://</code> links too. Works before you send the prompt, and in Claude's fullscreen mode.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-zap"/></svg></div>
-      <h3>Smart auto-launch</h3>
-      <p>Open a project and your last Claude session resumes by itself, and only in project folders, never your home folder. Numbered <code>1 -- MAUT</code> with its own icon and color per session.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-keyboard"/></svg></div>
-      <h3>Type <kbd>maut</kbd> anywhere</h3>
-      <p>Type those four letters in the editor, search or command palette: the keystrokes are removed and a fresh Claude terminal spawns. In terminals and the Reader, "maut" is just text.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-at"/></svg></div>
-      <h3>Drag as @-mention</h3>
-      <p>Drag files and folders, from anywhere in the tree, onto Claude and each becomes <code>@workspace/path</code>, in the terminal or the Reader. Drag an editor selection for <code>@path:start-end</code>.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-undo"/></svg></div>
-      <h3>Undo Claude's edits</h3>
-      <p>The Maut Activity sidebar lists every file Claude touched this session. Click for the diff; right-click to undo per file or per edit, with redo.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-file"/></svg></div>
-      <h3>PDF page picker</h3>
-      <p>Right-click a PDF and pick pages visually or type a range like <code>3-15, 20</code>. The extract lands in <code>~/.maut-tmp/</code> and is @-mentioned into the CLI.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-book"/></svg></div>
-      <h3>Markdown that reads well</h3>
-      <p><code>.md</code> opens as a real preview with a sticky table of contents and highlighted code. <kbd>⇧⌘V</kbd> toggles to source.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-server"/></svg></div>
-      <h3>Right-click servers</h3>
-      <p>Right-click a folder: Maut detects Node, Python, Rust, Go, Make or Docker and starts the right command in a terminal.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-clip"/></svg></div>
-      <h3>Word, Excel, PowerPoint</h3>
-      <p>Click an Office file to hand it to its app. Right-click to convert to TXT, JSON or PDF. No more "file is binary" warnings.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-focus"/></svg></div>
-      <h3>Hide Claude, keep it running</h3>
-      <p><kbd>⌃⌘J</kbd> hides Claude to a slim strip that still shows when it's working; press again, or click the strip, and it's back at the same width.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-commit"/></svg></div>
-      <h3>One-click commit</h3>
-      <p>A status-bar button stages everything, commits with your message and optionally pushes, all in quick-pick UI.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-pull"/></svg></div>
-      <h3>One-click fetch and pull</h3>
-      <p>Pick a remote and branch to fetch and pull. On a conflict, choose stash and pull, reset, or cancel.</p>
-    </div>
-    <div class="feature fade-up">
-      <div class="icon-tile"><svg><use href="#i-palette"/></svg></div>
-      <h3>Theme Studio</h3>
-      <p>Set accent, surface tone, font and size for light and dark separately; <kbd>⇧⌘L</kbd> swaps between them. The font applies to the whole workbench, not just the editor.</p>
-    </div>
-  </div>
-</section>
-
-<section id="install" class="wrap">
-  <div class="section-head fade-up">
-    <p class="kicker">Install</p>
-    <h2>One command. Run it again to update.</h2>
-    <p class="section-sub">Each installer fetches the latest release, puts Maut where your system expects apps, and opens it.</p>
-  </div>
-
-  <div class="install-grid">
-    <div class="install fade-up">
-      <div class="install-head">
-        <div class="icon-tile"><svg><use href="#i-apple"/></svg></div>
-        <h3>macOS <small>Apple Silicon</small></h3>
+  <section id="features">
+    <div class="row">
+      <div class="copy fade">
+        <span class="tag">New in v1.3</span>
+        <h2>See exactly what Claude changed</h2>
+        <p>When Claude edits a file you have open, new lines light up green and removed lines appear in red right where they were, the way Claude shows a diff. The editor jumps to the first change; step through the rest with the arrows, or press Done.</p>
+        <p>Open any file and Maut shows what changed since the last commit, so you can review Claude's work without hunting through a diff view.</p>
       </div>
-      <div class="qi-row">
-        <code class="qi-cmd"><span class="p">$</span><span class="c">curl -fsSL https://jmkq0056.github.io/maut-code/install.sh | bash</span></code>
-        <button class="qi-copy" type="button" aria-label="Copy the macOS install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
+      <div class="shot fade" aria-hidden="true">
+        <div class="app">
+          <div class="ed">
+            <div class="tabs"><div class="tab on"><span class="ts">TS</span>config.ts</div></div>
+            <div class="code">
+              <div class="ln"><i>12</i><span><span class="k">export</span> <span class="k">const</span> defaults = {</span></div>
+              <div class="ln"><i>13</i><span>  port: <span class="n">3000</span>,</span></div>
+              <div class="ln del"><i></i><span>  retries: <span class="n">1</span>,</span></div>
+              <div class="ln add"><i>14</i><span>  retries: <span class="n">3</span>, <span class="c">// flaky CI network</span></span></div>
+              <div class="ln add"><i>15</i><span>  backoffMs: <span class="n">250</span>,</span></div>
+              <div class="ln"><i>16</i><span>  logLevel: <span class="s">'info'</span>,</span></div>
+              <div class="ln"><i>17</i><span>};</span></div>
+              <div class="ln"><i>18</i><span> </span></div>
+              <div class="ln"><i>19</i><span><span class="k">export</span> <span class="k">function</span> <span class="f">load</span>(env: <span class="t">Env</span>) {</span></div>
+              <div class="ln add"><i>20</i><span>  <span class="k">const</span> port = <span class="t">Number</span>(env.PORT ?? defaults.port);</span></div>
+              <div class="ln"><i>21</i><span>  <span class="k">return</span> { ...defaults, port };</span></div>
+              <div class="ln"><i>22</i><span>}</span></div>
+            </div>
+            <div class="bar" style="top:44px"><span class="dot"></span>Claude changed 2 places <span class="ct">1/2</span><u>&uarr;</u><u>&darr;</u><u>Done</u></div>
+          </div>
+        </div>
       </div>
-      <p>Installs into <code>/Applications</code> (an older copy goes to the Trash), clears the quarantine flag so macOS opens it without the right-click dance, and offers to install Claude Code.</p>
+    </div>
+  </section>
+
+  <section id="reader">
+    <div class="row flip">
+      <div class="copy fade">
+        <span class="tag">Reader</span>
+        <h2>The conversation, readable</h2>
+        <p>While <code>claude</code> runs, the Reader turns its terminal into a chat: your messages as bubbles, tool steps folded, edits as cards, images as thumbnails. The Now line says what Claude is doing ("Editing app.ts &middot; 14s"), and the plain terminal is one click away.</p>
+        <ul>
+          <li>Copy any reply with one button, mark text and press <kbd>&#x2318;C</kbd>, or right-click to copy the whole conversation as Markdown.</li>
+          <li>Claude's <code>/</code> menus and questions show as cards above the input, never clipped.</li>
+          <li>A prompt rail with fuzzy search jumps to anything you asked earlier.</li>
+        </ul>
+      </div>
+      <div class="shot fade" aria-hidden="true">
+        <div class="app">
+          <div class="cl" style="position:relative">
+            <div class="cl-head">
+              <div class="cl-top"><img src="icon.svg" alt="">webshop<span class="seg"><em class="on">Reader</em><em>Terminal</em></span></div>
+              <div class="cl-now">Ready for your next message<span class="meter" style="margin-left:auto"><b></b></span><span style="font-size:11.5px;color:#8c7d82">34%</span></div>
+            </div>
+            <div class="reader" style="height:330px">
+              <div class="you">why is checkout slow on mobile?</div>
+              <div class="re"><img src="icon.svg" alt="">
+                <div>
+                  <div class="steps"><div><b>Read</b> checkout.tsx, cart.ts</div><div><b>Searched</b> useEffect in src/checkout</div></div>
+                  <p>The cart re-renders on every keystroke because <code>useCart()</code> returns a new object each time. Memoizing it cuts renders from 40 to 2 per input.</p>
+                  <div class="foot"><span class="cp hot"><svg><use href="#i-copy"/></svg></span>Worked for 18s</div>
+                </div>
+              </div>
+            </div>
+            <div class="menu" style="right:26px;top:190px"><div>Copy</div><div class="on">Copy Response</div><div>Copy Conversation</div></div>
+            <div class="input">&#x276f; <span class="caret"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="row">
+      <div class="copy fade">
+        <span class="tag">New in v1.3</span>
+        <h2>Find files by name, hand them to Claude</h2>
+        <p><kbd>&#x2318;&#x21e7;F</kbd> finds files and folders by name, fuzzy and instant, instead of searching inside them. Open one, or add it to Claude as an <code>@-mention</code> in one click. Dragging files or whole folders onto Claude works too, from anywhere in the tree.</p>
+      </div>
+      <div class="shot fade" aria-hidden="true">
+        <div class="app">
+          <div class="cl">
+            <div class="cl-head"><div class="cl-top" style="font-weight:500;color:#c9babe"><svg style="width:15px;height:15px"><use href="#i-search"/></svg>chk srv</div></div>
+            <div class="reader" style="gap:2px;font-size:13px">
+              <div style="display:flex;gap:10px;padding:7px 10px;border-radius:7px;background:#3a2530"><b style="color:#4ea1ff;font:600 10.5px var(--mono)">TS</b><span><b>checkout</b>Service.ts</span><span style="margin-left:auto;color:#8c7d82">src/server</span><span style="color:var(--accent-hover)">+ Add to Claude</span></div>
+              <div style="display:flex;gap:10px;padding:7px 10px"><b style="color:#4ea1ff;font:600 10.5px var(--mono)">TS</b><span><b>checkout</b>.<b>s</b>e<b>rv</b>er.test.ts</span><span style="margin-left:auto;color:#8c7d82">test</span></div>
+              <div style="display:flex;gap:10px;padding:7px 10px"><b style="color:#e8c46a;font:600 10.5px var(--mono)">{}</b><span><b>ch</b>ec<b>k</b>-<b>s</b>e<b>rv</b>ice.json</span><span style="margin-left:auto;color:#8c7d82">config</span></div>
+              <div style="display:flex;gap:10px;padding:7px 10px"><b style="color:#b4a4a9;font:600 10.5px var(--mono)">&#x25b8;</b><span><b>ch</b>ec<b>k</b>out/<b>s</b>e<b>rv</b>ices</span><span style="margin-left:auto;color:#8c7d82">src</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="head fade">
+      <h2>Claude works. You stay in charge.</h2>
+      <p>Everything Claude does in the background is visible, and you can step in at any moment.</p>
+    </div>
+    <div class="cards">
+      <div class="card fade">
+        <div class="ic"><svg><use href="#i-send"/></svg></div>
+        <h3>Queue and send now</h3>
+        <p>Messages you type while Claude works show up queued, exactly as Claude sees them. <kbd>Ctrl &#x21b5;</kbd> sends one right away.</p>
+        <p>Press Esc and the Reader marks clearly where you interrupted. Larger Input gives long prompts room.</p>
+      </div>
+      <div class="card fade">
+        <div class="ic"><svg><use href="#i-server"/></svg></div>
+        <h3>Background shells and agents</h3>
+        <p>The Activity panel lists every command Claude runs in the background and every agent it starts, live.</p>
+        <p>Read a shell's output or stop it, and open an agent to read its own conversation.</p>
+      </div>
+      <div class="card fade">
+        <div class="ic"><svg><use href="#i-gauge"/></svg></div>
+        <h3>True context meter</h3>
+        <p>The header shows how much of Claude's context is used, read from the session itself and matching <code>/context</code>, 1M windows included.</p>
+        <p>Nothing is typed into Claude to get it.</p>
+      </div>
     </div>
 
-    <div class="install fade-up">
-      <div class="install-head">
-        <div class="icon-tile"><svg><use href="#i-windows"/></svg></div>
-        <h3>Windows <small>x64 · PowerShell</small></h3>
+    <div class="cta fade">
+      <div>
+        <h2>Start with one command</h2>
       </div>
-      <div class="qi-row">
-        <code class="qi-cmd"><span class="p">&gt;</span><span class="c">irm https://jmkq0056.github.io/maut-code/install.ps1 | iex</span></code>
-        <button class="qi-copy" type="button" aria-label="Copy the Windows install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
+      <div>
+        <p>Paste it into Terminal or PowerShell. It installs the latest release, opens Maut, and offers to set up Claude Code if you don't have it. Run it again to update.</p>
+        <div class="qi" id="quick-install">
+          <div class="qi-row" data-os="mac">
+            <span class="qi-os"><svg><use href="#i-apple"/></svg><span>macOS</span></span>
+            <code class="qi-cmd"><span class="p">$</span><span class="c">curl -fsSL https://jmkq0056.github.io/maut-code/install.sh | bash</span></code>
+            <button class="qi-copy" type="button" aria-label="Copy the macOS install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
+          </div>
+          <div class="qi-row" data-os="win">
+            <span class="qi-os"><svg><use href="#i-windows"/></svg><span>Windows</span></span>
+            <code class="qi-cmd"><span class="p">&gt;</span><span class="c">irm https://jmkq0056.github.io/maut-code/install.ps1 | iex</span></code>
+            <button class="qi-copy" type="button" aria-label="Copy the Windows install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
+          </div>
+        </div>
       </div>
-      <p>Installs for your user with no admin rights and no wizard; adds Start menu and desktop shortcuts, Explorer's right-click menu and <code>maut-code</code> on your <code>PATH</code>; offers to install Claude Code.</p>
     </div>
+  </section>
 
-    <div class="install wide fade-up">
-      <div class="install-head">
-        <div class="icon-tile"><svg><use href="#i-download"/></svg></div>
-        <h3>Prefer a download?</h3>
+  <section>
+    <div class="row flip">
+      <div class="copy fade">
+        <h2>A workspace shaped around Claude</h2>
+        <p>Windows open full screen with a short splash while Claude gets ready: Maut continues your last conversation, or starts a new one when there's nothing to resume. If Claude Code isn't installed, it says so and offers to install it.</p>
+        <p>Claude takes the window in Focus mode. Press <kbd>&#x2318;B</kbd> for the IDE layout with Claude in a resizable column on the right, and <kbd>&#x2303;&#x2318;J</kbd> to hide it to a slim strip that still shows when it's working.</p>
+        <p>No Copilot sign-in buttons or setup prompts in the way.</p>
       </div>
-      <p>The buttons at the top get the same builds. On macOS, open the <code>.dmg</code>, drag Maut code to Applications, then right-click it and choose Open the first time (it's ad-hoc signed, not notarized). On Windows, download <code>Maut-code-Setup-x64.exe</code> and run it: it installs for your user, no admin rights needed. It isn't code-signed yet, so SmartScreen may ask you to choose More info, then Run anyway. Windows 11 with Smart App Control on, or a work PC with an app-control policy, blocks unsigned apps entirely; there, Maut can't install until it's signed. A portable <code>Maut-code-win-x64.zip</code> is on every <a href="https://github.com/jmkq0056/maut-code/releases/latest" style="color:var(--accent-hover)">release</a> too.</p>
+      <div class="shot fade" aria-hidden="true">
+        <div class="app split" style="grid-template-columns:44px minmax(0,1fr) minmax(0,1fr)">
+          <div class="rail"><b class="on">MC</b><b>WE</b><b class="add">+</b></div>
+          <div class="ed">
+            <div class="tabs"><div class="tab on"><span class="ts">TS</span>cart.ts</div></div>
+            <div class="code">
+              <div class="ln"><i>1</i><span><span class="k">import</span> { <span class="f">memo</span> } <span class="k">from</span> <span class="s">'react'</span>;</span></div>
+              <div class="ln"><i>2</i><span> </span></div>
+              <div class="ln add"><i>3</i><span><span class="k">export</span> <span class="k">const</span> <span class="f">useCart</span> = ...</span></div>
+              <div class="ln"><i>4</i><span><span class="k">export</span> <span class="k">function</span> <span class="f">total</span>() {</span></div>
+              <div class="ln"><i>5</i><span>  <span class="k">return</span> items.<span class="f">sum</span>();</span></div>
+              <div class="ln"><i>6</i><span>}</span></div>
+            </div>
+          </div>
+          <div class="cl" style="border-left:1px solid rgba(0,0,0,.3)">
+            <div class="cl-head"><div class="cl-top"><img src="icon.svg" alt="">webshop</div><div class="cl-now"><span class="spin"></span>Running npm test</div></div>
+            <div class="reader" style="height:190px"><div class="you">memoize useCart</div><div class="re"><img src="icon.svg" alt=""><div><p>Done. Renders per keystroke dropped from 40 to 2.</p></div></div></div>
+            <div class="input">&#x276f; <span class="caret"></span></div>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
-</section>
+  </section>
+
+  <section id="everything">
+    <div class="head fade">
+      <h2>And everything else you'd expect</h2>
+      <p>Every feature exists because clicking through menus for Claude Code workflows got annoying. All of it sits on top of the full VS Code editor.</p>
+    </div>
+    <div class="grid4">
+      <div class="mini fade"><h3><svg><use href="#i-stack"/></svg>Project dock</h3><p>Open and starred projects at the top of the activity bar, each in its own window. A spinner while Claude works, a bell when it needs you.</p></div>
+      <div class="mini fade"><h3><svg><use href="#i-tabs"/></svg>Tabs that tidy themselves</h3><p>At most eight tabs; files you haven't looked at for 20 minutes close by themselves, with a Reopen.</p></div>
+      <div class="mini fade"><h3><svg><use href="#i-image"/></svg>Image previews</h3><p>Pasted images preview right in Claude's terminal and the Reader, as thumbnails that open full size.</p></div>
+      <div class="mini fade"><h3><svg><use href="#i-zap"/></svg>Smart auto-launch</h3><p>Opening a project starts Claude in it, resuming the last session. Your launch flags, model and permission mode live in the Maut panel.</p></div>
+      <div class="mini fade"><h3><svg><use href="#i-at"/></svg>Drag as @-mention</h3><p>Drop files or folders on Claude, even several from different places, and they arrive as <code>@-mentions</code>.</p></div>
+      <div class="mini fade"><h3><svg><use href="#i-undo"/></svg>Undo Claude's edits</h3><p>Roll back what Claude did to a file, per file, without touching the rest.</p></div>
+      <div class="mini fade"><h3><svg><use href="#i-file"/></svg>PDF page picker</h3><p>Pick the pages of a PDF to hand to Claude instead of the whole document.</p></div>
+      <div class="mini fade"><h3><svg><use href="#i-book"/></svg>Markdown that reads well</h3><p>Markdown opens rendered, with proper type, so Claude's plans and notes read like documents.</p></div>
+      <div class="mini fade"><h3><svg><use href="#i-server"/></svg>Right-click servers</h3><p>Start and stop the dev servers in your project from the explorer's context menu.</p></div>
+      <div class="mini fade"><h3><svg><use href="#i-clip"/></svg>Word, Excel, PowerPoint</h3><p>Click an Office file to open it in its app; right-click to convert it to TXT, JSON or PDF.</p></div>
+      <div class="mini fade"><h3><svg><use href="#i-commit"/></svg>One-click commit</h3><p>A status-bar button stages everything, commits with your message and optionally pushes.</p></div>
+      <div class="mini fade"><h3><svg><use href="#i-palette"/></svg>Theme Studio</h3><p>Accent, surface, font and size for light and dark separately; <kbd>&#x21e7;&#x2318;L</kbd> swaps between them.</p></div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="head fade">
+      <h2>One command. Run it again to update.</h2>
+      <p>Each installer fetches the latest release, puts Maut where your system expects apps, and opens it.</p>
+    </div>
+    <div class="install-grid">
+      <div class="install fade">
+        <h3><span class="ic"><svg><use href="#i-apple"/></svg></span>macOS <small>Apple Silicon</small></h3>
+        <div class="qi-row">
+          <code class="qi-cmd"><span class="p">$</span><span class="c">curl -fsSL https://jmkq0056.github.io/maut-code/install.sh | bash</span></code>
+          <button class="qi-copy" type="button" aria-label="Copy the macOS install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
+        </div>
+        <p>Installs into <code>/Applications</code> (an older copy goes to the Trash), clears the quarantine flag so macOS opens it without the right-click dance, and offers to install Claude Code.</p>
+      </div>
+      <div class="install fade">
+        <h3><span class="ic"><svg><use href="#i-windows"/></svg></span>Windows <small>x64 &middot; PowerShell</small></h3>
+        <div class="qi-row">
+          <code class="qi-cmd"><span class="p">&gt;</span><span class="c">irm https://jmkq0056.github.io/maut-code/install.ps1 | iex</span></code>
+          <button class="qi-copy" type="button" aria-label="Copy the Windows install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
+        </div>
+        <p>Installs for your user with no admin rights and no wizard; adds Start menu and desktop shortcuts, Explorer's right-click menu and <code>maut-code</code> on your <code>PATH</code>; offers to install Claude Code.</p>
+      </div>
+      <div class="install wide fade">
+        <h3><span class="ic"><svg><use href="#i-download"/></svg></span>Prefer a download?</h3>
+        <p>The download button at the top gets the same builds. On macOS, open the <code>.dmg</code>, drag Maut code to Applications, then right-click it and choose Open the first time (it's ad-hoc signed, not notarized). On Windows, run <code>Maut-code-Setup-x64.exe</code>: it installs for your user, no admin rights needed. It isn't code-signed yet, so SmartScreen may ask you to choose More info, then Run anyway. Windows 11 with Smart App Control on, or a work PC with an app-control policy, blocks unsigned apps entirely; there, Maut can't install until it's signed. A portable <code>Maut-code-win-x64.zip</code> is on every <a class="link" href="https://github.com/jmkq0056/maut-code/releases/latest">release</a> too.</p>
+      </div>
+    </div>
+  </section>
+</main>
 
 <footer>
   <div class="wrap">
-    <span>Maut code · MIT · Built on <a href="https://github.com/microsoft/vscode">microsoft/vscode</a></span>
+    <span>Maut code &middot; MIT &middot; Built on <a href="https://github.com/microsoft/vscode">microsoft/vscode</a>, not affiliated with Microsoft or Anthropic</span>
     <div class="links">
       <a href="https://github.com/jmkq0056/maut-code">Source</a>
       <a href="https://github.com/jmkq0056/maut-code/releases">Releases</a>
-      <a href="https://github.com/jmkq0056/maut-code/tree/main/dpcs">Feature docs</a>
       <a href="https://github.com/jmkq0056/maut-code/blob/main/CONTINUATION.md">Continuation prompt</a>
     </div>
   </div>
@@ -543,13 +678,53 @@
   const io = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
   }, { rootMargin: '0px 0px -40px 0px' });
-  document.querySelectorAll('.fade-up').forEach(el => io.observe(el));
+  document.querySelectorAll('.fade').forEach(el => io.observe(el));
 
-  // Put the visitor's OS first in the hero and highlight it.
-  const ua = navigator.userAgent;
-  if (/Windows|Macintosh|Mac OS/i.test(ua)) {
-    const os = /Windows/i.test(ua) ? 'win' : 'mac';
-    const row = document.querySelector(`.quick-install .qi-row[data-os="${os}"]`);
+  // The glyph field behind the hero: Claude's own marks in a quiet grid.
+  (() => {
+    const canvas = document.getElementById('glyphs');
+    const ctx = canvas.getContext && canvas.getContext('2d');
+    if (!ctx) { return; }
+    const marks = ['0', '1', '0', '1', '❯', '⏺', '·'];
+    const draw = () => {
+      const ratio = window.devicePixelRatio || 1;
+      const width = canvas.clientWidth, height = canvas.clientHeight;
+      canvas.width = width * ratio; canvas.height = height * ratio;
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      ctx.font = '13px "JetBrains Mono", ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      let seed = 7;
+      const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      for (let y = 18; y < height; y += 22) {
+        for (let x = 10; x < width; x += 22) {
+          const r = random();
+          const mark = marks[Math.floor(r * marks.length)];
+          ctx.fillStyle = mark === '❯' || mark === '⏺' ? `rgba(236, 88, 115, ${0.12 + random() * 0.16})` : `rgba(255, 225, 232, ${0.045 + random() * 0.07})`;
+          ctx.fillText(mark, x, y);
+        }
+      }
+    };
+    draw();
+    let pending;
+    window.addEventListener('resize', () => { clearTimeout(pending); pending = setTimeout(draw, 150); });
+    document.fonts && document.fonts.ready.then(draw);
+  })();
+
+  // The visitor's OS: the main download button and the first install row.
+  const isWindows = /Windows/i.test(navigator.userAgent);
+  const isMac = /Macintosh|Mac OS/i.test(navigator.userAgent);
+  const mainButton = document.getElementById('dl-main');
+  const otherLink = document.getElementById('dl-other');
+  if (isWindows) {
+    mainButton.href = 'https://github.com/jmkq0056/maut-code/releases/latest/download/Maut-code-Setup-x64.exe';
+    document.getElementById('dl-main-label').textContent = 'Download for Windows';
+    document.getElementById('dl-main-icon').setAttribute('href', '#i-windows');
+    otherLink.textContent = 'macOS';
+    otherLink.href = 'https://github.com/jmkq0056/maut-code/releases/latest/download/Maut-code-arm64.dmg';
+  }
+  if (isWindows || isMac) {
+    const row = document.querySelector(`#quick-install .qi-row[data-os="${isWindows ? 'win' : 'mac'}"]`);
     row.classList.add('detected');
     row.parentElement.prepend(row);
   }
@@ -572,7 +747,7 @@
     });
   });
 
-  // Point the download buttons and version at the latest release.
+  // Point the downloads and version at the latest release.
   fetch('https://api.github.com/repos/jmkq0056/maut-code/releases/latest')
     .then(r => r.ok ? r.json() : null)
     .then(d => {
@@ -580,8 +755,10 @@
       document.getElementById('ver').textContent = d.tag_name;
       const mac = d.assets?.find(a => /arm64.*\.dmg$/i.test(a.name));
       const win = d.assets?.find(a => /setup.*x64.*\.exe$/i.test(a.name)) ?? d.assets?.find(a => /win.*x64.*\.zip$/i.test(a.name));
-      if (mac) { document.getElementById('dl-mac-arm').href = mac.browser_download_url; }
-      if (win) { document.getElementById('dl-win').href = win.browser_download_url; }
+      const macLink = isWindows ? otherLink : mainButton;
+      const winLink = isWindows ? mainButton : otherLink;
+      if (mac) { macLink.href = mac.browser_download_url; }
+      if (win) { winLink.href = win.browser_download_url; }
     })
     .catch(() => {});
 </script>

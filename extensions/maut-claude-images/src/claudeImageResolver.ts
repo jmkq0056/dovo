@@ -24,6 +24,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { readTranscriptLines } from './transcriptLines';
 
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const SESSIONS_DIR = path.join(CLAUDE_DIR, 'sessions');
@@ -197,49 +198,44 @@ export class ClaudeImageResolver {
 		if (size === state.offset) {
 			return;
 		}
-		const handle = await fs.promises.open(state.transcript, 'r');
-		let text: string;
-		try {
-			const buffer = Buffer.alloc(size - state.offset);
-			await handle.read(buffer, 0, buffer.length, state.offset);
-			text = state.partial + buffer.toString('utf8');
-		} finally {
-			await handle.close();
-		}
-		state.offset = size;
-		const lines = text.split('\n');
-		state.partial = lines.pop() ?? '';
-
 		let sawUnnumbered = false;
-		for (const line of lines) {
+		const position = await readTranscriptLines(state.transcript, state, size, line => {
 			// Cheap pre-filter: most lines are tool calls and never carry images.
 			if (!line.includes('"imagePasteIds"') && !line.includes('"type":"image"') && !line.includes('inlined_image_paths')) {
-				continue;
+				return;
 			}
 			let entry: ITranscriptEntry;
 			try {
 				entry = JSON.parse(line);
 			} catch {
-				continue;
+				return;
 			}
 			if (entry.attachment?.type === 'inlined_image_paths') {
 				if (state.lastUnnumbered && !state.lastUnnumbered.paths) {
 					state.lastUnnumbered.paths = entry.attachment.paths;
 				}
-				continue;
+				return;
 			}
 			// Only prompts the user typed; tool screenshots arrive as meta user messages.
 			if (entry.type !== 'user' || entry.isSidechain || entry.isMeta || (entry.origin && entry.origin.kind !== 'human') || !Array.isArray(entry.message?.content)) {
-				continue;
+				return;
 			}
 			const blocks = entry.message.content.filter(b => b?.type === 'image');
 			if (!blocks.length) {
-				continue;
+				return;
 			}
 			if (entry.imagePasteIds?.length) {
 				entry.imagePasteIds.forEach((id, i) => {
-					if (blocks[i]) {
-						state.pendingBlocks.set(id, blocks[i]);
+					const block = blocks[i];
+					if (!block) {
+						return;
+					}
+					// Decode to the cache right away rather than holding the base64 in memory.
+					const file = state.files.has(id) ? undefined : this._writeDecoded(sessionId, id, block);
+					if (file) {
+						state.files.set(id, file);
+					} else if (!state.files.has(id)) {
+						state.pendingBlocks.set(id, block);
 					}
 				});
 				state.lastUnnumbered = undefined;
@@ -249,7 +245,9 @@ export class ClaudeImageResolver {
 				state.lastUnnumbered = message;
 				sawUnnumbered = true;
 			}
-		}
+		});
+		state.offset = position.offset;
+		state.partial = position.partial;
 		if (sawUnnumbered || state.unnumbered.length) {
 			await this._numberUnnumbered(state, sessionId);
 		}

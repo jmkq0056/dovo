@@ -13,6 +13,7 @@
 import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { readTranscriptLines } from './transcriptLines';
 import { findSessionId, findTranscript, readSessionRecords } from './claudeImageResolver';
 
 /** A piece of Claude's reply. */
@@ -362,30 +363,21 @@ export class ClaudeSessionReader {
 		if (size === state.offset) {
 			return;
 		}
-		const handle = await fs.promises.open(state.transcript, 'r');
-		let text: string;
-		try {
-			const buffer = Buffer.alloc(size - state.offset);
-			await handle.read(buffer, 0, buffer.length, state.offset);
-			text = state.partial + buffer.toString('utf8');
-		} finally {
-			await handle.close();
-		}
-		state.offset = size;
-		const lines = text.split('\n');
-		state.partial = lines.pop() ?? '';
-		for (const line of lines) {
+		const position = await readTranscriptLines(state.transcript, state, size, line => {
 			if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"') && !line.includes('"type":"queued_command"') && !line.includes('task-notification')) {
-				continue;
+				return;
 			}
 			let entry: ITranscriptEntry;
 			try {
-				entry = JSON.parse(line);
+				// Images aren't needed here; dropping their base64 keeps parsing cheap.
+				entry = JSON.parse(line.length > 50_000 ? line.replace(/"data":"[A-Za-z0-9+/=]{1000,}"/g, '"data":""') : line);
 			} catch {
-				continue;
+				return;
 			}
 			this._apply(state, entry);
-		}
+		});
+		state.offset = position.offset;
+		state.partial = position.partial;
 	}
 
 	private _apply(state: ISessionState, entry: ITranscriptEntry): void {

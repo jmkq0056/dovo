@@ -13,9 +13,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
 <style>
-  /* Layout: sticky nav; hero over a glyph field with a download card and a framed product mock;
-     alternating text/mock feature rows; a three-card row; a gradient call-to-action; a compact
-     grid of the rest; install cards; footer. Dovo colors: deep maroon surfaces, crimson accent. */
+  /* Layout: sticky nav; hero with the download and a product mock; text/mock feature rows;
+     three columns on watching Claude work; the install commands; a plain list of the rest; footer.
+     Flat surfaces, hairline borders, one accent (Ember amber). */
   :root {
     --bg: #141114;
     --bg-2: #1a1618;
@@ -61,9 +61,7 @@
   /* ---------- Nav ---------- */
   nav {
     position: sticky; top: 0; z-index: 50;
-    background: rgba(20, 17, 20, 0.82);
-    backdrop-filter: saturate(160%) blur(14px);
-    -webkit-backdrop-filter: saturate(160%) blur(14px);
+    background: var(--bg);
     border-bottom: 1px solid var(--line);
   }
   nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
@@ -86,36 +84,25 @@
   .btn:hover { background: var(--accent-hover); }
 
   /* ---------- Hero ---------- */
-  .hero { position: relative; padding: 88px 0 0; text-align: center; isolation: isolate; }
-  .glyphs {
-    position: absolute; inset: 0 0 auto 0; height: 760px; z-index: -1; pointer-events: none;
-    mask-image: radial-gradient(ellipse 85% 70% at 50% 30%, #000 20%, transparent 78%);
-    -webkit-mask-image: radial-gradient(ellipse 85% 70% at 50% 30%, #000 20%, transparent 78%);
-  }
-  .glyphs canvas { width: 100%; height: 100%; display: block; }
+  .hero { padding: 80px 0 0; }
+  .hero-top { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 56px; align-items: end; }
   .hero h1 {
-    margin: 0 auto; max-width: 980px;
-    font-size: clamp(42px, 7.2vw, 76px); font-weight: 800; line-height: 1.08; letter-spacing: -.035em;
+    margin: 0; max-width: 760px;
+    font-size: clamp(38px, 5.6vw, 64px); font-weight: 750; line-height: 1.06; letter-spacing: -.03em;
   }
-  .hero h1 .accent { background: linear-gradient(100deg, #fcd34d, var(--accent) 60%); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .hero .lede { margin: 22px auto 0; max-width: 700px; font-size: clamp(19px, 2.3vw, 26px); font-weight: 600; letter-spacing: -.01em; color: var(--fg); line-height: 1.35; }
-  .hero .lede-sub { margin: 14px auto 0; max-width: 640px; color: var(--muted); font-size: 17px; }
+  .hero .lede { margin: 20px 0 0; max-width: 640px; color: var(--muted); font-size: 18.5px; line-height: 1.55; }
+  .hero .used { margin: 18px 0 0; display: flex; align-items: center; gap: 9px; color: var(--fg); font-size: 15px; }
+  .hero .used i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
 
-  .dl-card {
-    margin: 38px auto 0; width: min(420px, 100%);
-    padding: 18px 18px 14px; border-radius: 12px;
-    background: rgba(31, 26, 29, 0.88); border: 1px solid var(--line-strong);
-    box-shadow: 0 24px 60px -30px rgba(0, 0, 0, .8);
-    backdrop-filter: blur(6px);
-  }
+  .dl-card { width: 100%; }
   .dl-main {
     display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%;
-    padding: 15px 18px; border-radius: 8px;
-    background: #f6efe6; color: #120f10; text-decoration: none;
-    font: 700 19px var(--sans); letter-spacing: -.01em;
-    transition: transform .15s ease, background .15s ease;
+    padding: 14px 18px; border-radius: 6px;
+    background: var(--accent); color: #1a1208; text-decoration: none;
+    font: 700 18px var(--sans); letter-spacing: -.01em;
+    transition: background .15s ease;
   }
-  .dl-main:hover { background: #fff; transform: translateY(-1px); }
+  .dl-main:hover { background: var(--accent-hover); }
   .dl-main svg { width: 22px; height: 22px; }
   .dl-main small { font-weight: 500; font-size: 14px; color: #6b6056; }
   .dl-alt { margin: 13px 0 0; font-size: 14.5px; color: var(--muted); }
@@ -124,23 +111,16 @@
 
   /* ---------- Product mock ---------- */
   .frame {
-    position: relative; margin: 64px auto 0; max-width: 1140px;
-    padding: 46px 46px 0; border-radius: 16px 16px 0 0;
-    background:
-      radial-gradient(120% 90% at 15% 0%, #fcd34d 0%, transparent 55%),
-      radial-gradient(90% 80% at 100% 20%, #ea580c 0%, transparent 60%),
-      linear-gradient(160deg, #f59e0b, #9a3412 70%);
+    position: relative; margin: 56px 0 0;
+    padding: 0; border-radius: 10px 10px 0 0;
     overflow: hidden;
   }
-  .frame.round { border-radius: 16px; padding-bottom: 46px; }
   .app {
     display: grid; grid-template-columns: 46px minmax(0, 1fr) minmax(0, 400px);
     height: 560px; border-radius: 10px 10px 0 0; overflow: hidden;
-    background: #1f1a1d; border: 1px solid rgba(0, 0, 0, .45);
-    box-shadow: 0 30px 80px -20px rgba(20, 10, 0, .7);
+    background: #1f1a1d; border: 1px solid var(--line-strong); border-bottom: 0;
     font-family: var(--mono); font-size: 13px; text-align: left; color: #ebe3d9;
   }
-  .frame.round .app { border-radius: 10px; }
   .app-title { grid-column: 1 / -1; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #262022; border-bottom: 1px solid rgba(0, 0, 0, .35); }
   .app-title i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
   .app-title i:nth-child(2) { background: #febc2e; }
@@ -227,53 +207,50 @@
   .row.flip .copy { order: 2; }
   .copy h2 { margin: 0 0 18px; font-size: clamp(30px, 3.6vw, 40px); line-height: 1.15; letter-spacing: -.025em; font-weight: 750; }
   .copy p { margin: 0 0 16px; color: var(--muted); }
-  .copy .tag { display: inline-block; margin-bottom: 14px; padding: 2px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-hover); font-size: 13px; font-weight: 600; }
+  .copy .tag { display: block; margin-bottom: 10px; color: var(--subtle); font: 500 13px var(--mono); }
   .copy ul { margin: 0 0 16px; padding: 0; list-style: none; color: var(--muted); }
   .copy li { position: relative; padding-left: 22px; margin: 0 0 8px; }
   .copy li::before { content: ''; position: absolute; left: 2px; top: .62em; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
-  .shot { border-radius: 16px; padding: 34px; background: radial-gradient(110% 90% at 0% 0%, #fcd34d, transparent 55%), linear-gradient(150deg, #ea580c, #7c2d12 80%); }
-  .shot .app { height: auto; grid-template-columns: minmax(0, 1fr); border-radius: 10px; }
+  .shot .app { height: auto; grid-template-columns: minmax(0, 1fr); border-radius: 10px; border-bottom: 1px solid var(--line-strong); }
   .shot .app.split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 
-  .head { text-align: center; max-width: 780px; margin: 0 auto 48px; }
+  .head { max-width: 760px; margin: 0 0 40px; }
   .head h2 { margin: 0 0 14px; font-size: clamp(32px, 4vw, 46px); letter-spacing: -.03em; line-height: 1.1; font-weight: 750; }
   .head p { margin: 0; color: var(--muted); font-size: 18px; }
 
-  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
-  .card { padding: 28px 26px; border-radius: 12px; border: 1px solid var(--line-strong); background: linear-gradient(180deg, var(--card), var(--bg-2)); }
-  .card h3 { margin: 14px 0 12px; font-size: 22px; letter-spacing: -.015em; line-height: 1.25; }
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line-strong); }
+  .card { padding: 26px 28px 8px 0; }
+  .card + .card { padding-left: 28px; border-left: 1px solid var(--line); }
+  .card h3 { margin: 0 0 10px; font-size: 20px; letter-spacing: -.015em; line-height: 1.25; }
   .card p { margin: 0 0 12px; color: var(--muted); font-size: 16px; }
-  .ic { width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-hover); border: 1px solid rgba(245, 158, 11, .3); }
-  .ic svg { width: 22px; height: 22px; }
+  .ic { display: inline-grid; place-items: center; color: var(--muted); }
+  .ic svg { width: 20px; height: 20px; }
 
   .cta {
     margin-top: 120px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 40px; align-items: center;
-    padding: 46px 44px; border-radius: 14px; border: 1px solid var(--line-strong);
-    background:
-      radial-gradient(60% 140% at 0% 100%, rgba(251, 191, 36, .55), transparent 60%),
-      radial-gradient(50% 120% at 35% 0%, rgba(234, 88, 12, .65), transparent 65%),
-      linear-gradient(110deg, #3a2410, #1a1210 70%);
+    padding: 40px 0 0; border-top: 1px solid var(--line-strong);
   }
   .cta h2 { margin: 0; font-size: clamp(28px, 3.3vw, 38px); letter-spacing: -.025em; line-height: 1.15; }
-  .cta p { margin: 0 0 14px; color: #ecdccb; }
+  .cta p { margin: 0 0 14px; color: var(--muted); }
   .qi { display: flex; flex-direction: column; gap: 10px; }
-  .qi-row { display: flex; align-items: center; gap: 10px; padding: 7px 7px 7px 14px; border-radius: 9px; background: rgba(14, 11, 12, .62); border: 1px solid var(--line-strong); min-width: 0; }
-  .qi-row.detected { border-color: rgba(251, 191, 36, .6); box-shadow: 0 0 0 3px rgba(245, 158, 11, .15); }
+  .qi-row { display: flex; align-items: center; gap: 10px; padding: 7px 7px 7px 14px; border-radius: 9px; background: var(--card); border: 1px solid var(--line-strong); min-width: 0; }
+  .qi-row.detected { border-color: var(--accent); }
   .qi-os { display: inline-flex; align-items: center; gap: 6px; flex: none; width: 88px; font-size: 13px; color: var(--muted); }
   .qi-cmd { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 13.5px; scrollbar-width: none; }
   .qi-cmd::-webkit-scrollbar { display: none; }
   .qi-cmd .p { color: var(--accent-hover); margin-right: 8px; user-select: none; }
-  .qi-copy { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 6px; border: 1px solid var(--line-strong); background: rgba(255, 255, 255, .06); color: var(--fg); font: 600 13px var(--sans); cursor: pointer; }
+  .qi-copy { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--card-2); color: var(--fg); font: 600 13px var(--sans); cursor: pointer; }
   .qi-copy:hover { background: var(--accent); border-color: var(--accent); color: #1a1208; }
   .qi-copy svg { width: 14px; height: 14px; }
 
-  .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 40px 36px; }
-  .mini h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 17.5px; letter-spacing: -.01em; }
-  .mini h3 svg { width: 20px; height: 20px; color: var(--accent-hover); flex: none; }
+  .grid4 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; border-top: 1px solid var(--line-strong); }
+  .mini { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .mini h3 { margin: 0; font-size: 15.5px; font-weight: 600; letter-spacing: 0; }
+  .mini h3 svg { display: none; }
   .mini p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
 
   .install-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
-  .install { padding: 28px 26px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--card); min-width: 0; }
+  .install { padding: 24px 0 0; border-top: 1px solid var(--line-strong); min-width: 0; }
   .install h3 { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; font-size: 21px; }
   .install h3 small { color: var(--subtle); font-weight: 500; font-size: 14px; }
   .install p { margin: 14px 0 0; color: var(--muted); font-size: 15.5px; }
@@ -285,39 +262,38 @@
   footer a { text-decoration: none; color: var(--muted); }
   footer a:hover { color: var(--fg); }
 
-  .js .fade { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s ease; }
-  .js .fade.in { opacity: 1; transform: none; }
 
   /* ---------- Narrow screens ---------- */
   @media (max-width: 1020px) {
     .app { grid-template-columns: 46px minmax(0, 1fr) minmax(0, 330px); }
     .row, .row.flip { grid-template-columns: minmax(0, 1fr); gap: 36px; }
     .row.flip .copy { order: 0; }
-    .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid4 { grid-template-columns: minmax(0, 1fr); }
     .cta { grid-template-columns: minmax(0, 1fr); }
+    .hero-top { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   }
   @media (max-width: 760px) {
     .wrap { padding: 0 16px; }
     .nav-links, .nav-gh span { display: none; }
     nav .wrap { gap: 12px; justify-content: space-between; }
     .hero { padding-top: 56px; }
-    .frame { padding: 18px 12px 0; margin-top: 44px; }
+    .frame { margin-top: 40px; }
     .app { grid-template-columns: minmax(0, 1fr); height: 520px; }
     .app .rail, .app .ed { display: none; }
     .app-title span { display: none; }
-    .shot { padding: 14px; }
     .shot .app .ed { display: flex; }
     .shot .app.split { grid-template-columns: minmax(0, 1fr) !important; }
     .shot .app.split .rail, .shot .app.split .ed { display: none; }
     .cards, .install-grid, .grid4 { grid-template-columns: minmax(0, 1fr); }
-    .cta { padding: 30px 20px; }
+    .card, .card + .card { padding: 22px 0 6px; border-left: 0; }
+    .card + .card { border-top: 1px solid var(--line); }
+    .mini { grid-template-columns: minmax(0, 1fr); gap: 4px; }
     .qi-os { width: auto; }
     .qi-os span { display: none; }
     section { padding-top: 84px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .spin, .input .caret { animation: none; }
-    .js .fade { opacity: 1; transform: none; transition: none; }
   }
 </style>
 </head>
@@ -371,21 +347,24 @@
 </nav>
 
 <header class="hero">
-  <div class="glyphs" aria-hidden="true"><canvas id="glyphs"></canvas></div>
   <div class="wrap">
-    <h1>The editor built for <span class="accent">agentic coding</span></h1>
-    <p class="lede">Code with your agent, not around it.</p>
-    <p class="lede-sub">An open source editor built on VS Code, designed around terminal coding agents and working with the Claude Code CLI today. Read the conversation like a chat, watch every change land in your files, and keep the full editor one keystroke away.</p>
+   <div class="hero-top">
+    <div>
+    <h1>An editor for working with Claude Code</h1>
+    <p class="lede">Dovo is VS Code with the Claude Code CLI built in. The conversation reads like a chat next to your files, every change Claude makes is highlighted where it happened, and the rest of the editor works the way you already know.</p>
+    <p class="used"><i></i>Free and open source. In daily use since 1.0.</p>
+    </div>
 
     <div class="dl-card">
       <a class="dl-main" id="dl-main" href="https://github.com/jmkq0056/dovo/releases/latest/download/Dovo-arm64.dmg">
         <svg><use id="dl-main-icon" href="#i-apple"/></svg><span id="dl-main-label">Download for macOS</span>
       </a>
       <p class="dl-alt"><a id="dl-other" href="https://github.com/jmkq0056/dovo/releases/latest/download/Dovo-Setup-x64.exe">Windows</a>, <a href="#install">one-line install</a>, or <a href="https://github.com/jmkq0056/dovo/releases/latest">all downloads</a></p>
-      <p class="dl-fine"><span id="ver">v2.0.1</span> · Free and open source (MIT) · Apple Silicon and Windows x64</p>
+      <p class="dl-fine"><span id="ver">v2.1.0</span> · MIT · Apple Silicon and Windows x64</p>
     </div>
+   </div>
 
-    <div class="frame fade" aria-hidden="true">
+    <div class="frame" aria-hidden="true">
       <div class="app has-title">
         <div class="app-title"><i></i><i></i><i></i><span>dovo</span></div>
         <div class="rail"><b class="on">MC</b><b>WE</b><b>AP</b><b class="add">+</b><hr><em></em><em></em><em></em></div>
@@ -442,13 +421,13 @@
 
   <section id="features">
     <div class="row">
-      <div class="copy fade">
-        <span class="tag">New in v1.3</span>
+      <div class="copy">
+        <span class="tag">Change highlights</span>
         <h2>See exactly what Claude changed</h2>
         <p>When Claude edits a file you have open, new lines light up green and removed lines appear in red right where they were, the way Claude shows a diff. The editor jumps to the first change; step through the rest with the arrows, or press Done.</p>
         <p>Open any file and Dovo shows what changed since the last commit, so you can review Claude's work without hunting through a diff view.</p>
       </div>
-      <div class="shot fade" aria-hidden="true">
+      <div class="shot" aria-hidden="true">
         <div class="app">
           <div class="ed">
             <div class="tabs"><div class="tab on"><span class="ts">TS</span>config.ts</div></div>
@@ -475,7 +454,7 @@
 
   <section id="reader">
     <div class="row flip">
-      <div class="copy fade">
+      <div class="copy">
         <span class="tag">Reader</span>
         <h2>The conversation, readable</h2>
         <p>While <code>claude</code> runs, the Reader turns its terminal into a chat: your messages as bubbles, tool steps folded, edits as cards, images as thumbnails. The Now line says what Claude is doing ("Editing app.ts &middot; 14s"), and the plain terminal is one click away.</p>
@@ -485,7 +464,7 @@
           <li>A prompt rail with fuzzy search jumps to anything you asked earlier.</li>
         </ul>
       </div>
-      <div class="shot fade" aria-hidden="true">
+      <div class="shot" aria-hidden="true">
         <div class="app">
           <div class="cl" style="position:relative">
             <div class="cl-head">
@@ -512,12 +491,12 @@
 
   <section>
     <div class="row">
-      <div class="copy fade">
-        <span class="tag">New in v1.3</span>
+      <div class="copy">
+        <span class="tag">File finder &middot; &#x2318;&#x21e7;F</span>
         <h2>Find files by name, hand them to Claude</h2>
         <p><kbd>&#x2318;&#x21e7;F</kbd> finds files and folders by name, fuzzy and instant, instead of searching inside them. Open one, or add it to Claude as an <code>@-mention</code> in one click. Dragging files or whole folders onto Claude works too, from anywhere in the tree.</p>
       </div>
-      <div class="shot fade" aria-hidden="true">
+      <div class="shot" aria-hidden="true">
         <div class="app">
           <div class="cl">
             <div class="cl-head"><div class="cl-top" style="font-weight:500;color:#c9bfb4"><svg style="width:15px;height:15px"><use href="#i-search"/></svg>chk srv</div></div>
@@ -534,62 +513,41 @@
   </section>
 
   <section>
-    <div class="head fade">
-      <h2>Claude works. You stay in charge.</h2>
-      <p>Everything Claude does in the background is visible, and you can step in at any moment.</p>
+    <div class="head">
+      <h2>While Claude is working</h2>
+      <p>What Claude runs in the background is listed, and you can step in at any point.</p>
     </div>
     <div class="cards">
-      <div class="card fade">
+      <div class="card">
         <div class="ic"><svg><use href="#i-send"/></svg></div>
         <h3>Queue and send now</h3>
         <p>Messages you type while Claude works show up queued, exactly as Claude sees them. <kbd>Ctrl &#x21b5;</kbd> sends one right away.</p>
         <p>Press Esc and the Reader marks clearly where you interrupted. Larger Input gives long prompts room.</p>
       </div>
-      <div class="card fade">
+      <div class="card">
         <div class="ic"><svg><use href="#i-server"/></svg></div>
         <h3>Background shells and agents</h3>
         <p>The Activity panel lists every command Claude runs in the background and every agent it starts, live.</p>
         <p>Read a shell's output or stop it, and open an agent to read its own conversation.</p>
       </div>
-      <div class="card fade">
+      <div class="card">
         <div class="ic"><svg><use href="#i-gauge"/></svg></div>
         <h3>True context meter</h3>
         <p>The header shows how much of Claude's context is used, read from the session itself and matching <code>/context</code>, 1M windows included.</p>
         <p>Nothing is typed into Claude to get it.</p>
       </div>
     </div>
-
-    <div class="cta fade">
-      <div>
-        <h2>Start with one command</h2>
-      </div>
-      <div>
-        <p>Paste it into Terminal or PowerShell. It installs the latest release, opens Dovo, and offers to set up Claude Code if you don't have it. Run it again to update.</p>
-        <div class="qi" id="quick-install">
-          <div class="qi-row" data-os="mac">
-            <span class="qi-os"><svg><use href="#i-apple"/></svg><span>macOS</span></span>
-            <code class="qi-cmd"><span class="p">$</span><span class="c">curl -fsSL https://jmkq0056.github.io/dovo/install.sh | bash</span></code>
-            <button class="qi-copy" type="button" aria-label="Copy the macOS install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
-          </div>
-          <div class="qi-row" data-os="win">
-            <span class="qi-os"><svg><use href="#i-windows"/></svg><span>Windows</span></span>
-            <code class="qi-cmd"><span class="p">&gt;</span><span class="c">irm https://jmkq0056.github.io/dovo/install.ps1 | iex</span></code>
-            <button class="qi-copy" type="button" aria-label="Copy the Windows install command"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
-          </div>
-        </div>
-      </div>
-    </div>
   </section>
 
   <section>
     <div class="row flip">
-      <div class="copy fade">
+      <div class="copy">
         <h2>A workspace shaped around Claude</h2>
         <p>Windows open full screen with a short splash while Claude gets ready: Dovo continues your last conversation, or starts a new one when there's nothing to resume. If Claude Code isn't installed, it says so and offers to install it.</p>
         <p>Claude takes the window in Focus mode. Press <kbd>&#x2318;B</kbd> for the IDE layout with Claude in a resizable column on the right, and <kbd>&#x2303;&#x2318;J</kbd> to hide it to a slim strip that still shows when it's working.</p>
         <p>No Copilot sign-in buttons or setup prompts in the way.</p>
       </div>
-      <div class="shot fade" aria-hidden="true">
+      <div class="shot" aria-hidden="true">
         <div class="app split" style="grid-template-columns:44px minmax(0,1fr) minmax(0,1fr)">
           <div class="rail"><b class="on">MC</b><b>WE</b><b class="add">+</b></div>
           <div class="ed">
@@ -614,33 +572,33 @@
   </section>
 
   <section id="everything">
-    <div class="head fade">
-      <h2>And everything else you'd expect</h2>
-      <p>Every feature exists because clicking through menus for Claude Code workflows got annoying. All of it sits on top of the full VS Code editor.</p>
+    <div class="head">
+      <h2>The rest</h2>
+      <p>Smaller things, each added because a Claude Code workflow needed it. All of it sits on top of the full VS Code editor.</p>
     </div>
     <div class="grid4">
-      <div class="mini fade"><h3><svg><use href="#i-stack"/></svg>Project dock</h3><p>Open and starred projects at the top of the activity bar, each in its own window. A spinner while Claude works, a bell when it needs you.</p></div>
-      <div class="mini fade"><h3><svg><use href="#i-tabs"/></svg>Tabs that tidy themselves</h3><p>At most eight tabs; files you haven't looked at for 20 minutes close by themselves, with a Reopen.</p></div>
-      <div class="mini fade"><h3><svg><use href="#i-image"/></svg>Image previews</h3><p>Pasted images preview right in Claude's terminal and the Reader, as thumbnails that open full size.</p></div>
-      <div class="mini fade"><h3><svg><use href="#i-zap"/></svg>Smart auto-launch</h3><p>Opening a project starts Claude in it, resuming the last session. Your launch flags, model and permission mode live in the Dovo panel.</p></div>
-      <div class="mini fade"><h3><svg><use href="#i-at"/></svg>Drag as @-mention</h3><p>Drop files or folders on Claude, even several from different places, and they arrive as <code>@-mentions</code>.</p></div>
-      <div class="mini fade"><h3><svg><use href="#i-undo"/></svg>Undo Claude's edits</h3><p>Roll back what Claude did to a file, per file, without touching the rest.</p></div>
-      <div class="mini fade"><h3><svg><use href="#i-file"/></svg>PDF page picker</h3><p>Pick the pages of a PDF to hand to Claude instead of the whole document.</p></div>
-      <div class="mini fade"><h3><svg><use href="#i-book"/></svg>Markdown that reads well</h3><p>Markdown opens rendered, with proper type, so Claude's plans and notes read like documents.</p></div>
-      <div class="mini fade"><h3><svg><use href="#i-server"/></svg>Right-click servers</h3><p>Start and stop the dev servers in your project from the explorer's context menu.</p></div>
-      <div class="mini fade"><h3><svg><use href="#i-clip"/></svg>Word, Excel, PowerPoint</h3><p>Click an Office file to open it in its app; right-click to convert it to TXT, JSON or PDF.</p></div>
-      <div class="mini fade"><h3><svg><use href="#i-commit"/></svg>One-click commit</h3><p>A status-bar button stages everything, commits with your message and optionally pushes.</p></div>
-      <div class="mini fade"><h3><svg><use href="#i-palette"/></svg>Theme Studio</h3><p>Accent, surface, font and size for light and dark separately; <kbd>&#x21e7;&#x2318;L</kbd> swaps between them.</p></div>
+      <div class="mini"><h3><svg><use href="#i-stack"/></svg>Project dock</h3><p>Open and starred projects at the top of the activity bar, each in its own window. A spinner while Claude works, a bell when it needs you.</p></div>
+      <div class="mini"><h3><svg><use href="#i-tabs"/></svg>Tabs that tidy themselves</h3><p>At most eight tabs; files you haven't looked at for 20 minutes close by themselves, with a Reopen.</p></div>
+      <div class="mini"><h3><svg><use href="#i-image"/></svg>Image previews</h3><p>Pasted images preview right in Claude's terminal and the Reader, as thumbnails that open full size.</p></div>
+      <div class="mini"><h3><svg><use href="#i-zap"/></svg>Smart auto-launch</h3><p>Opening a project starts Claude in it, resuming the last session. Your launch flags, model and permission mode live in the Dovo panel.</p></div>
+      <div class="mini"><h3><svg><use href="#i-at"/></svg>Drag as @-mention</h3><p>Drop files or folders on Claude, even several from different places, and they arrive as <code>@-mentions</code>.</p></div>
+      <div class="mini"><h3><svg><use href="#i-undo"/></svg>Undo Claude's edits</h3><p>Roll back what Claude did to a file, per file, without touching the rest.</p></div>
+      <div class="mini"><h3><svg><use href="#i-file"/></svg>PDF page picker</h3><p>Pick the pages of a PDF to hand to Claude instead of the whole document.</p></div>
+      <div class="mini"><h3><svg><use href="#i-book"/></svg>Markdown that reads well</h3><p>Markdown opens rendered, with proper type, so Claude's plans and notes read like documents.</p></div>
+      <div class="mini"><h3><svg><use href="#i-server"/></svg>Right-click servers</h3><p>Start and stop the dev servers in your project from the explorer's context menu.</p></div>
+      <div class="mini"><h3><svg><use href="#i-clip"/></svg>Word, Excel, PowerPoint</h3><p>Click an Office file to open it in its app; right-click to convert it to TXT, JSON or PDF.</p></div>
+      <div class="mini"><h3><svg><use href="#i-commit"/></svg>One-click commit</h3><p>A status-bar button stages everything, commits with your message and optionally pushes.</p></div>
+      <div class="mini"><h3><svg><use href="#i-palette"/></svg>Theme Studio</h3><p>Accent, surface, font and size for light and dark separately; <kbd>&#x21e7;&#x2318;L</kbd> swaps between them.</p></div>
     </div>
   </section>
 
   <section id="install">
-    <div class="head fade">
-      <h2>One command. Run it again to update.</h2>
-      <p>Each installer fetches the latest release, puts Dovo where your system expects apps, and opens it.</p>
+    <div class="head">
+      <h2>Install and update</h2>
+      <p>Each installer fetches the latest release, puts Dovo where your system expects apps, and opens it. Run it again to update. On first launch a short welcome sets up the theme and Claude Code.</p>
     </div>
-    <div class="install-grid">
-      <div class="install fade">
+    <div class="install-grid" id="quick-install">
+      <div class="install" data-os="mac">
         <h3><span class="ic"><svg><use href="#i-apple"/></svg></span>macOS <small>Apple Silicon</small></h3>
         <div class="qi-row">
           <code class="qi-cmd"><span class="p">$</span><span class="c">curl -fsSL https://jmkq0056.github.io/dovo/install.sh | bash</span></code>
@@ -648,7 +606,7 @@
         </div>
         <p>Installs into <code>/Applications</code> (an older copy goes to the Trash), clears the quarantine flag so macOS opens it without the right-click dance, and offers to install Claude Code.</p>
       </div>
-      <div class="install fade">
+      <div class="install" data-os="win">
         <h3><span class="ic"><svg><use href="#i-windows"/></svg></span>Windows <small>x64 &middot; PowerShell</small></h3>
         <div class="qi-row">
           <code class="qi-cmd"><span class="p">&gt;</span><span class="c">irm https://jmkq0056.github.io/dovo/install.ps1 | iex</span></code>
@@ -656,7 +614,7 @@
         </div>
         <p>Installs for your user with no admin rights and no wizard; adds Start menu and desktop shortcuts, Explorer's right-click menu and <code>dovo</code> on your <code>PATH</code>; offers to install Claude Code.</p>
       </div>
-      <div class="install wide fade">
+      <div class="install wide">
         <h3><span class="ic"><svg><use href="#i-download"/></svg></span>Prefer a download?</h3>
         <p>The download button at the top gets the same builds. On macOS, open the <code>.dmg</code>, drag Dovo to Applications, then right-click it and choose Open the first time (it's ad-hoc signed, not notarized). On Windows, run <code>Dovo-Setup-x64.exe</code>: it installs for your user, no admin rights needed. It isn't code-signed yet, so SmartScreen may ask you to choose More info, then Run anyway. Windows 11 with Smart App Control on, or a work PC with an app-control policy, blocks unsigned apps entirely; there, Dovo can't install until it's signed. A portable <code>Dovo-win-x64.zip</code> is on every <a class="link" href="https://github.com/jmkq0056/dovo/releases/latest">release</a> too.</p>
       </div>
@@ -675,44 +633,6 @@
 </footer>
 
 <script>
-  // Fade sections in as they scroll into view; content stays visible if this never runs.
-  document.documentElement.classList.add('js');
-  const io = new IntersectionObserver(entries => {
-    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
-  }, { rootMargin: '0px 0px -40px 0px' });
-  document.querySelectorAll('.fade').forEach(el => io.observe(el));
-
-  // The glyph field behind the hero: Claude's own marks in a quiet grid.
-  (() => {
-    const canvas = document.getElementById('glyphs');
-    const ctx = canvas.getContext && canvas.getContext('2d');
-    if (!ctx) { return; }
-    const marks = ['0', '1', '0', '1', '>', '/', '.'];
-    const draw = () => {
-      const ratio = window.devicePixelRatio || 1;
-      const width = canvas.clientWidth, height = canvas.clientHeight;
-      canvas.width = width * ratio; canvas.height = height * ratio;
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.clearRect(0, 0, width, height);
-      ctx.font = '13px "JetBrains Mono", ui-monospace, monospace';
-      ctx.textAlign = 'center';
-      let seed = 7;
-      const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-      for (let y = 18; y < height; y += 22) {
-        for (let x = 10; x < width; x += 22) {
-          const r = random();
-          const mark = marks[Math.floor(r * marks.length)];
-          ctx.fillStyle = mark === '>' || mark === '/' ? `rgba(251, 191, 36, ${0.12 + random() * 0.16})` : `rgba(255, 236, 214, ${0.045 + random() * 0.07})`;
-          ctx.fillText(mark, x, y);
-        }
-      }
-    };
-    draw();
-    let pending;
-    window.addEventListener('resize', () => { clearTimeout(pending); pending = setTimeout(draw, 150); });
-    document.fonts && document.fonts.ready.then(draw);
-  })();
-
   // The visitor's OS: the main download button and the first install row.
   const isWindows = /Windows/i.test(navigator.userAgent);
   const isMac = /Macintosh|Mac OS/i.test(navigator.userAgent);
@@ -726,9 +646,8 @@
     otherLink.href = 'https://github.com/jmkq0056/dovo/releases/latest/download/Dovo-arm64.dmg';
   }
   if (isWindows || isMac) {
-    const row = document.querySelector(`#quick-install .qi-row[data-os="${isWindows ? 'win' : 'mac'}"]`);
-    row.classList.add('detected');
-    row.parentElement.prepend(row);
+    const card = document.querySelector(`#quick-install .install[data-os="${isWindows ? 'win' : 'mac'}"]`);
+    if (card) { card.querySelector('.qi-row').classList.add('detected'); card.parentElement.prepend(card); }
   }
 
   // Copy buttons

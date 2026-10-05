@@ -386,7 +386,6 @@
 		cursor (on Claude's bottom row) shows, sliding the frame onto the footer. Clip never scrolls. */
 	overflow: clip;
 }
-.monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer > .terminal-wrapper { overflow: clip; }
 .monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer > .terminal-wrapper {
 	position: absolute;
 	left: 14px;

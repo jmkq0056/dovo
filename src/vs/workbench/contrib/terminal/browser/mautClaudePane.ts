@@ -51,7 +51,6 @@ const imageFileRegex = /\.(?:png|jpe?g|gif|webp|bmp)$/i;
 const maxColumnWidth = 1120;
 const sidePadding = 24;
 /** The live terminal strip under the Reader, framed like a chat composer. */
-const composerMaxWidth = 820;
 const composerMarginTop = 10;
 const composerPaddingX = 14;
 const composerPaddingY = 8;
@@ -196,9 +195,6 @@ export class MautClaudePane extends Disposable {
 	private _activityKey = '';
 	private _activityBody: HTMLElement | undefined;
 	private readonly _activityDisposables = this._register(new DisposableStore());
-	/** A taller input, for long prompts and Claude's menus (like its agent picker). */
-	private _composerExpanded = false;
-	private readonly _expandButton: HTMLButtonElement;
 	/** The Reader follows new output, like a chat, until you scroll up to read. */
 	private _followBottom = true;
 	/** Set while the Reader scrolls itself, so that scroll isn't taken as yours. */
@@ -245,14 +241,6 @@ export class MautClaudePane extends Disposable {
 		this._root.insertBefore(this._header, this._reader);
 		this._liveNoteText = dom.$('span.mcp-live-note-text', undefined, defaultLiveNote());
 		this._liveNote = dom.$('.mcp-live-note', undefined, dom.$('i'), this._liveNoteText);
-		this._expandButton = dom.append(this._liveNote, dom.$<HTMLButtonElement>('button.mcp-expand', { type: 'button' }));
-		this._register(dom.addDisposableListener(this._expandButton, dom.EventType.CLICK, () => {
-			this._composerExpanded = !this._composerExpanded;
-			this._renderExpandButton();
-			this._relayout();
-			this._instance?.focus();
-		}));
-		this._renderExpandButton();
 		this._root.appendChild(this._liveNote);
 		this._activity = dom.append(this._root, dom.$('.mcp-activity'));
 		this._menuPop = dom.append(this._root, dom.$('.mcp-menu-pop'));
@@ -412,7 +400,7 @@ export class MautClaudePane extends Disposable {
 				if (xterm && instance === this._instance) {
 					const store = new DisposableStore();
 					let scheduled = false;
-					store.add(xterm.raw.onRender(() => {
+					const measureSoon = () => {
 						if (!scheduled) {
 							scheduled = true;
 							dom.getWindow(this._root).requestAnimationFrame(() => {
@@ -420,7 +408,19 @@ export class MautClaudePane extends Disposable {
 								this._measureComposer();
 							});
 						}
-					}));
+					};
+					store.add(xterm.raw.onRender(measureSoon));
+					// A resize moves Claude's prompt; measure again even if nothing redraws afterwards.
+					store.add(xterm.raw.onResize(measureSoon));
+					// And keep checking while the Reader shows, so a measurement taken mid-draw (at
+					// startup, say) can never stick and leave the input on the wrong rows.
+					const timer = new IntervalTimer();
+					timer.cancelAndSet(() => {
+						if (this._readerShown) {
+							measureSoon();
+						}
+					}, 400, dom.getWindow(this._root));
+					store.add(timer);
 					this._renderWatch.value = store;
 				}
 			});
@@ -766,24 +766,26 @@ export class MautClaudePane extends Disposable {
 		const width = Math.max(0, Math.min(dimension.width - sidePadding * 2, maxColumnWidth));
 		host.width = `${width}px`;
 		host.margin = '0 auto';
+		// Both views give the terminal the very same size, so switching between them never resizes
+		// it: a resize makes Claude redraw under leftovers of its old frame (a jumbled screen).
+		const terminalWidth = Math.max(0, width - composerPaddingX * 2 - 2);
 		if (!reader) {
 			this._activity.style.bottom = '0px';
 			this._reader.style.height = '0px';
 			host.height = `${body}px`;
-			host.padding = '10px 0 0';
-			return new dom.Dimension(width, body - 10);
+			host.padding = `10px ${composerPaddingX + 1}px 0`;
+			return new dom.Dimension(terminalWidth, body - 10);
 		}
 		// Reader: the conversation above; below it the live terminal framed as a composer. The
 		// terminal keeps a full-height screen so Claude lays out normally, but the frame shows only
 		// its bottom rows: the prompt box, or a question Claude is asking.
 		const cell = this._cellHeight();
-		const terminalRows = Math.max(12, Math.floor(body * 0.85 / cell));
-		// A menu or question needs the room above the input: Larger Input steps aside while one shows.
-		const overlay = this._menuPop.classList.contains('visible') || this._askCard.classList.contains('visible');
-		const expanded = this._composerExpanded && !overlay;
-		const visibleRows = Math.min(expanded ? Math.max(this._composerRows, Math.floor(terminalRows * 0.75)) : this._composerRows, terminalRows);
+		const terminalRows = Math.max(1, Math.floor((body - 10) / cell));
+		// The input shows only Claude's prompt box: it grows with what you type (Claude's menus and
+		// questions have their own cards), never with the conversation above it.
+		const visibleRows = Math.min(this._composerRows, terminalRows);
 		const composer = Math.round(visibleRows * cell) + composerPaddingY * 2 + 2;
-		const composerWidth = Math.max(0, Math.min(dimension.width - sidePadding * 2, composerMaxWidth));
+		const composerWidth = width;
 		const readerHeight = Math.max(0, body - composer - composerMarginTop - liveNoteHeight);
 		this._reader.style.height = `${readerHeight}px`;
 		this._jumpToLatest.style.bottom = `${composer + composerMarginTop + liveNoteHeight + 14}px`;
@@ -809,7 +811,7 @@ export class MautClaudePane extends Disposable {
 		// Which slice of Claude's screen the frame shows: its bottom rows unless told otherwise.
 		this._terminalHost.style.setProperty('--mcp-shift', `${Math.round(this._composerShift * cell)}px`);
 		// Border (1px each side) and padding come out of the terminal's own width.
-		return new dom.Dimension(composerWidth - composerPaddingX * 2 - 2, Math.round(terminalRows * cell));
+		return new dom.Dimension(terminalWidth, body - 10);
 	}
 
 	private _update(): void {
@@ -1177,10 +1179,6 @@ export class MautClaudePane extends Disposable {
 		}
 	}
 
-	private _renderExpandButton(): void {
-		this._expandButton.textContent = this._composerExpanded ? localize('maut.claude.collapseInput', "Smaller Input") : localize('maut.claude.expandInput', "Larger Input");
-		this._expandButton.setAttribute('aria-pressed', String(this._composerExpanded));
-	}
 
 	// ---------- Activity: background shells and agents ----------
 

@@ -1,0 +1,85 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* The startup splash: the Maut logo while Claude gets ready, then a fade into the workbench. */
+.monaco-workbench .maut-splash {
+	position: absolute;
+	inset: 0;
+	z-index: 100;
+	display: grid;
+	place-items: center;
+	background: var(--vscode-editor-background);
+	opacity: 1;
+	transition: opacity .4s ease;
+	cursor: default;
+}
+.monaco-workbench .maut-splash.leaving { opacity: 0; pointer-events: none; }
+
+.monaco-workbench .maut-splash-center {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 22px;
+	max-width: min(440px, calc(100% - 48px));
+	text-align: center;
+}
+
+.monaco-workbench .maut-splash-logo {
+	width: 112px;
+	height: 112px;
+	border-radius: 26px;
+	animation: maut-splash-in .7s cubic-bezier(.2, .8, .2, 1) both, maut-splash-glow 2.4s ease-in-out .7s infinite;
+}
+.monaco-workbench .maut-splash.leaving .maut-splash-logo { transform: scale(1.06); transition: transform .4s ease; }
+.monaco-workbench .maut-splash.failed .maut-splash-logo { animation: maut-splash-in .7s cubic-bezier(.2, .8, .2, 1) both; filter: grayscale(.35); }
+
+.monaco-workbench .maut-splash-status {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 13.5px;
+	letter-spacing: .01em;
+	animation: maut-splash-fade .6s ease .25s both;
+}
+.monaco-workbench .maut-splash-status b { color: var(--vscode-foreground); font-size: 16px; font-weight: 650; }
+.monaco-workbench .maut-splash:not(.failed) .maut-splash-status::after {
+	content: '';
+	width: 34px;
+	height: 3px;
+	margin: 10px auto 0;
+	border-radius: 2px;
+	background: linear-gradient(90deg, transparent, var(--vscode-focusBorder), transparent);
+	background-size: 200% 100%;
+	animation: maut-splash-bar 1.2s linear infinite;
+}
+
+.monaco-workbench .maut-splash-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.monaco-workbench .maut-splash-actions:empty { display: none; }
+.monaco-workbench .maut-splash-actions button {
+	padding: 7px 14px;
+	border-radius: 7px;
+	border: 1px solid var(--vscode-button-border, var(--vscode-widget-border, rgba(128, 128, 128, .4)));
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	font: inherit;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+}
+.monaco-workbench .maut-splash-actions button.maut-splash-primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: transparent; }
+.monaco-workbench .maut-splash-actions button:hover { filter: brightness(1.1); }
+
+@keyframes maut-splash-in { from { opacity: 0; transform: scale(.82); } to { opacity: 1; transform: scale(1); } }
+@keyframes maut-splash-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(200, 48, 74, 0); } 50% { box-shadow: 0 0 46px 6px rgba(200, 48, 74, .28); } }
+@keyframes maut-splash-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes maut-splash-bar { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+	.monaco-workbench .maut-splash-logo,
+	.monaco-workbench .maut-splash-status,
+	.monaco-workbench .maut-splash:not(.failed) .maut-splash-status::after { animation: none; }
+	.monaco-workbench .maut-splash { transition: none; }
+}

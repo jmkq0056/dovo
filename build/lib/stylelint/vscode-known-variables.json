@@ -1084,7 +1084,8 @@
 		"--mcp-subtle",
 		"--mcp-surface",
 		"--mcp-surface-2",
-		"--vscode-editor-font-family"
+		"--vscode-editor-font-family",
+		"--mcp-shift"
 	],
 	"sizes": [
 		"--vscode-agents-fontWeight-medium",

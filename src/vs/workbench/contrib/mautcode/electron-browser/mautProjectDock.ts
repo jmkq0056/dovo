@@ -6,15 +6,17 @@
 import * as dom from '../../../../base/browser/dom.js';
 import { StandardMouseEvent } from '../../../../base/browser/mouseEvent.js';
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
-import { toAction } from '../../../../base/common/actions.js';
+import { Separator, toAction } from '../../../../base/common/actions.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { IntervalTimer } from '../../../../base/common/async.js';
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { basename, isEqualOrParent } from '../../../../base/common/resources.js';
+import { isDefined } from '../../../../base/common/types.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
+import { IClipboardService } from '../../../../platform/clipboard/common/clipboardService.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IFileDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
@@ -30,9 +32,12 @@ import './media/mautProjectDock.css';
 const statusesCommandId = '_maut.claude.statuses';
 const storageKey = 'maut.projectDock.projects';
 const starredKey = 'maut.projectDock.starred';
-const refreshInterval = 4000;
+/** Projects you removed from the dock: hidden until you open them again from the dock's +. */
+const hiddenKey = 'maut.projectDock.hidden';
+const refreshInterval = 2000;
 
-type ClaudeState = 'working' | 'ready' | undefined;
+/** Working: Claude is busy. Needs you: it finished while you were elsewhere, until you go there. */
+type ClaudeState = 'working' | 'needs' | undefined;
 
 interface IProject {
 	readonly uri: URI;
@@ -47,7 +52,7 @@ interface IProject {
  * The project dock, at the top of the activity bar: the projects open in a window, plus the ones
  * you star (hover a project for its star, or right-click it), which stay one click away when
  * closed. Each project keeps its own window; the dock switches between them. A dot shows each
- * project's Claude: pulsing while it works, green when it's ready for you.
+ * project's Claude: a spinner while it works, a bell when it finished while you were elsewhere.
  */
 class MautProjectDock extends Disposable implements IWorkbenchContribution {
 
@@ -58,6 +63,11 @@ class MautProjectDock extends Disposable implements IWorkbenchContribution {
 	/** Projects in dock order; stable so buttons don't move under your cursor. */
 	private _order: string[];
 	private readonly _starred: Set<string>;
+	private readonly _hidden: Set<string>;
+	/** Each project's Claude, last time we looked: busy or not. */
+	private readonly _wasBusy = new Map<string, boolean>();
+	private readonly _needsYou = new Set<string>();
+	private _lastProjects = new Map<string, IProject>();
 
 	constructor(
 		@IWorkbenchLayoutService private readonly _layoutService: IWorkbenchLayoutService,
@@ -69,10 +79,17 @@ class MautProjectDock extends Disposable implements IWorkbenchContribution {
 		@IHoverService private readonly _hoverService: IHoverService,
 		@IStorageService private readonly _storageService: IStorageService,
 		@IContextMenuService private readonly _contextMenuService: IContextMenuService,
+		@IClipboardService private readonly _clipboardService: IClipboardService,
 	) {
 		super();
 		this._order = this._loadList(storageKey);
 		this._starred = new Set(this._loadList(starredKey));
+		this._hidden = new Set(this._loadList(hiddenKey));
+		// Opening a project you removed brings it back.
+		const opened = this._workspaceContextService.getWorkspace().folders[0]?.uri.toString();
+		if (opened && this._hidden.delete(opened)) {
+			this._saveList(hiddenKey, [...this._hidden]);
+		}
 		this._element = dom.$('.maut-project-dock');
 		this._element.setAttribute('role', 'toolbar');
 		this._element.setAttribute('aria-label', localize('maut.dock.label', "Projects"));
@@ -80,6 +97,10 @@ class MautProjectDock extends Disposable implements IWorkbenchContribution {
 		const timer = this._register(new IntervalTimer());
 		timer.cancelAndSet(() => this._refresh(), refreshInterval);
 		this._register(this._hostService.onDidChangeFocus(focused => focused && this._refresh()));
+		// Windows opening, closing (focus moves on) and gaining focus show up right away.
+		this._register(this._nativeHostService.onDidOpenMainWindow(() => this._refresh()));
+		this._register(this._nativeHostService.onDidFocusMainWindow(() => this._refresh()));
+		this._register(this._nativeHostService.onDidBlurMainWindow(() => this._refresh()));
 		this._refresh();
 	}
 
@@ -100,6 +121,9 @@ class MautProjectDock extends Disposable implements IWorkbenchContribution {
 			this._commandService.executeCommand<{ cwd: string; status: string }[]>(statusesCommandId).catch(() => []),
 		]);
 		const current = this._workspaceContextService.getWorkspace().folders[0]?.uri;
+		// Stars and removals are shared by every window.
+		this._replace(this._starred, this._loadList(starredKey));
+		this._replace(this._hidden, this._loadList(hiddenKey));
 		const windowFolders = windows.flatMap(window => isSingleFolderWorkspaceIdentifier(window.workspace) ? [{ uri: window.workspace.uri, id: window.id }] : []);
 
 		// What's open, and what you starred. Known projects keep their place; new ones join at the end.
@@ -109,15 +133,26 @@ class MautProjectDock extends Disposable implements IWorkbenchContribution {
 				this._order.push(key);
 			}
 		}
-		this._order = this._order.filter(key => open.has(key) || this._starred.has(key));
+		// A removed project stays out, except in its own window (so you always see where you are).
+		this._order = this._order.filter(key => (open.has(key) || this._starred.has(key)) && (!this._hidden.has(key) || key === current?.toString()));
 		this._saveList(storageKey, this._order);
 
 		const projects: IProject[] = this._order.map(key => {
 			const uri = URI.parse(key);
 			const states = (sessions ?? []).filter(session => isEqualOrParent(URI.file(session.cwd), uri)).map(session => session.status);
-			const claude: ClaudeState = states.includes('busy') ? 'working' : states.length ? 'ready' : undefined;
+			const busy = states.includes('busy');
+			const isCurrent = !!current && key === current.toString();
+			if (this._wasBusy.get(key) && !busy && states.length && !(isCurrent && this._hostService.hasFocus)) {
+				this._needsYou.add(key);
+			}
+			if (busy || !states.length || (isCurrent && this._hostService.hasFocus)) {
+				this._needsYou.delete(key);
+			}
+			this._wasBusy.set(key, busy);
+			const claude: ClaudeState = busy ? 'working' : this._needsYou.has(key) ? 'needs' : undefined;
 			return { uri, name: basename(uri), windowId: windowFolders.find(window => window.uri.toString() === key)?.id, claude, starred: this._starred.has(key) };
 		});
+		this._lastProjects = new Map(projects.map(project => [project.uri.toString(), project]));
 		this._render(projects, current);
 	}
 
@@ -133,12 +168,14 @@ class MautProjectDock extends Disposable implements IWorkbenchContribution {
 			button.classList.toggle('closed', project.windowId === undefined && !isCurrent);
 			button.setAttribute('aria-label', project.name);
 			if (project.claude) {
-				dom.append(button, dom.$(`span.maut-dock-status.${project.claude}`));
+				// One tone: a spinner while Claude works, a bell when it's waiting for you.
+				const icon = project.claude === 'working' ? ThemeIcon.modify(Codicon.loading, 'spin') : Codicon.bellDot;
+				dom.append(button, dom.$(`span.maut-dock-status.${project.claude}${ThemeIcon.asCSSSelector(icon)}`));
 			}
 			const detail = project.claude === 'working'
 				? localize('maut.dock.working', "Claude is working")
-				: project.claude === 'ready'
-					? localize('maut.dock.ready', "Claude is ready")
+				: project.claude === 'needs'
+					? localize('maut.dock.needsYou', "Claude finished and is waiting for you")
 					: project.windowId !== undefined || isCurrent ? localize('maut.dock.open', "Open") : localize('maut.dock.closed', "Click to open in a new window");
 			this._renderStore.add(this._hoverService.setupDelayedHover(button, {
 				content: `${project.name} · ${detail}\n${project.uri.fsPath}`,
@@ -155,11 +192,22 @@ class MautProjectDock extends Disposable implements IWorkbenchContribution {
 				this._toggleStar(project);
 			}));
 			this._renderStore.add(dom.addDisposableListener(button, dom.EventType.CONTEXT_MENU, e => {
+				// The dock's own menu, not the activity bar's.
 				e.preventDefault();
+				e.stopPropagation();
 				this._contextMenuService.showContextMenu({
 					getAnchor: () => new StandardMouseEvent(dom.getWindow(button), e),
 					getActions: () => [
 						toAction({ id: 'maut.dock.toggleStar', label: project.starred ? localize('maut.dock.unstarProject', "Unstar Project") : localize('maut.dock.starProject', "Star Project"), run: () => this._toggleStar(project) }),
+						toAction({
+							id: 'maut.dock.remove',
+							label: project.windowId !== undefined || isCurrent ? localize('maut.dock.closeAndRemove', "Close and Remove from Dock") : localize('maut.dock.removeProject', "Remove from Dock"),
+							run: () => this._remove(project, isCurrent),
+						}),
+						new Separator(),
+						toAction({ id: 'maut.dock.openNew', label: localize('maut.dock.openNewWindow', "Open in New Window"), run: () => this._hostService.openWindow([{ folderUri: project.uri }], { forceNewWindow: true }) }),
+						toAction({ id: 'maut.dock.reveal', label: localize('maut.dock.reveal', "Reveal in Finder"), run: () => this._nativeHostService.showItemInFolder(project.uri.fsPath) }),
+						toAction({ id: 'maut.dock.copyPath', label: localize('maut.dock.copyPath', "Copy Path"), run: () => this._clipboardService.writeText(project.uri.fsPath) }),
 					],
 				});
 			}));
@@ -181,6 +229,32 @@ class MautProjectDock extends Disposable implements IWorkbenchContribution {
 		}
 	}
 
+	/** Takes a project out of the dock, closing its window if it has one. */
+	private async _remove(project: IProject, isCurrent: boolean): Promise<void> {
+		const key = project.uri.toString();
+		this._hidden.add(key);
+		this._starred.delete(key);
+		this._saveList(hiddenKey, [...this._hidden]);
+		this._saveList(starredKey, [...this._starred]);
+		if (isCurrent) {
+			await this._nativeHostService.closeWindow();
+			return;
+		}
+		this._order = this._order.filter(existing => existing !== key);
+		this._render(this._order.map(existing => this._lastProjects.get(existing)).filter(isDefined), this._workspaceContextService.getWorkspace().folders[0]?.uri);
+		if (project.windowId !== undefined) {
+			await this._nativeHostService.closeWindow({ targetWindowId: project.windowId });
+		}
+		this._refresh();
+	}
+
+	private _replace(set: Set<string>, values: string[]): void {
+		set.clear();
+		for (const value of values) {
+			set.add(value);
+		}
+	}
+
 	private _toggleStar(project: IProject): void {
 		const key = project.uri.toString();
 		if (!this._starred.delete(key)) {
@@ -197,6 +271,9 @@ class MautProjectDock extends Disposable implements IWorkbenchContribution {
 			return;
 		}
 		const key = folder.toString();
+		if (this._hidden.delete(key)) {
+			this._saveList(hiddenKey, [...this._hidden]);
+		}
 		this._order = [...this._order.filter(existing => existing !== key), key];
 		this._saveList(storageKey, this._order);
 		await this._hostService.openWindow([{ folderUri: folder }], { forceNewWindow: true });

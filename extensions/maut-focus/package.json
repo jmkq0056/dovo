@@ -1,18 +1,26 @@
 {
 	"name": "maut-focus",
 	"displayName": "Maut Focus",
-	"description": "Maut Mode — one button (or shortcut) makes the current terminal or file immersively fullscreen, and a second click puts everything back exactly where it was. Preserves Claude Code session, scrollback, and editor scroll position.",
+	"description": "Legacy Maut Mode commands (Focus File, Focus Terminal). Superseded by Maut's Claude layout (Focus and IDE, Hide Claude with Ctrl+Cmd+J); kept only so existing keybindings to these commands keep working.",
 	"version": "1.0.0",
 	"publisher": "maut",
 	"license": "MIT",
-	"engines": { "vscode": "^1.121.0" },
+	"engines": {
+		"vscode": "^1.121.0"
+	},
 	"main": "./out/extension",
-	"activationEvents": [ "onStartupFinished" ],
+	"activationEvents": [
+		"onStartupFinished"
+	],
 	"capabilities": {
-		"untrustedWorkspaces": { "supported": true },
+		"untrustedWorkspaces": {
+			"supported": true
+		},
 		"virtualWorkspaces": true
 	},
-	"devDependencies": { "@types/node": "22.x" },
+	"devDependencies": {
+		"@types/node": "22.x"
+	},
 	"contributes": {
 		"commands": [
 			{
@@ -39,42 +47,6 @@
 				"category": "Maut",
 				"icon": "$(layout-sidebar-left)"
 			}
-		],
-		"keybindings": [
-			{
-				"command": "maut.focus.toggleSmart",
-				"key": "cmd+k cmd+m",
-				"mac": "cmd+k cmd+m"
-			},
-			{
-				"command": "maut.focus.toggleFile",
-				"key": "cmd+k cmd+f",
-				"mac": "cmd+k cmd+f"
-			},
-			{
-				"command": "maut.focus.toggleTerminal",
-				"key": "cmd+k cmd+t",
-				"mac": "cmd+k cmd+t"
-			}
-		],
-		"menus": {
-			"editor/title": [
-				{
-					"command": "maut.focus.toggleSidebar",
-					"group": "navigation@1"
-				},
-				{
-					"command": "maut.focus.toggleSmart",
-					"group": "navigation@2"
-				}
-			],
-			"view/title": [
-				{
-					"command": "maut.focus.toggleTerminal",
-					"group": "navigation@99",
-					"when": "view == terminal"
-				}
-			]
-		}
+		]
 	}
 }

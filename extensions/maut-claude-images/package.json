@@ -25,7 +25,7 @@
 		"commands": [
 			{
 				"command": "maut.chat.startClaude",
-				"title": "Spawn New Maut Claude (clsp)",
+				"title": "Start New Claude",
 				"category": "Maut",
 				"icon": "$(flame)"
 			},
@@ -34,6 +34,21 @@
 				"title": "Switch Maut Terminal",
 				"category": "Maut",
 				"icon": "$(list-tree)"
+			},
+			{
+				"command": "maut.claude.pickPermissionMode",
+				"title": "Choose How Claude Asks for Permission",
+				"category": "Maut"
+			},
+			{
+				"command": "maut.claude.pickModel",
+				"title": "Choose Claude's Model",
+				"category": "Maut"
+			},
+			{
+				"command": "maut.claude.editExtraArgs",
+				"title": "Edit Extra Flags for Claude",
+				"category": "Maut"
 			}
 		],
 		"menus": {
@@ -62,7 +77,7 @@
 				"maut.autoLaunchClsp": {
 					"type": "boolean",
 					"default": true,
-					"description": "On Maut code launch, automatically spawn a new clsp terminal if no Maut Claude session is already running."
+					"description": "On opening a project folder, start Claude (continuing your last conversation there) if none is running in this window."
 				},
 				"maut.autoEnterFocusMode": {
 					"type": "boolean",
@@ -73,8 +88,54 @@
 					"type": "boolean",
 					"default": true,
 					"description": "After auto-launching clsp on app open, type `/resume` + Enter ~2s later to restore the last Claude conversation."
+				},
+				"maut.claude.permissionMode": {
+					"type": "string",
+					"default": "bypassPermissions",
+					"enum": [
+						"bypassPermissions",
+						"acceptEdits",
+						"auto",
+						"manual",
+						"plan",
+						"dontAsk"
+					],
+					"enumDescriptions": [
+						"Never asks: Claude edits and runs commands freely.",
+						"Edits files without asking; asks before running commands.",
+						"Claude decides what is safe without asking.",
+						"Asks before each edit and each command.",
+						"Plans first and changes nothing until you approve.",
+						"Never asks: anything not already allowed is refused."
+					],
+					"description": "How Claude asks before acting, every time Maut starts Claude."
+				},
+				"maut.claude.model": {
+					"type": "string",
+					"default": "",
+					"description": "The model Maut starts Claude with: opus, sonnet, haiku or a full model name. Empty uses Claude Code's default."
+				},
+				"maut.claude.extraArgs": {
+					"type": "string",
+					"default": "",
+					"description": "More flags for claude when Maut starts it, like --add-dir ../shared."
+				},
+				"maut.claude.command": {
+					"type": "string",
+					"default": "claude",
+					"description": "The Claude Code executable Maut starts: claude, or a full path or wrapper script."
 				}
 			}
+		},
+		"views": {
+			"maut": [
+				{
+					"id": "maut.claude.launch",
+					"name": "Claude",
+					"icon": "$(sparkle)",
+					"contextualTitle": "Maut Claude"
+				}
+			]
 		}
 	}
 }

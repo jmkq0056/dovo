@@ -62,16 +62,18 @@
 
 .monaco-workbench .maut-dock-status {
 	position: absolute;
-	right: -3px;
-	bottom: -3px;
-	width: 11px;
-	height: 11px;
+	right: -5px;
+	bottom: -5px;
+	width: 15px;
+	height: 15px;
+	display: grid;
+	place-items: center;
 	border-radius: 50%;
-	border: 2px solid var(--vscode-activityBar-background);
+	background: var(--vscode-activityBar-background);
+	color: color-mix(in srgb, var(--vscode-foreground) 70%, transparent);
+	font-size: 11px !important;
 }
-.monaco-workbench .maut-dock-status.working { background: var(--vscode-terminal-ansiYellow, #e2b25d); animation: maut-dock-pulse 1.4s ease-in-out infinite; }
-.monaco-workbench .maut-dock-status.ready { background: var(--vscode-terminal-ansiGreen, #74d394); }
-@keyframes maut-dock-pulse { 50% { opacity: .35; } }
+.monaco-workbench .maut-dock-status.needs { color: var(--vscode-errorForeground); }
 
 .monaco-workbench .maut-dock-add {
 	width: 32px;
@@ -86,6 +88,5 @@
 .monaco-workbench .maut-dock-add:hover { color: var(--vscode-foreground); border-color: var(--vscode-foreground); }
 
 @media (prefers-reduced-motion: reduce) {
-	.monaco-workbench .maut-dock-status.working { animation: none; }
 	.monaco-workbench .maut-dock-project, .monaco-workbench .maut-dock-star { transition: none; }
 }

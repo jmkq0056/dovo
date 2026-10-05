@@ -1,0 +1,166 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* The finder: a panel over the editor, next to the activity bar. Nothing behind it resizes. */
+.monaco-workbench .maut-finder {
+	display: none;
+	position: absolute;
+	z-index: 40;
+	width: 340px;
+	max-width: calc(100vw - 120px);
+	box-sizing: border-box;
+	flex-direction: column;
+	background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+	border-right: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, .3));
+	box-shadow: 14px 0 40px rgba(0, 0, 0, .35);
+	font-size: 12.5px;
+	color: var(--vscode-foreground);
+}
+.monaco-workbench .maut-finder.open { display: flex; }
+
+.monaco-workbench .maut-finder-head { flex: none; padding: 8px 8px 6px; }
+.monaco-workbench .maut-finder-box {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	height: 30px;
+	padding: 0 9px;
+	box-sizing: border-box;
+	border-radius: 7px;
+	border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, rgba(128, 128, 128, .35)));
+	background: var(--vscode-input-background);
+	color: var(--vscode-descriptionForeground);
+}
+.monaco-workbench .maut-finder-box:focus-within { border-color: var(--vscode-focusBorder); }
+.monaco-workbench .maut-finder-input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--vscode-input-foreground); font: inherit; font-size: 13px; }
+
+.monaco-workbench .maut-finder-modes { flex: none; display: flex; gap: 4px; padding: 0 8px 6px; }
+.monaco-workbench .maut-finder-modes button {
+	flex: 1;
+	padding: 3px 0;
+	border-radius: 6px;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, .3));
+	background: none;
+	color: var(--vscode-descriptionForeground);
+	font: inherit; font-size: 11.5px; font-weight: 600;
+	cursor: pointer;
+}
+.monaco-workbench .maut-finder-modes button.on { color: var(--vscode-foreground); background: var(--vscode-list-inactiveSelectionBackground); }
+
+.monaco-workbench .maut-finder-list { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 6px; }
+.monaco-workbench .maut-finder-group { padding: 8px 12px 3px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
+.monaco-workbench .maut-finder-empty { padding: 14px 12px; color: var(--vscode-descriptionForeground); }
+.monaco-workbench .maut-finder-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 24px;
+	padding: 0 10px 0 8px;
+	white-space: nowrap;
+	cursor: pointer;
+	user-select: none;
+}
+.monaco-workbench .maut-finder-row:hover { background: var(--vscode-list-hoverBackground); }
+.monaco-workbench .maut-finder-row.selected { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
+.monaco-workbench .maut-finder-row.picked { background: var(--vscode-list-inactiveSelectionBackground); }
+.monaco-workbench .maut-finder-row.selected.picked { background: var(--vscode-list-activeSelectionBackground); }
+.monaco-workbench .maut-finder-pick {
+	flex: none;
+	width: 12px;
+	height: 12px;
+	border-radius: 3px;
+	border: 1.5px solid var(--vscode-checkbox-border, rgba(128, 128, 128, .5));
+	opacity: 0;
+}
+.monaco-workbench .maut-finder-row:hover .maut-finder-pick,
+.monaco-workbench .maut-finder-pick.on { opacity: 1; }
+.monaco-workbench .maut-finder-pick.on { background: var(--vscode-button-background); border-color: var(--vscode-button-background); }
+.monaco-workbench .maut-finder-chevron { flex: none; width: 14px; font-size: 13px !important; color: var(--vscode-descriptionForeground); }
+.monaco-workbench .maut-finder-icon { flex: none; width: 16px; height: 22px; display: flex; align-items: center; }
+.monaco-workbench .maut-finder-icon > span::before { font-size: 16px; }
+.monaco-workbench .maut-finder-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.monaco-workbench .maut-finder-name mark { background: none; color: var(--vscode-list-highlightForeground); font-weight: 700; }
+.monaco-workbench .maut-finder-row.selected .maut-finder-name mark { color: inherit; text-decoration: underline; }
+.monaco-workbench .maut-finder-dir { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--vscode-descriptionForeground); font-size: 11.5px; text-align: right; }
+.monaco-workbench .maut-finder-row.selected .maut-finder-dir { color: inherit; opacity: .8; }
+.monaco-workbench .maut-finder-tag { flex: none; margin-left: auto; font-weight: 700; font-size: 10.5px; }
+.monaco-workbench .maut-finder-tag.changed { color: var(--vscode-gitDecoration-modifiedResourceForeground); }
+.monaco-workbench .maut-finder-tag.new { color: var(--vscode-gitDecoration-addedResourceForeground); }
+.monaco-workbench .maut-finder-kind { flex: none; font-size: 10px; padding: 0 4px; border-radius: 4px; border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, .3)); color: var(--vscode-descriptionForeground); }
+
+.monaco-workbench .maut-finder-add {
+	display: none;
+	flex: none;
+	margin: 6px 8px 4px;
+	height: 30px;
+	border: 0;
+	border-radius: 7px;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	font: inherit; font-size: 12.5px; font-weight: 600;
+	cursor: pointer;
+}
+.monaco-workbench .maut-finder-add.visible { display: block; }
+.monaco-workbench .maut-finder-add:hover { background: var(--vscode-button-hoverBackground); }
+
+.monaco-workbench .maut-finder-foot {
+	flex: none;
+	display: flex;
+	gap: 10px;
+	height: 26px;
+	align-items: center;
+	padding: 0 12px;
+	border-top: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, .25));
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.monaco-workbench .maut-finder-foot b { font-weight: 600; color: var(--vscode-foreground); }
+
+/* The rail: under the project dock, the files you're working on, while the side bar is hidden. */
+.monaco-workbench .part.activitybar > .content > .maut-rail {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	padding: 6px 0 8px;
+	margin-bottom: 4px;
+	border-bottom: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+}
+.monaco-workbench .maut-rail-button {
+	position: relative;
+	width: 32px;
+	height: 28px;
+	display: grid;
+	place-items: center;
+	border: 0;
+	border-radius: 7px;
+	background: none;
+	color: var(--vscode-activityBar-inactiveForeground);
+	cursor: pointer;
+}
+.monaco-workbench .maut-rail-button:hover { background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent); color: var(--vscode-activityBar-foreground); }
+.monaco-workbench .maut-rail-icon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.monaco-workbench .maut-rail-icon > span::before { font-size: 16px; }
+.monaco-workbench .maut-rail-dot { position: absolute; right: 5px; top: 4px; width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--vscode-activityBar-background); }
+.monaco-workbench .maut-rail-dot.changed { background: var(--vscode-gitDecoration-modifiedResourceForeground); }
+.monaco-workbench .maut-rail-dot.new { background: var(--vscode-gitDecoration-addedResourceForeground); }
+
+/* File icon themes draw icons as backgrounds or font glyphs on ::before; size them like VS Code's
+	own icon labels do, or a background icon repeats across the box. */
+.monaco-workbench .maut-finder-icon > span::before,
+.monaco-workbench .maut-rail-icon > span::before {
+	display: inline-block;
+	width: 16px;
+	height: 16px;
+	background-size: 16px;
+	background-position: center;
+	background-repeat: no-repeat;
+	line-height: 16px !important;
+	text-align: center;
+	-webkit-font-smoothing: antialiased;
+}
+.monaco-workbench .maut-finder-input:focus { outline: none !important; }

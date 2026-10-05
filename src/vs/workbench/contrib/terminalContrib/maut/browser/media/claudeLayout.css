@@ -1,0 +1,31 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* The strip on the right edge of the editor area while Claude is hidden: its status, and a way back. */
+.monaco-workbench .maut-claude-strip {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 20;
+	width: 30px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 0 0;
+	border: 0;
+	border-left: 1px solid var(--vscode-editorGroup-border, rgba(128, 128, 128, .25));
+	background: var(--vscode-editor-background);
+	color: var(--vscode-descriptionForeground);
+	cursor: pointer;
+}
+.monaco-workbench .maut-claude-strip:hover { background: var(--vscode-list-hoverBackground); color: var(--vscode-foreground); }
+.monaco-workbench .maut-claude-strip .mcp-avatar { width: 20px; height: 20px; border-radius: 6px; }
+.monaco-workbench .maut-claude-strip-status { width: 8px; height: 8px; border-radius: 50%; background: var(--vscode-terminal-ansiGreen, #74d394); }
+.monaco-workbench .maut-claude-strip.working .maut-claude-strip-status { background: var(--vscode-terminal-ansiYellow, #e2b25d); animation: maut-strip-pulse 1.4s ease-in-out infinite; }
+.monaco-workbench .maut-claude-strip-label { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11.5px; font-weight: 600; letter-spacing: .04em; }
+@keyframes maut-strip-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .monaco-workbench .maut-claude-strip.working .maut-claude-strip-status { animation: none; } }

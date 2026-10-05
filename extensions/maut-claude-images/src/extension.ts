@@ -9,15 +9,17 @@
  *  `[Image #N]` references for the workbench's terminal image previews.
  */
 
+import * as cp from 'child_process';
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ClaudeImageResolver, findSessionId, readSessionRecords } from './claudeImageResolver';
+import { claudeCommand, registerClaudeLaunch } from './claudeLaunch';
 import { ClaudeSessionReader } from './claudeSession';
 
 // Use the full claude flag rather than the user's `clsp` alias so the app works on machines
 // where the alias isn't defined.
-const CLSP_COMMAND = 'claude --dangerously-skip-permissions';
 
 let mautTerminal: vscode.Terminal | undefined;
 
@@ -134,12 +136,12 @@ function createMautTerminal(): vscode.Terminal {
  */
 async function runClaude(terminal: vscode.Terminal, resume: boolean): Promise<void> {
 	if (!resume) {
-		await runCommand(terminal, CLSP_COMMAND);
+		await runCommand(terminal, claudeCommand());
 		return;
 	}
-	const result = await runCommand(terminal, `${CLSP_COMMAND} --continue`);
+	const result = await runCommand(terminal, `${claudeCommand()} --continue`);
 	if (result === 'ended-quickly') {
-		await runCommand(terminal, CLSP_COMMAND);
+		await runCommand(terminal, claudeCommand());
 	}
 }
 
@@ -174,6 +176,53 @@ async function runCommand(terminal: vscode.Terminal, command: string): Promise<'
 			}
 		});
 	});
+}
+
+/** Tells the workbench's startup splash what's happening. */
+function reportStartup(state: 'resuming' | 'starting' | 'skip' | 'failed', message?: string): void {
+	void vscode.commands.executeCommand('_maut.startup.status', state, message).then(undefined, () => { /* no splash */ });
+}
+
+/** Whether Claude Code has a conversation saved for `folder` (in ~/.claude/projects). */
+function hasConversation(folder: string): boolean {
+	const dir = path.join(os.homedir(), '.claude', 'projects', folder.replace(/[^a-zA-Z0-9]/g, '-'));
+	try {
+		return fs.readdirSync(dir).some(name => name.endsWith('.jsonl'));
+	} catch {
+		return false;
+	}
+}
+
+/** Why Claude can't start, if it can't: its command isn't installed or isn't found. */
+async function claudeMissing(): Promise<string | undefined> {
+	const command = (vscode.workspace.getConfiguration('maut.claude').get<string>('command', 'claude').trim() || 'claude').split(/\s+/)[0];
+	if (command.includes('/') || command.includes('\\')) {
+		return fs.existsSync(command.replace(/^~/, os.homedir())) ? undefined : `${command} doesn't exist. Check the maut.claude.command setting.`;
+	}
+	const places = [...(process.env.PATH ?? '').split(path.delimiter), path.join(os.homedir(), '.local', 'bin'), path.join(os.homedir(), '.claude', 'local'), '/opt/homebrew/bin', '/usr/local/bin'];
+	const names = process.platform === 'win32' ? [`${command}.exe`, `${command}.cmd`, command] : [command];
+	for (const dir of places) {
+		for (const name of names) {
+			if (dir && fs.existsSync(path.join(dir, name))) {
+				return undefined;
+			}
+		}
+	}
+	return `The ${command} command isn't installed on this computer, so Maut can't start Claude for you.`;
+}
+
+/** A file as it is in the last commit, or undefined when it isn't tracked (or there's no git). */
+function gitOriginal(fsPath: string): Promise<string | undefined> {
+	return new Promise(resolve => {
+		cp.execFile('git', ['-C', path.dirname(fsPath), 'show', `HEAD:./${path.basename(fsPath)}`], { maxBuffer: 16 * 1024 * 1024, timeout: 4000 }, (error, stdout) => resolve(error ? undefined : stdout));
+	});
+}
+
+/** Installs Claude Code in a terminal, with Anthropic's official installer. */
+function installClaude(): void {
+	const terminal = vscode.window.createTerminal({ name: 'Install Claude Code' });
+	terminal.show();
+	terminal.sendText(process.platform === 'win32' ? 'irm https://claude.ai/install.ps1 | iex' : 'curl -fsSL https://claude.ai/install.sh | bash', true);
 }
 
 /** True if a Claude Code process is running under any of this window's terminals. */
@@ -316,12 +365,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const imageResolver = new ClaudeImageResolver(vscode.Uri.joinPath(context.globalStorageUri, 'claude-images').fsPath);
 	imageResolver.pruneCache();
 	const sessionReader = new ClaudeSessionReader();
+	registerClaudeLaunch(context);
 	context.subscriptions.push(
 		vscode.commands.registerCommand('_maut.claudeImages.resolve', (shellPid: number | undefined, index: number) => imageResolver.resolve(shellPid, index)),
 		vscode.commands.registerCommand('_maut.claudeImages.captureClipboard', (shellPid: number | undefined, index: number) => imageResolver.captureClipboard(shellPid, index)),
 		// The conversation of the Claude session in a terminal, for the workbench's Reader view.
 		vscode.commands.registerCommand('_maut.claude.session', (shellPid: number | undefined) => sessionReader.read(shellPid)),
 		vscode.commands.registerCommand('_maut.claude.agent', (shellPid: number | undefined, agentId: string) => sessionReader.readAgent(shellPid, agentId)),
+		vscode.commands.registerCommand('_maut.claude.install', () => installClaude()),
+		vscode.commands.registerCommand('_maut.git.original', (fsPath: string) => gitOriginal(fsPath)),
+		vscode.commands.registerCommand('_maut.files.changed', (cwd: string) => sessionReader.changedFiles(cwd)),
 		vscode.commands.registerCommand('_maut.claude.stopShell', (shellPid: number | undefined, taskId: string) => sessionReader.stopShell(shellPid, taskId)),
 		// Running Claude sessions by folder, for the workbench's project dock.
 		vscode.commands.registerCommand('_maut.claude.statuses', () => runningClaudeSessions()),
@@ -363,18 +416,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 	// A restored "N -- MAUT" tab is just a fresh shell with its old output replayed, so decide on
 	// whether Claude is actually running, not on tab names. Only in a real project folder.
-	if (autoLaunch && projectFolder()) {
+	const folder = projectFolder();
+	if (autoLaunch && folder) {
 		setTimeout(async () => {
 			if (await isClaudeRunningHere()) {
+				reportStartup('skip');
 				return;
 			}
-			startClaudeInNewTerminal({ autoResume });
+			const missing = await claudeMissing();
+			if (missing) {
+				reportStartup('failed', missing);
+				return;
+			}
+			// Continue only when there is a conversation here to continue: no waiting to find out.
+			const resume = autoResume && hasConversation(folder);
+			reportStartup(resume ? 'resuming' : 'starting');
+			startClaudeInNewTerminal({ autoResume: resume });
 			if (autoFocus) {
 				setTimeout(() => {
 					void vscode.commands.executeCommand('maut.focus.toggleTerminal').then(undefined, () => { /* noop */ });
 				}, 250);
 			}
-		}, 400);
+		}, 150);
+	} else {
+		reportStartup('skip');
 	}
 }
 

@@ -268,6 +268,12 @@ export class WindowsStateHandler extends Disposable {
 	}
 
 	getNewWindowState(configuration: INativeWindowConfiguration): INewWindowState {
+		// Maut: on macOS every window opens in full screen, whatever size it had before.
+		if (isMacintosh && !configuration.extensionTestsPath && !configuration.extensionDevelopmentPath && this.configurationService.getValue<boolean>('maut.window.openFullScreen') !== false) {
+			// A position and size are required to keep the mode; leaving full screen lands on the whole screen.
+			const area = (electron.screen.getDisplayNearestPoint(electron.screen.getCursorScreenPoint()) ?? electron.screen.getPrimaryDisplay()).workArea;
+			return { ...defaultWindowState(WindowMode.Fullscreen, true), x: area.x, y: area.y, width: area.width, height: area.height, hasDefaultState: true };
+		}
 		const state = this.doGetNewWindowState(configuration);
 		const windowConfig = this.configurationService.getValue<IWindowSettings | undefined>('window');
 

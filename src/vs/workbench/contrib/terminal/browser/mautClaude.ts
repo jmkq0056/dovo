@@ -29,12 +29,23 @@ export interface IMautClaudeService {
 
 	readonly layoutMode: MautClaudeLayoutMode;
 	readonly view: MautClaudeView;
+	/** Claude's group is hidden (the slim strip shows instead); Claude keeps running. */
+	readonly hidden: boolean;
+	/** Fired when the user asks to hide or show Claude; the layout contribution applies it. */
+	readonly onDidRequestToggleHidden: Event<void>;
+	/** True while any Claude in this window is working. */
+	readonly working: boolean;
+	/** True while a Claude runs in this window. */
+	readonly hasClaude: boolean;
 
 	isClaude(instance: ITerminalInstance): boolean;
 	setClaude(instance: ITerminalInstance, running: boolean): void;
 	requestLayoutMode(mode: MautClaudeLayoutMode): void;
 	setLayoutMode(mode: MautClaudeLayoutMode): void;
 	setView(view: MautClaudeView): void;
+	requestToggleHidden(): void;
+	setHidden(hidden: boolean): void;
+	setWorking(instance: ITerminalInstance, working: boolean): void;
 }
 
 const viewStorageKey = 'maut.claude.view';
@@ -47,7 +58,12 @@ class MautClaudeService extends Disposable implements IMautClaudeService {
 	private readonly _onDidRequestLayoutMode = this._register(new Emitter<MautClaudeLayoutMode>());
 	readonly onDidRequestLayoutMode = this._onDidRequestLayoutMode.event;
 
+	private readonly _onDidRequestToggleHidden = this._register(new Emitter<void>());
+	readonly onDidRequestToggleHidden = this._onDidRequestToggleHidden.event;
+
 	private readonly _running = new Set<ITerminalInstance>();
+	private readonly _working = new Set<ITerminalInstance>();
+	private _hidden = false;
 	private _layoutMode: MautClaudeLayoutMode = 'focus';
 	private _view: MautClaudeView;
 
@@ -58,6 +74,9 @@ class MautClaudeService extends Disposable implements IMautClaudeService {
 
 	get layoutMode(): MautClaudeLayoutMode { return this._layoutMode; }
 	get view(): MautClaudeView { return this._view; }
+	get hidden(): boolean { return this._hidden; }
+	get working(): boolean { return this._working.size > 0; }
+	get hasClaude(): boolean { return this._running.size > 0; }
 
 	isClaude(instance: ITerminalInstance): boolean {
 		return this._running.has(instance);
@@ -71,6 +90,7 @@ class MautClaudeService extends Disposable implements IMautClaudeService {
 			this._running.add(instance);
 		} else {
 			this._running.delete(instance);
+			this._working.delete(instance);
 		}
 		this._onDidChange.fire();
 	}
@@ -84,6 +104,29 @@ class MautClaudeService extends Disposable implements IMautClaudeService {
 			this._layoutMode = mode;
 			this._onDidChange.fire();
 		}
+	}
+
+	requestToggleHidden(): void {
+		this._onDidRequestToggleHidden.fire();
+	}
+
+	setHidden(hidden: boolean): void {
+		if (hidden !== this._hidden) {
+			this._hidden = hidden;
+			this._onDidChange.fire();
+		}
+	}
+
+	setWorking(instance: ITerminalInstance, working: boolean): void {
+		if (working === this._working.has(instance) || (working && !this._running.has(instance))) {
+			return;
+		}
+		if (working) {
+			this._working.add(instance);
+		} else {
+			this._working.delete(instance);
+		}
+		this._onDidChange.fire();
 	}
 
 	setView(view: MautClaudeView): void {

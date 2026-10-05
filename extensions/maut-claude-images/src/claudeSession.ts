@@ -292,6 +292,11 @@ export class ClaudeSessionReader {
 		});
 	}
 
+	/** Files changed or new in the repo at `cwd`, most recently written first (for the finder). */
+	async changedFiles(cwd: string): Promise<{ path: string; isNew: boolean; mtime: number }[]> {
+		return (await this._gitChanges(cwd)).sort((a, b) => b.mtime - a.mtime).slice(0, 50);
+	}
+
 	/** Changed and untracked files of the repo at `cwd`, with their modification times; cached briefly. */
 	private _gitChanges(cwd: string): Promise<{ path: string; isNew: boolean; mtime: number }[]> {
 		const cached = this._gitCache.get(cwd);

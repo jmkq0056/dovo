@@ -6,31 +6,39 @@
 import { DataTransfers } from '../../../../base/browser/dnd.js';
 import * as dom from '../../../../base/browser/dom.js';
 import { renderMarkdown } from '../../../../base/browser/markdownRenderer.js';
+import { toAction } from '../../../../base/common/actions.js';
 import { IntervalTimer, RunOnceScheduler } from '../../../../base/common/async.js';
 import { MarkdownString } from '../../../../base/common/htmlContent.js';
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { FileAccess } from '../../../../base/common/network.js';
 import { matchesFuzzy } from '../../../../base/common/filters.js';
 import { basename, isAbsolute } from '../../../../base/common/path.js';
+import { Codicon } from '../../../../base/common/codicons.js';
+import { isMacintosh } from '../../../../base/common/platform.js';
+import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
+import { IClipboardService } from '../../../../platform/clipboard/common/clipboardService.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { CodeDataTransfers, containsDragType } from '../../../../platform/dnd/browser/dnd.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { IMautClaudeService, MautClaudeLayoutMode, MautClaudeView } from './mautClaude.js';
+import { IMautClaudeService, MautClaudeView } from './mautClaude.js';
 import type { ITerminalInstance } from './terminal.js';
 import { getFileResourcesFromDragEvent } from './terminalUri.js';
 import type { IXtermCore } from './xterm-private.js';
+import { IScreenMenu, IScreenState, readScreen } from './mautClaudeScreen.js';
 import './media/mautClaudePane.css';
 
 /** Contributed by the built-in `maut-claude-images` extension: the conversation in a terminal. */
 const sessionCommandId = '_maut.claude.session';
 const resolveImageCommandId = '_maut.claudeImages.resolve';
-const headerHeight = 46;
+/** Two rows: who and how (name, view, layout, hide), then what's happening (Now, context, tasks). */
+const headerHeight = 72;
 const refreshInterval = 1500;
 const imageFileRegex = /\.(?:png|jpe?g|gif|webp|bmp)$/i;
 /** Widest the terminal gets while Claude runs: a comfortable reading column. */
@@ -139,6 +147,9 @@ export class MautClaudePane extends Disposable {
 	/** A new activity shows once it has held for a moment, so quick switches don't flicker. */
 	private _nowPending: { label: string; since: number } | undefined;
 	private _headerKey = '';
+	private readonly _headerDisposables = this._register(new DisposableStore());
+	/** The line under the input: Claude's latest notice ("Update installed"), else a hint. */
+	private readonly _liveNoteText: HTMLElement;
 	/** Redraws the terminal from scratch: its GPU glyph cache can go blank after a resize or font change. */
 	private readonly _repaint = this._register(new RunOnceScheduler(() => {
 		const xterm = this._instance?.xterm;
@@ -170,6 +181,13 @@ export class MautClaudePane extends Disposable {
 	private readonly _imagePaths = new Map<number, string | undefined>();
 	/** Rows at the bottom of Claude's screen the composer shows: its prompt box (or a question). */
 	private _composerRows = 6;
+	/** Rows of Claude's screen below the frame's last shown row: the frame shows a slice, not just the bottom. */
+	private _composerShift = 0;
+	/** Claude's menus and questions, drawn as HTML above the input instead of inside the frame. */
+	private readonly _menuPop: HTMLElement;
+	private readonly _askCard: HTMLElement;
+	private _overlayKey = '';
+	private _menu: IScreenMenu | undefined;
 	private readonly _renderWatch = this._register(new MutableDisposable<DisposableStore>());
 	/** The terminal currently rendered with Claude's larger reading font. */
 	private _fontApplied: ITerminalInstance | undefined;
@@ -185,6 +203,8 @@ export class MautClaudePane extends Disposable {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IHoverService private readonly _hoverService: IHoverService,
 		@IOpenerService private readonly _openerService: IOpenerService,
+		@IClipboardService private readonly _clipboardService: IClipboardService,
+		@IContextMenuService private readonly _contextMenuService: IContextMenuService,
 	) {
 		super();
 		this._root.classList.add('maut-claude-host');
@@ -193,7 +213,8 @@ export class MautClaudePane extends Disposable {
 		this._column = dom.append(this._reader, dom.$('.mcp-column'));
 		this._root.insertBefore(this._reader, this._terminalHost);
 		this._root.insertBefore(this._header, this._reader);
-		this._liveNote = dom.$('.mcp-live-note', undefined, dom.$('i'), dom.$('span', undefined, localize('maut.claude.liveNote', "Live Claude terminal. What you type goes straight to Claude.")));
+		this._liveNoteText = dom.$('span.mcp-live-note-text', undefined, defaultLiveNote());
+		this._liveNote = dom.$('.mcp-live-note', undefined, dom.$('i'), this._liveNoteText);
 		this._expandButton = dom.append(this._liveNote, dom.$<HTMLButtonElement>('button.mcp-expand', { type: 'button' }));
 		this._register(dom.addDisposableListener(this._expandButton, dom.EventType.CLICK, () => {
 			this._composerExpanded = !this._composerExpanded;
@@ -204,6 +225,10 @@ export class MautClaudePane extends Disposable {
 		this._renderExpandButton();
 		this._root.appendChild(this._liveNote);
 		this._activity = dom.append(this._root, dom.$('.mcp-activity'));
+		this._menuPop = dom.append(this._root, dom.$('.mcp-menu-pop'));
+		this._askCard = dom.append(this._root, dom.$('.mcp-ask'));
+		this._register(dom.addDisposableListener(this._menuPop, dom.EventType.MOUSE_DOWN, e => e.preventDefault()));
+		this._register(dom.addDisposableListener(this._askCard, dom.EventType.MOUSE_DOWN, e => e.preventDefault()));
 		this._now = dom.$<HTMLButtonElement>('button.mcp-now', { type: 'button' });
 		dom.append(this._now, dom.$('i'));
 		this._nowLabel = dom.append(this._now, dom.$('span.mcp-now-label'));
@@ -243,6 +268,13 @@ export class MautClaudePane extends Disposable {
 			}
 		}));
 		this._register(dom.addDisposableListener(this._reader, dom.EventType.KEY_DOWN, e => {
+			if ((isMacintosh ? e.metaKey : e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c' && this._selectedText()) {
+				// Copy what you marked, before the terminal's own copy binding can take the key.
+				e.preventDefault();
+				e.stopPropagation();
+				this._clipboardService.writeText(this._selectedText());
+				return;
+			}
 			if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
 				e.preventDefault();
 				this._searchPrompts();
@@ -263,6 +295,7 @@ export class MautClaudePane extends Disposable {
 			}
 		}));
 		this._register(dom.addDisposableListener(this._reader, dom.EventType.CLICK, e => this._onReaderClick(e)));
+		this._register(dom.addDisposableListener(this._reader, dom.EventType.CONTEXT_MENU, e => this._onReaderContextMenu(e)));
 		this._registerFileDrop();
 		this._register(dom.addDisposableListener(this._terminalHost, dom.EventType.KEY_DOWN, e => this._onComposerKey(e), true));
 		// Coming back to the input, or to the window, draws it fresh.
@@ -483,23 +516,6 @@ export class MautClaudePane extends Disposable {
 		dom.getWindow(this._root).requestAnimationFrame(() => this._autoScrolling = false);
 	}
 
-	/** Rows of the two lowest rules on Claude's screen: the bottom and top of its prompt box. */
-	private _findRules(): number[] {
-		const raw = this._instance?.xterm?.raw;
-		const rules: number[] = [];
-		if (!raw) {
-			return rules;
-		}
-		const buffer = raw.buffer.active;
-		for (let row = raw.rows - 1; row >= Math.max(0, raw.rows - 30) && rules.length < 2; row--) {
-			const text = buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? '';
-			if (/^\s*[\u2500\u2501]{8,}\s*$/.test(text)) {
-				rules.push(row);
-			}
-		}
-		return rules;
-	}
-
 	/** Files dropped anywhere on Claude (the Reader included) go to Claude's prompt as paths. */
 	private _registerFileDrop(): void {
 		const accepts = (e: DragEvent) => this.active && !!this._instance && containsDragType(e, DataTransfers.FILES, DataTransfers.RESOURCES, CodeDataTransfers.FILES);
@@ -546,6 +562,7 @@ export class MautClaudePane extends Disposable {
 		}
 		this._header.classList.toggle('mcp-compact', dimension.width < 900);
 		this._header.classList.toggle('mcp-narrow', dimension.width < 700);
+		this._header.classList.toggle('mcp-tiny', dimension.width < 460);
 		const body = Math.max(0, dimension.height - headerHeight);
 		// A centered reading column instead of edge-to-edge text.
 		const width = Math.max(0, Math.min(dimension.width - sidePadding * 2, maxColumnWidth));
@@ -563,7 +580,10 @@ export class MautClaudePane extends Disposable {
 		// its bottom rows: the prompt box, or a question Claude is asking.
 		const cell = this._cellHeight();
 		const terminalRows = Math.max(12, Math.floor(body * 0.85 / cell));
-		const visibleRows = Math.min(this._composerExpanded ? Math.max(this._composerRows, Math.floor(terminalRows * 0.75)) : this._composerRows, terminalRows);
+		// A menu or question needs the room above the input: Larger Input steps aside while one shows.
+		const overlay = this._menuPop.classList.contains('visible') || this._askCard.classList.contains('visible');
+		const expanded = this._composerExpanded && !overlay;
+		const visibleRows = Math.min(expanded ? Math.max(this._composerRows, Math.floor(terminalRows * 0.75)) : this._composerRows, terminalRows);
 		const composer = Math.round(visibleRows * cell) + composerPaddingY * 2 + 2;
 		const composerWidth = Math.max(0, Math.min(dimension.width - sidePadding * 2, composerMaxWidth));
 		const readerHeight = Math.max(0, body - composer - composerMarginTop - liveNoteHeight);
@@ -581,6 +601,15 @@ export class MautClaudePane extends Disposable {
 		host.margin = `${composerMarginTop}px auto 0`;
 		host.padding = `${composerPaddingY}px ${composerPaddingX}px`;
 		this._liveNote.style.width = `${composerWidth}px`;
+		// Menus and questions sit right above the input, as wide as it.
+		for (const overlay of [this._menuPop, this._askCard]) {
+			overlay.style.width = `${composerWidth}px`;
+			overlay.style.bottom = `${composer + liveNoteHeight + 6}px`;
+			// Never taller than the room between the header and the input; it scrolls inside instead.
+			overlay.style.maxHeight = `${Math.max(0, readerHeight - 12)}px`;
+		}
+		// Which slice of Claude's screen the frame shows: its bottom rows unless told otherwise.
+		this._terminalHost.style.setProperty('--mcp-shift', `${Math.round(this._composerShift * cell)}px`);
 		// Border (1px each side) and padding come out of the terminal's own width.
 		return new dom.Dimension(composerWidth - composerPaddingX * 2 - 2, Math.round(terminalRows * cell));
 	}
@@ -622,18 +651,101 @@ export class MautClaudePane extends Disposable {
 	private _measureComposer(): void {
 		const raw = this._instance?.xterm?.raw;
 		if (!raw || !this.active || this._claudeService.view !== 'reader') {
+			this._showOverlays(undefined);
 			return;
 		}
-		const rules = this._findRules();
-		this._updateLive(rules.length === 2 ? rules[1] : raw.rows - 12);
-		// The frame shows just the prompt box (or a question Claude asks): stable while Claude works.
-		const rows = rules.length === 2 ? raw.rows - rules[1] : 12;
-		const capped = Math.max(3, Math.min(rows, Math.floor(raw.rows * 0.6)));
-		if (capped !== this._composerRows) {
-			this._composerRows = capped;
+		const screen = readScreen(raw);
+		this._setNotice(screen.notice ?? '', screen.footer ?? '');
+		this._updateLive(screen.liveTop);
+		this._showOverlays(screen);
+		// The frame shows exactly the rows that matter, never more: the prompt box and its footer, or
+		// the one hint line under a question. A long prompt grows it, up to most of the height.
+		const cap = Math.floor(raw.rows * 0.8);
+		const from = Math.max(screen.frame.from, screen.frame.to - cap + 1);
+		const rows = Math.max(1, screen.frame.to - from + 1);
+		const shift = raw.rows - 1 - screen.frame.to;
+		if (rows !== this._composerRows || shift !== this._composerShift) {
+			this._composerRows = rows;
+			this._composerShift = shift;
 			this._relayout();
 			this._repaint.schedule();
 		}
+	}
+
+	/** Claude's / and @ menus as a list above the input, and its questions as a card with buttons. */
+	private _showOverlays(screen: IScreenState | undefined): void {
+		const menu = screen?.menu;
+		const dialog = screen?.dialog;
+		const key = JSON.stringify([menu, dialog]);
+		if (key === this._overlayKey) {
+			return;
+		}
+		this._overlayKey = key;
+		this._menu = menu;
+		const hadOverlay = this._menuPop.classList.contains('visible') || this._askCard.classList.contains('visible');
+		this._menuPop.classList.toggle('visible', !!menu?.items.length);
+		this._menuPop.classList.toggle('mcp-menu-files', menu?.kind === 'file');
+		this._askCard.classList.toggle('visible', !!dialog);
+		this._root.classList.toggle('mcp-asking', !!dialog);
+		if (hadOverlay !== (!!menu?.items.length || !!dialog)) {
+			this._relayout();
+		}
+		dom.clearNode(this._menuPop);
+		if (menu?.items.length) {
+			const head = dom.append(this._menuPop, dom.$('.mcp-menu-head'));
+			dom.append(head, dom.$('span', undefined, menu.kind === 'file' ? localize('maut.claude.menuFiles', "Files") : localize('maut.claude.menuCommands', "Commands")));
+			dom.append(head, dom.$('span.mcp-menu-keys', undefined, menu.kind === 'file'
+				? localize('maut.claude.menuFileKeys', "\u2191\u2193 move \u00b7 tab insert \u00b7 esc close")
+				: localize('maut.claude.menuCommandKeys', "\u2191\u2193 move \u00b7 \u21b5 run \u00b7 tab complete \u00b7 esc close")));
+			const list = dom.append(this._menuPop, dom.$('.mcp-menu-list'));
+			let selectedRow: HTMLElement | undefined;
+			menu.items.forEach((item, index) => {
+				const row = dom.append(list, dom.$<HTMLButtonElement>(`button.mcp-menu-item${item.selected ? '.selected' : ''}`, { type: 'button' }));
+				if (item.selected) {
+					selectedRow = row;
+				}
+				dom.append(row, dom.$('span.mcp-menu-name', undefined, item.name));
+				if (item.detail) {
+					dom.append(row, dom.$('span.mcp-menu-detail', undefined, item.detail));
+				}
+				row.addEventListener('click', () => this._pickMenuItem(index));
+			});
+			selectedRow?.scrollIntoView({ block: 'nearest' });
+		}
+		dom.clearNode(this._askCard);
+		if (dialog) {
+			dom.append(this._askCard, dom.$('.mcp-ask-question', undefined, dom.$('i'), dom.$('span', undefined, dialog.question)));
+			if (dialog.details.length) {
+				dom.append(this._askCard, dom.$('pre.mcp-ask-details', undefined, dialog.details.join('\n')));
+			}
+			const options = dom.append(this._askCard, dom.$('.mcp-ask-options'));
+			for (const option of dialog.options) {
+				const button = dom.append(options, dom.$<HTMLButtonElement>(`button.mcp-ask-option${option.selected ? '.selected' : ''}`, { type: 'button' }));
+				dom.append(button, dom.$('kbd', undefined, option.key));
+				dom.append(button, dom.$('span', undefined, option.text));
+				button.addEventListener('click', () => {
+					this._instance?.sendText(option.key, false);
+					this._instance?.focus();
+				});
+			}
+			if (dialog.hint) {
+				dom.append(this._askCard, dom.$('.mcp-ask-hint', undefined, dialog.hint));
+			}
+		}
+	}
+
+	/** A click on a menu row moves Claude's selection there and completes it, as Tab would. */
+	private _pickMenuItem(index: number): void {
+		const menu = this._menu;
+		const instance = this._instance;
+		if (!menu || !instance) {
+			return;
+		}
+		const from = Math.max(0, menu.items.findIndex(item => item.selected));
+		const steps = index - from;
+		const key = steps > 0 ? '\x1b[B' : '\x1b[A';
+		instance.sendText(key.repeat(Math.abs(steps)) + '\t', false);
+		instance.focus();
 	}
 
 	/** Larger text and line spacing while Claude runs; the terminal settings otherwise. */
@@ -732,11 +844,22 @@ export class MautClaudePane extends Disposable {
 	 * screen first (the block it's on and its spinner's timer), else its latest step in the transcript.
 	 */
 	private _updateNow(): void {
-		const activity = this.active && this._isWorking() ? this._currentActivity() : undefined;
-		this._now.classList.toggle('visible', !!activity);
+		const working = this.active && this._isWorking();
+		if (this._instance) {
+			this._claudeService.setWorking(this._instance, working);
+		}
+		const activity = working ? this._currentActivity() : undefined;
+		this._now.classList.add('visible');
+		this._now.classList.toggle('idle', !activity);
 		if (!activity) {
 			this._nowPending = undefined;
-			this._nowLabel.textContent = '';
+			this._nowElapsed.textContent = '';
+			const ready = localize('maut.claude.nowReady', "Ready for your next message");
+			if (this._nowLabel.textContent !== ready) {
+				this._nowLabel.textContent = ready;
+				this._nowFile = undefined;
+				this._nowFull = ready;
+			}
 			return;
 		}
 		// The time ticks in place; the activity itself changes only once it has held for 600ms.
@@ -792,6 +915,16 @@ export class MautClaudePane extends Disposable {
 			this._openFile(file);
 		} else {
 			this._scrollToEnd(true);
+		}
+	}
+
+	/** The line under the input: Claude's notice if it has one, else its footer (the permission mode). */
+	private _setNotice(notice: string, footer = ''): void {
+		const text = notice || footer || defaultLiveNote();
+		if (this._liveNoteText.textContent !== text) {
+			this._liveNoteText.textContent = text;
+			this._liveNote.classList.toggle('mcp-notice', !!notice);
+			this._liveNote.classList.toggle('mcp-footer', !notice && !!footer);
 		}
 	}
 
@@ -956,59 +1089,77 @@ export class MautClaudePane extends Disposable {
 		const session = this._session;
 		const project = session?.project || this._workspaceContextService.getWorkspace().folders[0]?.name || localize('maut.claude.title', "Claude");
 		const meta = session?.model ? modelLabel(session.model) : '';
-		const status = !session ? 'starting' : this._isWorking() ? 'working' : session.status;
-		const statusText = status === 'working' ? localize('maut.claude.working', "Working") : status === 'idle' ? localize('maut.claude.ready', "Ready") : localize('maut.claude.starting', "Starting");
 
 		// Rebuild only when something shown changed: a rebuild drops hovers and focus.
 		const running = session?.tasks?.filter(task => task.status === 'running').length ?? 0;
-		const key = JSON.stringify([project, meta, status, session?.contextTokens, session?.contextWindow, running, this._activityOpen, this._claudeService.view, this._claudeService.layoutMode]);
+		const key = JSON.stringify([project, meta, session?.contextTokens, session?.contextWindow, running, this._activityOpen, this._claudeService.view, this._claudeService.layoutMode]);
 		this._updateNow();
 		if (key === this._headerKey && this._header.childElementCount) {
 			return;
 		}
 		this._headerKey = key;
+		this._headerDisposables.clear();
 		dom.clearNode(this._header);
-		dom.append(this._header, dom.$('span.mcp-avatar'));
-		dom.append(this._header, dom.$('span.mcp-name', undefined, project));
-		dom.append(this._header, dom.$('span.mcp-meta', undefined, meta));
-		this._header.appendChild(this._now);
-		dom.append(this._header, dom.$('span.mcp-grow'));
-		this._header.appendChild(this._activityButton(session));
-		this._header.appendChild(this._contextButton(session));
-		dom.append(this._header, dom.$(`span.mcp-status.${status}`, undefined, dom.$('i'), dom.$('span', undefined, statusText)));
-		this._header.append(
-			this._segment<MautClaudeView>(localize('maut.claude.viewLabel', "View"), [
-				['reader', localize('maut.claude.reader', "Reader"), undefined],
-				['terminal', localize('maut.claude.terminal', "Terminal"), undefined],
-			], this._claudeService.view, view => this._claudeService.setView(view)),
-			this._segment<MautClaudeLayoutMode>(localize('maut.claude.layoutLabel', "Layout"), [
-				['focus', localize('maut.claude.focus', "Focus"), undefined],
-				['ide', localize('maut.claude.ide', "IDE"), '⌘B'],
-			], this._claudeService.layoutMode, mode => this._claudeService.requestLayoutMode(mode)),
-		);
+
+		const top = dom.append(this._header, dom.$('.mcp-hrow.mcp-hrow-top'));
+		dom.append(top, dom.$('span.mcp-avatar'));
+		dom.append(top, dom.$('span.mcp-name', undefined, project));
+		dom.append(top, dom.$('span.mcp-meta', undefined, meta));
+		dom.append(top, dom.$('span.mcp-grow'));
+		top.appendChild(this._segment<MautClaudeView>(localize('maut.claude.viewLabel', "View"), [
+			['reader', localize('maut.claude.reader', "Reader"), undefined, Codicon.commentDiscussion],
+			['terminal', localize('maut.claude.terminal', "Terminal"), undefined, Codicon.terminal],
+		], this._claudeService.view, view => this._claudeService.setView(view)));
+		const ide = this._claudeService.layoutMode === 'ide';
+		top.appendChild(this._iconButton(ide ? Codicon.screenFull : Codicon.layoutSidebarLeft,
+			ide ? localize('maut.claude.toFocus', "Focus layout: Claude takes the window (\u2318B)") : localize('maut.claude.toIde', "IDE layout: files beside Claude (\u2318B)"),
+			() => this._claudeService.requestLayoutMode(ide ? 'focus' : 'ide')));
+		top.appendChild(this._iconButton(Codicon.layoutSidebarRightOff,
+			isMacintosh ? localize('maut.claude.hideMac', "Hide Claude (\u2303\u2318J)") : localize('maut.claude.hideOther', "Hide Claude (Ctrl+Alt+J)"),
+			() => this._claudeService.requestToggleHidden()));
+
+		const bottom = dom.append(this._header, dom.$('.mcp-hrow.mcp-hrow-bottom'));
+		bottom.appendChild(this._now);
+		bottom.appendChild(this._contextButton(session));
+		bottom.appendChild(this._activityButton(session));
 	}
 
-	/** How full Claude's context is, read from its transcript after every reply; never types into Claude. */
+	private _iconButton(icon: ThemeIcon, label: string, run: () => void): HTMLElement {
+		const button = dom.$<HTMLButtonElement>(`button.mcp-icon-button${ThemeIcon.asCSSSelector(icon)}`, { type: 'button' });
+		button.setAttribute('aria-label', label);
+		this._headerDisposables.add(this._hoverService.setupDelayedHover(button, { content: label }));
+		this._headerDisposables.add(dom.addDisposableListener(button, dom.EventType.CLICK, run));
+		return button;
+	}
+
 	private _contextButton(session: IClaudeSessionView | undefined): HTMLElement {
 		const element = dom.$('span.mcp-context');
 		const tokens = session?.contextTokens;
 		const window = session?.contextWindow;
 		if (tokens === undefined || !window) {
-			element.textContent = localize('maut.claude.contextPending', "Context after Claude's first reply");
 			return element;
 		}
-		dom.append(element, dom.$('b', undefined, localize('maut.claude.contextPercent', "{0}% context", Math.min(100, Math.round(tokens / window * 100)))));
-		dom.append(element, dom.$('span', undefined, `${formatTokens(tokens)} / ${formatTokens(window)}`));
-		element.title = localize('maut.claude.contextTitle', "Tokens in Claude's context after its last reply, out of its context window. Run /context in Claude for the full breakdown.");
+		const percent = Math.min(100, Math.round(tokens / window * 100));
+		const meter = dom.append(element, dom.$('span.mcp-context-meter'));
+		const fill = dom.append(meter, dom.$('b'));
+		fill.style.width = `${percent}%`;
+		element.classList.toggle('high', percent >= 80);
+		dom.append(element, dom.$('span', undefined, localize('maut.claude.contextShort', "{0}%", percent)));
+		this._headerDisposables.add(this._hoverService.setupDelayedHover(element, { content: localize('maut.claude.contextHover', "{0} of {1} tokens in Claude's context. Run /context in Claude for the breakdown.", formatTokens(tokens), formatTokens(window)) }));
 		return element;
 	}
 
-	private _segment<T extends string>(label: string, options: [T, string, string | undefined][], current: T, pick: (value: T) => void): HTMLElement {
+	private _segment<T extends string>(label: string, options: [T, string, string | undefined, ThemeIcon?][], current: T, pick: (value: T) => void): HTMLElement {
 		const group = dom.$('.mcp-seg');
 		group.setAttribute('role', 'group');
 		group.setAttribute('aria-label', label);
-		for (const [value, text, hint] of options) {
-			const button = dom.append(group, dom.$<HTMLButtonElement>('button.mcp-seg-button', { type: 'button' }, text));
+		for (const [value, text, hint, icon] of options) {
+			const button = dom.append(group, dom.$<HTMLButtonElement>('button.mcp-seg-button', { type: 'button' }));
+			if (icon) {
+				dom.append(button, dom.$(`span.mcp-seg-icon${ThemeIcon.asCSSSelector(icon)}`));
+			}
+			dom.append(button, dom.$('span.mcp-seg-label', undefined, text));
+			button.setAttribute('aria-label', text);
 			if (hint) {
 				dom.append(button, dom.$('kbd', undefined, hint));
 			}
@@ -1220,6 +1371,7 @@ export class MautClaudePane extends Disposable {
 		const reply = dom.append(element, dom.$('.mcp-reply'));
 		dom.append(reply, dom.$('span.mcp-avatar'));
 		const body = dom.append(reply, dom.$('.mcp-body'));
+		const replyText = turnReplyText(turn);
 		let steps: Extract<ClaudeItem, { kind: 'step' }>[] = [];
 		const flushSteps = (open = false) => {
 			if (steps.length) {
@@ -1266,8 +1418,14 @@ export class MautClaudePane extends Disposable {
 		}
 		if (live) {
 			dom.append(body, dom.$('.mcp-working', undefined, localize('maut.claude.workingLine', "Working…")));
-		} else if (turn.end > turn.time) {
-			dom.append(body, dom.$('.mcp-foot', undefined, localize('maut.claude.workedFor', "Worked for {0}", duration(turn.end - turn.time))));
+		} else if (turn.end > turn.time || replyText) {
+			const foot = dom.append(body, dom.$('.mcp-foot'));
+			if (replyText) {
+				foot.appendChild(this._copyButton(replyText));
+			}
+			if (turn.end > turn.time) {
+				dom.append(foot, dom.$('span', undefined, localize('maut.claude.workedFor', "Worked for {0}", duration(turn.end - turn.time))));
+			}
 		}
 		if (!body.childElementCount) {
 			reply.remove();
@@ -1330,16 +1488,26 @@ export class MautClaudePane extends Disposable {
 		const wrapper = dom.$('.mcp-steps-wrap');
 		wrapper.appendChild(box);
 		const strip = dom.append(wrapper, dom.$('.mcp-read-images'));
+		// The same file read twice (a screenshot Claude retook) shows once.
+		const seen = new Set<string>();
 		for (const step of images) {
-			const src = FileAccess.uriToBrowserUri(URI.file(step.file!)).toString(true);
+			if (seen.has(step.file!)) {
+				continue;
+			}
+			seen.add(step.file!);
 			const thumb = dom.append(strip, dom.$<HTMLImageElement>('img.mcp-read-image'));
-			thumb.src = src;
-			thumb.alt = step.target;
+			thumb.alt = '';
 			thumb.dataset.file = step.file;
+			loadImage(thumb, step.file!, () => {
+				// Still unreadable: a plain chip that opens the file, not a broken image.
+				const chip = dom.$<HTMLButtonElement>('button.mcp-read-image-missing', { type: 'button' }, basename(step.file!));
+				chip.dataset.file = step.file;
+				thumb.replaceWith(chip);
+			});
 			this._renderDisposables.add(this._hoverService.setupDelayedHover(thumb, () => {
 				const preview = dom.$('.maut-claude-image-hover');
 				const large = dom.append(preview, dom.$<HTMLImageElement>('img'));
-				large.src = src;
+				large.src = thumb.src;
 				large.alt = '';
 				dom.append(preview, dom.$('.maut-claude-image-caption', undefined, localize('maut.claude.readImage', "{0} · click to open", step.target)));
 				return { content: preview };
@@ -1373,8 +1541,8 @@ export class MautClaudePane extends Disposable {
 				return;
 			}
 			const thumb = dom.$<HTMLImageElement>('img');
-			thumb.src = FileAccess.uriToBrowserUri(URI.file(path)).toString(true);
 			thumb.alt = '';
+			loadImage(thumb, path, () => thumb.remove());
 			chip.prepend(thumb);
 			chip.dataset.file = path;
 		};
@@ -1387,6 +1555,57 @@ export class MautClaudePane extends Disposable {
 			}, () => { /* the extension isn't running yet */ });
 		}
 		return chip;
+	}
+
+	/** Copies one reply of Claude's, as the Markdown Claude wrote. */
+	private _copyButton(text: string): HTMLElement {
+		const label = localize('maut.claude.copyResponse', "Copy Response");
+		const button = dom.$<HTMLButtonElement>(`button.mcp-copy${ThemeIcon.asCSSSelector(Codicon.copy)}`, { type: 'button' });
+		button.setAttribute('aria-label', label);
+		this._renderDisposables.add(this._hoverService.setupDelayedHover(button, { content: label }));
+		this._renderDisposables.add(dom.addDisposableListener(button, dom.EventType.CLICK, async () => {
+			await this._clipboardService.writeText(text);
+			button.classList.replace(ThemeIcon.asClassName(Codicon.copy), ThemeIcon.asClassName(Codicon.check));
+			button.classList.add('copied');
+			const timer = dom.getWindow(button).setTimeout(() => {
+				button.classList.replace(ThemeIcon.asClassName(Codicon.check), ThemeIcon.asClassName(Codicon.copy));
+				button.classList.remove('copied');
+			}, 1400);
+			this._renderDisposables.add(toDisposable(() => dom.getWindow(button).clearTimeout(timer)));
+		}));
+		return button;
+	}
+
+	/** The text you marked in the Reader, if any. */
+	private _selectedText(): string {
+		const selection = dom.getWindow(this._reader).getSelection();
+		if (!selection || selection.isCollapsed || !selection.rangeCount || !dom.isAncestor(selection.getRangeAt(0).commonAncestorContainer, this._reader)) {
+			return '';
+		}
+		return selection.toString();
+	}
+
+	/** Right-click in the Reader: copy what you marked, the reply you clicked, or the whole conversation. */
+	private _onReaderContextMenu(e: MouseEvent): void {
+		const session = this._session;
+		if (!session) {
+			return;
+		}
+		e.preventDefault();
+		e.stopPropagation();
+		const selected = this._selectedText();
+		const turnElement = (e.target as HTMLElement).closest('.mcp-turn');
+		const index = turnElement ? [...this._column.children].filter(child => child.classList.contains('mcp-turn')).indexOf(turnElement) : -1;
+		const turn = index >= 0 ? session.turns[index] : undefined;
+		const reply = turn ? turnReplyText(turn) : '';
+		this._contextMenuService.showContextMenu({
+			getAnchor: () => ({ x: e.clientX, y: e.clientY }),
+			getActions: () => [
+				toAction({ id: 'maut.claude.copySelection', label: localize('maut.claude.copySelection', "Copy"), enabled: !!selected, run: () => this._clipboardService.writeText(selected) }),
+				toAction({ id: 'maut.claude.copyResponse', label: localize('maut.claude.copyResponse', "Copy Response"), enabled: !!reply, run: () => this._clipboardService.writeText(reply) }),
+				toAction({ id: 'maut.claude.copyConversation', label: localize('maut.claude.copyConversation', "Copy Conversation"), enabled: session.turns.length > 0, run: () => this._clipboardService.writeText(conversationText(session.turns)) }),
+			],
+		});
 	}
 
 	private async _onReaderClick(e: MouseEvent): Promise<void> {
@@ -1423,6 +1642,31 @@ export class MautClaudePane extends Disposable {
 	}
 }
 
+/** What Claude wrote in a turn, as Markdown: its prose, without the tool steps. */
+function turnReplyText(turn: IClaudeTurn): string {
+	return turn.items.flatMap(item => item.kind === 'text' && item.text.trim() ? [item.text.trim()] : []).join('\n\n');
+}
+
+/** The whole conversation as Markdown: your prompts and Claude's replies, in order. */
+function conversationText(turns: readonly IClaudeTurn[]): string {
+	const you = localize('maut.claude.copyYou', "You");
+	const claude = localize('maut.claude.copyClaude', "Claude");
+	const parts: string[] = [];
+	for (const turn of turns) {
+		if (turn.prompt) {
+			parts.push(`**${you}:** ${turn.prompt.trim()}`);
+		}
+		for (const item of turn.items) {
+			if (item.kind === 'user' && item.text) {
+				parts.push(`**${you}:** ${item.text.trim()}`);
+			} else if (item.kind === 'text' && item.text.trim()) {
+				parts.push(`**${claude}:** ${item.text.trim()}`);
+			}
+		}
+	}
+	return parts.join('\n\n');
+}
+
 /**
  * "Editing x.ts", "Running npm test": what a tool call is doing, from Claude's screen (`Bash(npm
  * test)`, `Update(src/x.ts)`) or a transcript step (`Ran`, `Read`).
@@ -1455,6 +1699,29 @@ function describeActivity(tool: string, target: string, file?: string): { label:
 		case 'Task': return { label: localize('maut.claude.nowAgent', "Agent: {0}", short) };
 		default: return { label: short ? `${tool}: ${short}` : tool };
 	}
+}
+
+/**
+ * Shows an image file. A failed load is cached by the browser under that address, and Claude's
+ * screenshots are often rewritten in place, so a half-written file would stay broken: retry once
+ * with a fresh address, then give up.
+ */
+function loadImage(img: HTMLImageElement, path: string, onFail: () => void): void {
+	const src = FileAccess.uriToBrowserUri(URI.file(path));
+	let retried = false;
+	img.addEventListener('error', () => {
+		if (retried) {
+			onFail();
+			return;
+		}
+		retried = true;
+		dom.getWindow(img).setTimeout(() => img.src = src.with({ query: `t=${Date.now()}` }).toString(true), 500);
+	});
+	img.src = src.toString(true);
+}
+
+function defaultLiveNote(): string {
+	return localize('maut.claude.liveNote', "Live Claude terminal. What you type goes straight to Claude.");
 }
 
 /** 48.4k, 846k, 1m: the way Claude's /context writes token counts. */

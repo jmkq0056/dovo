@@ -1,0 +1,59 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* What Claude changed, like Claude shows it: new lines in green, removed lines in red, in place. */
+.monaco-editor .maut-change-line { background: rgba(116, 211, 148, .16); }
+.monaco-editor .maut-change-gutter { border-left: 3px solid rgba(116, 211, 148, .95); margin-left: 3px; }
+.monaco-editor .maut-change-gutter-removed { border-left: 3px solid rgba(232, 70, 95, .95); margin-left: 3px; }
+
+.monaco-editor .maut-change-removed {
+	background: rgba(232, 70, 95, .14);
+	border-left: 3px solid rgba(232, 70, 95, .9);
+	box-sizing: border-box;
+	overflow: hidden;
+}
+.monaco-editor .maut-change-removed-line {
+	padding-left: 10px;
+	white-space: pre;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: color-mix(in srgb, var(--vscode-editor-foreground) 70%, transparent);
+	text-decoration: line-through;
+	text-decoration-color: rgba(232, 70, 95, .55);
+}
+.monaco-editor .maut-change-removed-line::before { content: '- '; color: rgba(232, 70, 95, .95); text-decoration: none; display: inline-block; }
+.monaco-editor .maut-change-removed-more { padding-left: 10px; font-style: italic; color: var(--vscode-descriptionForeground); }
+
+/* The bar: what changed, step through it, done. */
+.monaco-editor .maut-change-bar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 8px 18px 0 0;
+	padding: 4px 6px 4px 10px;
+	border-radius: 8px;
+	border: 1px solid var(--vscode-editorWidget-border, rgba(128, 128, 128, .35));
+	background: var(--vscode-editorWidget-background);
+	box-shadow: 0 6px 20px rgba(0, 0, 0, .3);
+	font-family: inherit;
+	font-size: 12px;
+	color: var(--vscode-foreground);
+	white-space: nowrap;
+}
+.monaco-editor .maut-change-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(116, 211, 148, .95); }
+.monaco-editor .maut-change-counter { color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
+.monaco-editor .maut-change-counter:empty { display: none; }
+.monaco-editor .maut-change-bar button {
+	min-width: 24px;
+	height: 22px;
+	padding: 0 7px;
+	border-radius: 5px;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, .3));
+	background: none;
+	color: var(--vscode-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+.monaco-editor .maut-change-bar button:hover { background: var(--vscode-toolbar-hoverBackground); }

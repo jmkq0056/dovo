@@ -49,6 +49,9 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { IHostService } from '../../../services/host/browser/host.js';
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
 import './media/dovoBrowserDock.css';
+import { generateUuid } from '../../../../base/common/uuid.js';
+import { BrowserViewUri } from '../../../../platform/browserView/common/browserViewUri.js';
+import { BrowserEditorInput } from '../../browserView/common/browserEditorInput.js';
 
 // Dovo's browser: Gecko can't run inside Electron, so the user's real Firefox (its passwords,
 // Inspector, Console, extensions) is docked: a "Firefox" editor tab sits beside the files, and its
@@ -175,7 +178,6 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 	private _visible = false;
 	/** The rectangle last reported, so the main process only hears about real changes. */
 	private _reportedKey = '';
-	private _installed: boolean | undefined;
 	private _fullScreen: { sideBar: boolean; auxiliaryBar: boolean; panel: boolean } | undefined;
 	private readonly _whileVisible = this._register(new MutableDisposable<DisposableStore>());
 	private readonly _raise = this._register(new MutableDisposable());
@@ -206,17 +208,15 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 				this._raise.value = toDisposable(() => mainWindow.clearTimeout(timer));
 			}
 		}, true));
-		if (isMacintosh) {
-			this._register(this._openerService.registerExternalOpener({
-				openExternal: async href => {
-					if (!this._configurationService.getValue<boolean>(openLinksSetting) || !/^https?:\/\//i.test(href) || !await this._isInstalled()) {
-						return false;
-					}
-					await this.open(href);
-					return true;
-				},
-			}));
-		}
+		this._register(this._openerService.registerExternalOpener({
+			openExternal: async href => {
+				if (!this._configurationService.getValue<boolean>(openLinksSetting) || !/^https?:\/\//i.test(href)) {
+					return false;
+				}
+				await this.open(href);
+				return true;
+			},
+		}));
 	}
 
 	get status(): DockStatus | undefined {
@@ -235,12 +235,21 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 		return this._configurationService.getValue<string>(appSetting)?.trim() || 'Firefox';
 	}
 
+	/**
+	 * Dovo's browser is the built-in one (Chromium, with its DevTools): a link opens in a new
+	 * browser tab beside your files; without a link, an open browser tab is focused or one opens.
+	 */
 	async open(url?: string): Promise<void> {
-		if (url) {
-			await this._nativeHostService.dovoBrowserOpenUrl(this.appName, url).catch(() => false);
+		const group = this._filesGroup();
+		if (!url) {
+			const existing = this._editorService.editors.find(editor => editor.typeId === BrowserEditorInput.ID);
+			if (existing) {
+				const holder = this._editorGroupsService.groups.find(candidate => candidate.contains(existing));
+				await this._editorService.openEditor(existing, { pinned: true }, holder ?? group);
+				return;
+			}
 		}
-		await this._editorService.openEditor(this.input, { pinned: true }, this._filesGroup());
-		this._report(true);
+		await this._editorService.openEditor({ resource: BrowserViewUri.forId(generateUuid()), options: { pinned: true, viewState: url ? { url } : undefined } }, group);
 	}
 
 	attach(body: HTMLElement): IDisposable {
@@ -422,18 +431,10 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 		});
 	}
 
-	private async _isInstalled(): Promise<boolean> {
-		if (this._installed === undefined) {
-			this._installed = await this._nativeHostService.dovoBrowserIsInstalled(this.appName).catch(() => false);
-		}
-		return this._installed;
-	}
-
 	private _setStatusFrom(result: IDovoBrowserDockResult): void {
 		if (result.status !== this._status) {
 			this._status = result.status;
 			if (result.status === 'missing') {
-				this._installed = false;
 			}
 			this._onDidChange.fire();
 		}
@@ -542,13 +543,14 @@ class DovoBrowserEditor extends EditorPane {
 
 class DovoBrowserInputSerializer implements IEditorSerializer {
 	canSerialize(): boolean {
-		return true;
+		return false;
 	}
 	serialize(): string {
 		return '';
 	}
-	deserialize(instantiationService: IInstantiationService): EditorInput {
-		return instantiationService.invokeFunction(accessor => accessor.get(IDovoBrowserService).input);
+	deserialize(): EditorInput | undefined {
+		// The docked Firefox tab is retired: the built-in browser took its place.
+		return undefined;
 	}
 }
 
@@ -587,7 +589,9 @@ class DovoBrowserView extends ViewPane {
 	protected override renderBody(container: HTMLElement): void {
 		super.renderBody(container);
 		const body = dom.append(container, dom.$('.dovo-browser-view'));
-		renderPlaceholder(body, this._browserService, this._bodyStore);
+		dom.append(body, dom.$('p', undefined, localize('dovo.browser.builtIn', "The browser opens as a tab beside your files: Chromium with its DevTools, and your logins stay. Cmd+click a link anywhere to open it there.")));
+		const newTab = dom.append(body, dom.$<HTMLButtonElement>('button.dovo-browser-primary', { type: 'button' }, localize('dovo.browser.newTabButton', "New Browser Tab")));
+		this._bodyStore.add(dom.addDisposableListener(newTab, dom.EventType.CLICK, () => void this._browserService.open('about:blank')));
 		if (this.isBodyVisible()) {
 			void this._browserService.open();
 		}
@@ -596,7 +600,7 @@ class DovoBrowserView extends ViewPane {
 
 const browserContainer = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewContainersRegistry).registerViewContainer({
 	id: containerId,
-	title: localize2('dovo.browser.containerTitle', "Firefox"),
+	title: localize2('dovo.browser.containerTitle', "Browser"),
 	icon: Codicon.globe,
 	ctorDescriptor: new SyncDescriptor(ViewPaneContainer, [containerId, { mergeViewWithContainerWhenSingleView: true }]),
 	order: 8,
@@ -605,7 +609,7 @@ const browserContainer = Registry.as<IViewContainersRegistry>(ViewExtensions.Vie
 
 Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([{
 	id: viewId,
-	name: localize2('dovo.browser.viewTitle', "Firefox"),
+	name: localize2('dovo.browser.viewTitle', "Browser"),
 	containerIcon: Codicon.globe,
 	ctorDescriptor: new SyncDescriptor(DovoBrowserView),
 	canToggleVisibility: false,

@@ -934,3 +934,18 @@
 }
 .monaco-workbench .mcp-path-link:hover { color: #fcd34d; text-decoration-color: currentColor; }
 .monaco-workbench.vs .mcp-path-link { color: #b45309; }
+
+/* Over the input while the Remote Control button turns it on, so the typed command isn't seen. */
+.monaco-workbench .mcp-rc-cover {
+	position: absolute;
+	inset: 0;
+	z-index: 30;
+	display: grid;
+	place-items: center;
+	border-radius: inherit;
+	background: var(--vscode-editor-background);
+	color: var(--vscode-descriptionForeground);
+	font-size: 12.5px;
+	animation: mcp-rc-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mcp-rc-pulse { 50% { color: #fbbf24; } }

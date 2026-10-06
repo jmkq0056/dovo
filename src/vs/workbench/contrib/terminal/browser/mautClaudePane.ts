@@ -130,6 +130,9 @@ interface IClaudeSessionView {
  * live terminal for typing) or the full terminal. When Claude isn't running, it stays out of the
  * way and the terminal editor looks as it always did.
  */
+/** Each terminal's latest Remote Control session, kept after its link leaves the screen. */
+const remoteControlSessions = new WeakMap<ITerminalInstance, string>();
+
 /** A file path in your message: a file:// link, or an absolute path (spaces escaped) with an extension. */
 const attachedPathRegex = /file:\/\/[^\s'"]+|(?<=^|\s)(?:\/|[A-Za-z]:\\)(?:\\ |[^\s'"])+\.[A-Za-z0-9]{1,8}\b/g;
 
@@ -1523,40 +1526,58 @@ export class MautClaudePane extends Disposable {
 
 	/**
 	 * The latest Remote Control link this Claude printed (`/remote-control` prints a claude.ai
-	 * session link), read from the terminal's history so the newest one always wins.
+	 * session link), read from the terminal's history so the newest one wins, and remembered per
+	 * terminal so it still opens after the link has scrolled away or the screen was cleared.
 	 */
-	private _remoteControlSession(): string | undefined {
-		const buffer = this._instance?.xterm?.raw.buffer.active;
-		if (!buffer) {
-			return undefined;
-		}
-		let text = '';
-		for (let row = Math.max(0, buffer.length - 5000); row < buffer.length; row++) {
-			const line = buffer.getLine(row);
-			if (line) {
-				// Soft-wrapped rows join up, so a link split across the width still matches.
-				text += (line.isWrapped ? '' : '\n') + line.translateToString(true);
+	private _remoteControlSession(instance: ITerminalInstance): string | undefined {
+		const buffer = instance.xterm?.raw.buffer.active;
+		if (buffer) {
+			let text = '';
+			for (let row = Math.max(0, buffer.length - 5000); row < buffer.length; row++) {
+				const line = buffer.getLine(row);
+				if (line) {
+					// Soft-wrapped rows join up, so a link split across the width still matches.
+					text += (line.isWrapped ? '' : '\n') + line.translateToString(true);
+				}
+			}
+			for (const match of text.matchAll(/claude\.ai\/code\/(?<session>session_[A-Za-z0-9]+)/g)) {
+				if (match.groups?.session) {
+					remoteControlSessions.set(instance, match.groups.session);
+				}
 			}
 		}
-		let session: string | undefined;
-		for (const match of text.matchAll(/claude\.ai\/code\/(?<session>session_[A-Za-z0-9]+)/g)) {
-			session = match.groups?.session;
-		}
-		return session;
+		return remoteControlSessions.get(instance);
 	}
 
-	/** Opens the session in the Claude app; with Remote Control off, turns it on first. */
+	/**
+	 * Opens the session in the Claude app. With Remote Control off (no link yet), turns it on
+	 * behind a cover over the input, answers "continue" if Claude asks, then opens it.
+	 */
 	private async _openRemoteControl(): Promise<void> {
 		const instance = this._instance;
 		if (!instance) {
 			return;
 		}
-		let session = this._remoteControlSession();
+		let session = this._remoteControlSession(instance);
 		if (!session) {
-			await instance.sendText('/remote-control', true);
-			for (let attempt = 0; attempt < 20 && !session; attempt++) {
-				await timeout(500);
-				session = this._remoteControlSession();
+			const cover = dom.append(this._terminalHost, dom.$('.mcp-rc-cover', undefined, localize('maut.claude.rcStarting', "Turning on Remote Control\u2026")));
+			try {
+				await instance.sendText('/remote-control', true);
+				let answered = false;
+				for (let attempt = 0; attempt < 24 && !session; attempt++) {
+					await timeout(400);
+					session = this._remoteControlSession(instance);
+					const raw = instance.xterm?.raw;
+					const dialog = !session && !answered && raw ? readScreen(raw).dialog : undefined;
+					const keep = dialog?.options.find(option => /continue|keep|stay/i.test(option.text));
+					if (keep) {
+						// Already on, but its link is gone from the screen: keep it on, which shows the link.
+						answered = true;
+						await instance.sendText(keep.selected ? '\r' : keep.key, false);
+					}
+				}
+			} finally {
+				cover.remove();
 			}
 		}
 		if (!session) {

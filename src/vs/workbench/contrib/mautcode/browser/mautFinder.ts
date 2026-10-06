@@ -4,16 +4,18 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { DataTransfers } from '../../../../base/browser/dnd.js';
+import { AnchorAxisAlignment } from '../../../../base/browser/ui/contextview/contextview.js';
 import * as dom from '../../../../base/browser/dom.js';
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { RunOnceScheduler } from '../../../../base/common/async.js';
 import { CancellationTokenSource } from '../../../../base/common/cancellation.js';
 import { Codicon } from '../../../../base/common/codicons.js';
+import { fromNow } from '../../../../base/common/date.js';
 import { IMatch } from '../../../../base/common/filters.js';
 import { prepareQuery, scoreFuzzy2 } from '../../../../base/common/fuzzyScorer.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
-import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore, IDisposable } from '../../../../base/common/lifecycle.js';
 import { Schemas } from '../../../../base/common/network.js';
 import { isMacintosh } from '../../../../base/common/platform.js';
 import { basename, dirname, isEqualOrParent, relativePath } from '../../../../base/common/resources.js';
@@ -25,6 +27,7 @@ import { IModelService } from '../../../../editor/common/services/model.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IContextViewService, IOpenContextView } from '../../../../platform/contextview/browser/contextView.js';
 import { CodeDataTransfers } from '../../../../platform/dnd/browser/dnd.js';
 import { FileKind, IFileService } from '../../../../platform/files/common/files.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
@@ -516,9 +519,22 @@ class MautFinder extends Disposable implements IMautFinderService {
 
 registerSingleton(IMautFinderService, MautFinder, InstantiationType.Delayed);
 
+/** One folder Claude worked in: the deepest folder holding the files it changed there. */
+interface IRailFolder {
+	readonly folder: URI;
+	readonly files: readonly { readonly resource: URI; readonly isNew: boolean; readonly mtime: number }[];
+	/** When a file in it was last changed. */
+	readonly mtime: number;
+	readonly hasNew: boolean;
+}
+
+/** How many folders the rail shows before the rest go under "more". */
+const railFolderSlots = 4;
+
 /**
- * The rail: when the side bar is hidden, the activity bar shows the files Claude changed and your
- * open files under the project dock, plus the finder. The quick way back to what you're working on.
+ * The rail: when the side bar is hidden, the activity bar shows the folders Claude has been
+ * working in (the deepest folder of each change, newest first) under the project dock, plus the
+ * finder. A folder opens a panel with its files and when each changed; "more" lists them all.
  */
 class MautFinderRail extends Disposable implements IWorkbenchContribution {
 
@@ -527,7 +543,9 @@ class MautFinderRail extends Disposable implements IWorkbenchContribution {
 	private readonly _rail = dom.$('.maut-rail');
 	private readonly _buttons = this._register(new DisposableStore());
 	private readonly _refresh = this._register(new RunOnceScheduler(() => this._render(), 300));
-	private _changed: { resource: URI; isNew: boolean }[] = [];
+	private _folders: IRailFolder[] = [];
+	/** The folder panel, while open. */
+	private _panel: IOpenContextView | undefined;
 
 	constructor(
 		@IWorkbenchLayoutService private readonly _layoutService: IWorkbenchLayoutService,
@@ -537,24 +555,61 @@ class MautFinderRail extends Disposable implements IWorkbenchContribution {
 		@IHoverService private readonly _hoverService: IHoverService,
 		@IModelService private readonly _modelService: IModelService,
 		@ILanguageService private readonly _languageService: ILanguageService,
+		@IFileService private readonly _fileService: IFileService,
+		@IContextViewService private readonly _contextViewService: IContextViewService,
 		@IMautFinderService private readonly _finder: IMautFinderService,
 	) {
 		super();
 		this._register({ dispose: () => this._rail.remove() });
-		this._register(this._editorService.onDidVisibleEditorsChange(() => this._refresh.schedule()));
+		this._register({ dispose: () => this._panel?.close() });
 		this._register(this._layoutService.onDidChangePartVisibility(() => this._refresh.schedule()));
 		const timer = this._register(new dom.WindowIntervalTimer());
 		timer.cancelAndSet(() => this._loadChanged(), 5000, mainWindow);
 		this._loadChanged();
 	}
 
+	private get _root(): URI | undefined {
+		return this._workspaceContextService.getWorkspace().folders[0]?.uri;
+	}
+
 	private async _loadChanged(): Promise<void> {
-		const root = this._workspaceContextService.getWorkspace().folders[0]?.uri;
-		if (root?.scheme === Schemas.file) {
-			const files = await this._commandService.executeCommand<{ path: string; isNew: boolean }[]>(changedFilesCommandId, root.fsPath).catch(() => undefined);
-			this._changed = (files ?? []).map(file => ({ resource: URI.file(file.path), isNew: file.isNew }));
+		const root = this._root;
+		if (root?.scheme !== Schemas.file) {
+			return;
 		}
-		this._render();
+		const changed = await this._commandService.executeCommand<{ path: string; isNew: boolean }[]>(changedFilesCommandId, root.fsPath).catch(() => undefined) ?? [];
+		const stats = await Promise.all(changed.slice(0, 200).map(async file => {
+			const resource = URI.file(file.path);
+			const mtime = await this._fileService.stat(resource).then(stat => stat.mtime ?? 0, () => 0);
+			return { resource, isNew: file.isNew, mtime };
+		}));
+		const byFolder = new Map<string, { folder: URI; files: { resource: URI; isNew: boolean; mtime: number }[] }>();
+		for (const file of stats) {
+			const folder = dirname(file.resource);
+			const key = folder.toString();
+			let group = byFolder.get(key);
+			if (!group) {
+				group = { folder, files: [] };
+				byFolder.set(key, group);
+			}
+			group.files.push(file);
+		}
+		const folders = [...byFolder.values()].map(group => {
+			group.files.sort((a, b) => b.mtime - a.mtime);
+			return { folder: group.folder, files: group.files, mtime: group.files[0]?.mtime ?? 0, hasNew: group.files.some(file => file.isNew) };
+		}).sort((a, b) => b.mtime - a.mtime);
+		const key = (list: readonly IRailFolder[]) => list.map(folder => `${folder.folder}:${folder.files.length}:${folder.mtime}`).join('|');
+		if (key(folders) !== key(this._folders)) {
+			this._folders = folders;
+			this._render();
+		}
+	}
+
+	/** The folder's path from the project root, or its name outside it. */
+	private _relative(folder: URI): string {
+		const root = this._root;
+		const path = root ? relativePath(root, folder) : undefined;
+		return path === undefined ? basename(folder) : path || basename(root ?? folder);
 	}
 
 	private _render(): void {
@@ -563,6 +618,7 @@ class MautFinderRail extends Disposable implements IWorkbenchContribution {
 		const content = this._layoutService.mainContainer.querySelector('.part.activitybar > .content');
 		const show = !this._layoutService.isVisible(Parts.SIDEBAR_PART);
 		if (!content || !show) {
+			this._panel?.close();
 			this._rail.remove();
 			return;
 		}
@@ -574,39 +630,104 @@ class MautFinderRail extends Disposable implements IWorkbenchContribution {
 		}
 		this._buttons.clear();
 		dom.clearNode(this._rail);
-		const button = (icon: HTMLElement, label: string, run: () => void, tag?: string) => {
-			const element = dom.append(this._rail, dom.$<HTMLButtonElement>('button.maut-rail-button', { type: 'button' }));
+		const button = (icon: HTMLElement, label: string, run: (element: HTMLElement) => void, extraClass = '') => {
+			const element = dom.append(this._rail, dom.$<HTMLButtonElement>(`button.maut-rail-button${extraClass}`, { type: 'button' }));
 			element.appendChild(icon);
-			if (tag) {
-				dom.append(element, dom.$(`span.maut-rail-dot.${tag}`));
-			}
 			element.setAttribute('aria-label', label);
 			this._buttons.add(this._hoverService.setupDelayedHover(element, { content: label, position: { hoverPosition: HoverPosition.RIGHT } }));
-			this._buttons.add(dom.addDisposableListener(element, dom.EventType.CLICK, run));
+			this._buttons.add(dom.addDisposableListener(element, dom.EventType.CLICK, () => run(element)));
+			return element;
 		};
 		const finderLabel = isMacintosh ? localize('maut.rail.findMac', "Find files and folders (\u21e7\u2318F)") : localize('maut.rail.find', "Find files and folders (Ctrl+Shift+F)");
 		button(dom.$(`span${ThemeIcon.asCSSSelector(Codicon.search)}`), finderLabel, () => this._finder.toggle());
-		const shown = new Set<string>();
-		const files: { resource: URI; tag?: string }[] = [];
-		for (const file of this._changed.slice(0, 5)) {
-			files.push({ resource: file.resource, tag: file.isNew ? 'new' : 'changed' });
-			shown.add(file.resource.toString());
+
+		const many = this._folders.length > railFolderSlots;
+		const shown = this._folders.slice(0, many ? railFolderSlots - 1 : railFolderSlots);
+		for (const folder of shown) {
+			const icon = dom.$('span.maut-rail-folder');
+			dom.append(icon, dom.$(`span${ThemeIcon.asCSSSelector(Codicon.folder)}`));
+			dom.append(icon, dom.$('span.maut-rail-caption', undefined, basename(folder.folder)));
+			// One pill: the dot says new (green) or changed (amber), the number how many files.
+			const pill = dom.append(icon, dom.$('span.maut-rail-pill'));
+			dom.append(pill, dom.$(`span.maut-rail-pill-dot.${folder.hasNew ? 'new' : 'changed'}`));
+			dom.append(pill, dom.$('span', undefined, String(folder.files.length)));
+			const label = localize('maut.rail.folder', "{0}: {1} changed, {2}", this._relative(folder.folder), folder.files.length, fromNow(folder.mtime, true));
+			button(icon, label, element => this._togglePanel(element, folder), '.folder');
 		}
-		for (const editor of this._editorService.visibleEditors) {
-			const resource = editor.resource;
-			if (resource?.scheme === Schemas.file && !shown.has(resource.toString()) && files.length < 8) {
-				files.push({ resource });
-				shown.add(resource.toString());
+		if (many) {
+			const icon = dom.$('span.maut-rail-folder');
+			dom.append(icon, dom.$(`span${ThemeIcon.asCSSSelector(Codicon.ellipsis)}`));
+			dom.append(icon, dom.$('span.maut-rail-caption', undefined, localize('maut.rail.moreCount', "+{0}", this._folders.length - shown.length)));
+			button(icon, localize('maut.rail.more', "All folders Claude worked in"), element => this._togglePanel(element, undefined), '.folder.more');
+		}
+		button(dom.$(`span${ThemeIcon.asCSSSelector(Codicon.folderOpened)}`), localize('maut.rail.browse', "Browse files"), () => this._finder.toggle());
+	}
+
+	/** Opens the panel beside the rail: every folder, newest first, with `open` expanded. */
+	private _togglePanel(anchor: HTMLElement, open: IRailFolder | undefined): void {
+		if (this._panel) {
+			const same = anchor.classList.contains('active');
+			this._panel.close();
+			if (same) {
+				return;
 			}
 		}
-		const root = this._workspaceContextService.getWorkspace().folders[0]?.uri;
-		for (const file of files) {
-			const icon = dom.$('span.maut-rail-icon.show-file-icons');
-			dom.append(icon, dom.$(`span.${getIconClasses(this._modelService, this._languageService, file.resource, FileKind.FILE).join('.')}`));
-			const label = root ? relativePath(root, file.resource) ?? basename(file.resource) : basename(file.resource);
-			button(icon, label, () => this._editorService.openEditor({ resource: file.resource, options: { pinned: false } }), file.tag);
+		anchor.classList.add('active');
+		this._panel = this._contextViewService.showContextView({
+			getAnchor: () => anchor,
+			anchorAxisAlignment: AnchorAxisAlignment.HORIZONTAL,
+			render: container => this._renderPanel(container, open),
+			onHide: () => {
+				anchor.classList.remove('active');
+				this._panel = undefined;
+			},
+		});
+	}
+
+	private _renderPanel(container: HTMLElement, open: IRailFolder | undefined): IDisposable {
+		const store = new DisposableStore();
+		const panel = dom.append(container, dom.$('.maut-rail-panel'));
+		const head = dom.append(panel, dom.$('.maut-rail-panel-head'));
+		dom.append(head, dom.$('b', undefined, localize('maut.rail.panelTitle', "Where Claude worked")));
+		const total = this._folders.reduce((sum, folder) => sum + folder.files.length, 0);
+		dom.append(head, dom.$('span', undefined, localize('maut.rail.panelCount', "{0} files in {1} folders", total, this._folders.length)));
+		const list = dom.append(panel, dom.$('.maut-rail-panel-list'));
+		for (const folder of open ? [open, ...this._folders.filter(candidate => candidate !== open)] : this._folders) {
+			const group = dom.append(list, dom.$('.maut-rail-group'));
+			const row = dom.append(group, dom.$<HTMLButtonElement>('button.maut-rail-group-row', { type: 'button' }));
+			dom.append(row, dom.$(`span.maut-rail-chevron${ThemeIcon.asCSSSelector(Codicon.chevronRight)}`));
+			dom.append(row, dom.$(`span.maut-rail-group-icon${ThemeIcon.asCSSSelector(Codicon.folder)}`));
+			const names = dom.append(row, dom.$('span.maut-rail-group-names'));
+			dom.append(names, dom.$('span.maut-rail-group-name', undefined, basename(folder.folder)));
+			const parent = this._relative(dirname(folder.folder));
+			if (parent && parent !== basename(folder.folder)) {
+				dom.append(names, dom.$('span.maut-rail-group-path', undefined, parent));
+			}
+			dom.append(row, dom.$('span.maut-rail-group-count', undefined, String(folder.files.length)));
+			dom.append(row, dom.$('span.maut-rail-time', undefined, fromNow(folder.mtime, true)));
+			const files = dom.append(group, dom.$('.maut-rail-files'));
+			for (const file of folder.files) {
+				const item = dom.append(files, dom.$<HTMLButtonElement>('button.maut-rail-file', { type: 'button' }));
+				const icon = dom.append(item, dom.$('span.maut-rail-icon.show-file-icons'));
+				dom.append(icon, dom.$(`span.${getIconClasses(this._modelService, this._languageService, file.resource, FileKind.FILE).join('.')}`));
+				dom.append(item, dom.$('span.maut-rail-file-name', undefined, basename(file.resource)));
+				if (file.isNew) {
+					dom.append(item, dom.$('span.maut-rail-badge', undefined, localize('maut.rail.new', "new")));
+				}
+				dom.append(item, dom.$('span.maut-rail-time', undefined, fromNow(file.mtime, true)));
+				item.title = this._relative(file.resource);
+				store.add(dom.addDisposableListener(item, dom.EventType.CLICK, () => {
+					this._panel?.close();
+					void this._editorService.openEditor({ resource: file.resource, options: { pinned: false } });
+				}));
+			}
+			group.classList.toggle('open', folder === open);
+			store.add(dom.addDisposableListener(row, dom.EventType.CLICK, () => group.classList.toggle('open')));
 		}
-		button(dom.$(`span${ThemeIcon.asCSSSelector(Codicon.folder)}`), localize('maut.rail.browse', "Browse files"), () => this._finder.toggle());
+		if (!this._folders.length) {
+			dom.append(list, dom.$('.maut-rail-empty', undefined, localize('maut.rail.empty', "Claude hasn't changed any files yet.")));
+		}
+		return store;
 	}
 }
 

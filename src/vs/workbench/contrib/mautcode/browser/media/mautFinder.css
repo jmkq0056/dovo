@@ -164,3 +164,106 @@
 	-webkit-font-smoothing: antialiased;
 }
 .monaco-workbench .maut-finder-input:focus { outline: none !important; }
+
+/* Rail folders: the folder, its name under it, and a pill with the status dot and file count. */
+.monaco-workbench .maut-rail-button.folder { height: 40px; width: 40px; }
+.monaco-workbench .maut-rail-button.active { background: color-mix(in srgb, #f59e0b 18%, transparent); color: var(--vscode-activityBar-foreground); }
+.monaco-workbench .maut-rail-folder { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; width: 40px; }
+.monaco-workbench .maut-rail-folder > .codicon { font-size: 17px; }
+.monaco-workbench .maut-rail-caption {
+	max-width: 38px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 9px;
+	line-height: 11px;
+	letter-spacing: .01em;
+	color: var(--vscode-descriptionForeground);
+}
+.monaco-workbench .maut-rail-pill {
+	position: absolute;
+	top: -3px;
+	right: 2px;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	height: 13px;
+	padding: 0 4px 0 3px;
+	border-radius: 7px;
+	background: var(--vscode-activityBar-background);
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--vscode-foreground) 18%, transparent);
+	font-size: 9px;
+	font-weight: 700;
+	line-height: 1;
+	color: var(--vscode-foreground);
+	font-variant-numeric: tabular-nums;
+}
+.monaco-workbench .maut-rail-pill-dot { width: 5px; height: 5px; border-radius: 50%; }
+.monaco-workbench .maut-rail-pill-dot.changed { background: #f59e0b; }
+.monaco-workbench .maut-rail-pill-dot.new { background: var(--vscode-gitDecoration-addedResourceForeground, #73c991); }
+
+/* The panel beside the rail: folders newest first; one opens to its files. Never wider than the
+	window, long names end in an ellipsis, and the list scrolls. */
+.maut-rail-panel {
+	width: min(360px, calc(100vw - 80px));
+	max-height: min(520px, calc(100vh - 120px));
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	border-radius: 12px;
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-editorWidget-border, rgba(128, 128, 128, .25));
+	box-shadow: 0 18px 48px -12px rgba(0, 0, 0, .55);
+	color: var(--vscode-foreground);
+	font-size: 12.5px;
+	animation: maut-rail-panel-in .16s ease-out;
+}
+@keyframes maut-rail-panel-in { from { opacity: 0; transform: translateX(-4px); } }
+.maut-rail-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 14px 8px; }
+.maut-rail-panel-head b { font-size: 13px; font-weight: 650; }
+.maut-rail-panel-head span { color: var(--vscode-descriptionForeground); font-size: 11.5px; white-space: nowrap; }
+.maut-rail-panel-list { overflow-y: auto; overflow-x: hidden; padding: 0 6px 8px; }
+.maut-rail-group-row,
+.maut-rail-file {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	border: 0;
+	border-radius: 7px;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.maut-rail-group-row { height: 34px; padding: 0 8px 0 4px; }
+.maut-rail-group-row:hover,
+.maut-rail-file:hover { background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent); }
+.maut-rail-chevron { flex: none; font-size: 14px !important; color: var(--vscode-descriptionForeground); transition: transform .15s ease; }
+.maut-rail-group.open .maut-rail-chevron { transform: rotate(90deg); }
+.maut-rail-group-icon { flex: none; color: #f59e0b; }
+.maut-rail-group-names { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; overflow: hidden; }
+.maut-rail-group-name { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.maut-rail-group-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font-size: 11px; color: var(--vscode-descriptionForeground); }
+.maut-rail-group-count {
+	flex: none;
+	min-width: 18px;
+	padding: 1px 6px;
+	border-radius: 9px;
+	background: color-mix(in srgb, #f59e0b 18%, transparent);
+	color: #fbbf24;
+	font-size: 11px;
+	font-weight: 700;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+.maut-rail-time { flex: none; font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; }
+.maut-rail-files { display: none; padding: 2px 0 6px 26px; }
+.maut-rail-group.open .maut-rail-files { display: block; }
+.maut-rail-file { height: 28px; padding: 0 8px; }
+.maut-rail-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.maut-rail-badge { flex: none; padding: 0 5px; border-radius: 5px; background: color-mix(in srgb, var(--vscode-gitDecoration-addedResourceForeground, #73c991) 20%, transparent); color: var(--vscode-gitDecoration-addedResourceForeground, #73c991); font-size: 10px; font-weight: 700; }
+.maut-rail-empty { padding: 16px 10px; color: var(--vscode-descriptionForeground); }
+.vs .maut-rail-group-count { color: #b45309; }

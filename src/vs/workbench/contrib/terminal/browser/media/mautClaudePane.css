@@ -900,3 +900,19 @@
 	.monaco-workbench .mcp-live-sweep,
 	.monaco-workbench .mcp-live-orbit { animation: none; }
 }
+
+/* Links in Claude's text, in Dovo's amber (the browser's own dark purple for visited links was
+	unreadable). Click opens the page in Dovo's browser tab, Cmd+click in your default browser. */
+.monaco-workbench .mcp-prose a,
+.monaco-workbench .mcp-prose a:visited {
+	color: #fbbf24;
+	text-decoration: underline;
+	text-decoration-color: rgba(251, 191, 36, .4);
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+.monaco-workbench .mcp-prose a:hover { color: #fcd34d; text-decoration-color: currentColor; }
+.monaco-workbench.vs .mcp-prose a,
+.monaco-workbench.vs .mcp-prose a:visited,
+.monaco-workbench.hc-light .mcp-prose a,
+.monaco-workbench.hc-light .mcp-prose a:visited { color: #b45309; text-decoration-color: rgba(180, 83, 9, .4); }

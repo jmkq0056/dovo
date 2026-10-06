@@ -238,6 +238,9 @@ export class MautClaudePane extends Disposable {
 	/** The terminal currently rendered with Claude's larger reading font. */
 	private _fontApplied: ITerminalInstance | undefined;
 
+	/** Set on mouse down: the click that follows is a Cmd+click. */
+	private _linkToDefaultBrowser = false;
+
 	constructor(
 		private readonly _root: HTMLElement,
 		private readonly _terminalHost: HTMLElement,
@@ -306,6 +309,10 @@ export class MautClaudePane extends Disposable {
 				this._promptNav.classList.remove('open');
 			}
 		}));
+		// Whether the link being clicked was Cmd+clicked: that one goes to your default browser.
+		this._register(dom.addDisposableListener(this._root, dom.EventType.MOUSE_DOWN, e => {
+			this._linkToDefaultBrowser = isMacintosh ? e.metaKey : e.ctrlKey;
+		}, true));
 		this._register(dom.addDisposableListener(this._reader, dom.EventType.KEY_DOWN, e => {
 			if ((isMacintosh ? e.metaKey : e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c' && this._selectedText()) {
 				// Copy what you marked, before the terminal's own copy binding can take the key.
@@ -1357,7 +1364,7 @@ export class MautClaudePane extends Disposable {
 				for (const item of turn.items) {
 					if (item.kind === 'text') {
 						const rendered = this._activityDisposables.add(renderMarkdown(new MarkdownString(item.text), {
-							actionHandler: link => this._openerService.open(link, { fromUserGesture: true, allowCommands: false }),
+							actionHandler: link => this._openLink(link),
 						}));
 						rendered.element.classList.add('mcp-prose');
 						content.appendChild(rendered.element);
@@ -1776,8 +1783,8 @@ export class MautClaudePane extends Disposable {
 				dom.append(body, dom.$('.mcp-interrupted', undefined, dom.$('i'), dom.$('span', undefined, localize('maut.claude.interrupted', "Interrupted by you. Claude stopped here and is waiting for what to do instead."))));
 			} else if (item.kind === 'text') {
 				const rendered = this._renderDisposables.add(renderMarkdown(new MarkdownString(item.text), {
-					// Links open where they belong: web pages in your browser, files in the editor.
-					actionHandler: link => this._openerService.open(link, { fromUserGesture: true, allowCommands: false }),
+					// Links open where they belong: web pages in Dovo's browser, files in the editor.
+					actionHandler: link => this._openLink(link),
 				}));
 				rendered.element.classList.add('mcp-prose');
 				body.appendChild(rendered.element);
@@ -1953,6 +1960,21 @@ export class MautClaudePane extends Disposable {
 	}
 
 	/** The text you marked in the Reader, if any. */
+	/**
+	 * Web pages open in Dovo's browser tab (Cmd+click: your default browser), files and other
+	 * links where they belong.
+	 */
+	private _openLink(link: string): Promise<boolean> {
+		const toDefaultBrowser = this._linkToDefaultBrowser;
+		this._linkToDefaultBrowser = false;
+		if (/^https?:\/\//i.test(link)) {
+			return toDefaultBrowser
+				? this._openerService.open(link, { openExternal: true, fromUserGesture: true, allowContributedOpeners: false })
+				: this._openerService.open(link, { fromUserGesture: true, allowCommands: false, allowContributedOpeners: true });
+		}
+		return this._openerService.open(link, { fromUserGesture: true, allowCommands: false });
+	}
+
 	private _selectedText(): string {
 		const selection = dom.getWindow(this._reader).getSelection();
 		if (!selection || selection.isCollapsed || !selection.rangeCount || !dom.isAncestor(selection.getRangeAt(0).commonAncestorContainer, this._reader)) {

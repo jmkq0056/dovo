@@ -303,8 +303,8 @@ import product from '../../platform/product/common/product.js';
 			},
 			'window.nativeFullScreen': {
 				'type': 'boolean',
-				'default': false,
-				'description': localize('window.nativeFullScreen', "Controls if native full-screen should be used on macOS. Disable this option to prevent macOS from creating a new space when going full-screen."),
+				'default': true,
+				'description': localize('window.nativeFullScreen.dovo', "Use macOS native full screen, in a Space of its own. Turn it off for Dovo's own full screen: it stays in the current Space, hides the menu bar and Dock, and keeps the window below the camera notch."),
 				'scope': ConfigurationScope.APPLICATION,
 				'included': isMacintosh
 			},

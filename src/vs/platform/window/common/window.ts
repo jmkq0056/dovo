@@ -320,10 +320,9 @@ export function useNativeFullScreen(configurationService: IConfigurationService)
 		return true; // https://github.com/electron/electron/issues/16142
 	}
 
-	// Dovo: simple full screen by default. It keeps Dovo in the current Space (native full screen
-	// makes a Space of its own that no other app's window can enter), so the browser Dovo docks
-	// can sit above it; the menu bar and Dock still hide.
-	return windowConfig?.nativeFullScreen === true;
+	// Dovo: native macOS full screen by default. Dovo's own full screen (it stays in the current
+	// Space and keeps the window below the camera notch) is kept for `window.nativeFullScreen: false`.
+	return windowConfig?.nativeFullScreen !== false;
 }
 
 

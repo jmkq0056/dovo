@@ -2076,6 +2076,9 @@ export class MautClaudePane extends Disposable {
 			text += (text && line.trimEnd().length < raw.cols - 4 ? '\n' : '') + content;
 		}
 		const files = this._attachedFiles(text);
+		// The previews float just above the input, over the conversation: never in the input's
+		// way, so the input keeps its place and size however many files there are.
+		this._inputFiles.style.bottom = `${Math.max(0, this._root.clientHeight - this._terminalHost.offsetTop)}px`;
 		const key = files.map(file => file.toString()).join('|');
 		if (key === this._inputFilesKey) {
 			return;

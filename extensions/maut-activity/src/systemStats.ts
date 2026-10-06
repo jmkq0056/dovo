@@ -150,6 +150,21 @@ class SystemStats {
 					remaining: battery.remaining && /^\d+:\d+$/.test(battery.remaining) && battery.remaining !== '0:00' ? battery.remaining : undefined,
 				};
 			}
+		} else if (process.platform === 'win32') {
+			// Percent; status (1 on battery, 2 on AC, 3 full, 6-9 charging); minutes left.
+			const out = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '$b = Get-CimInstance Win32_Battery | Select-Object -First 1; if ($b) { "$($b.EstimatedChargeRemaining);$($b.BatteryStatus);$($b.EstimatedRunTime)" }']);
+			const battery = /^(?<percent>\d+);(?<status>\d+);(?<minutes>\d*)/.exec(out.trim())?.groups;
+			if (battery) {
+				const status = Number(battery.status);
+				const minutes = Number(battery.minutes);
+				const charging = status !== 1 && status !== 4 && status !== 5;
+				slow.battery = {
+					percent: Number(battery.percent),
+					charging,
+					// Windows reports a huge number for "unknown" while plugged in.
+					remaining: !charging && minutes > 0 && minutes < 6000 ? `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}` : undefined,
+				};
+			}
 		}
 		this._slow = slow;
 	}

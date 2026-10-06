@@ -7,6 +7,7 @@ import * as dom from '../../../../base/browser/dom.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
+import { isMacintosh } from '../../../../base/common/platform.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
@@ -55,7 +56,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 		[openLinksSetting]: {
 			type: 'boolean',
 			default: true,
-			markdownDescription: localize('dovo.browser.openLinks', "Open web links (Cmd+Click in the editor, terminal or Claude's Reader) in a browser tab inside Dovo instead of your default browser."),
+			markdownDescription: localize('dovo.browser.openLinks', "Open web links (Cmd+Click on macOS, Ctrl+Click on Windows and Linux, in the editor, terminal or Claude's Reader) in a browser tab inside Dovo instead of your default browser."),
 		},
 	},
 });
@@ -193,7 +194,9 @@ class DovoBrowserView extends ViewPane {
 	protected override renderBody(container: HTMLElement): void {
 		super.renderBody(container);
 		const body = dom.append(container, dom.$('.dovo-browser-view'));
-		dom.append(body, dom.$('p', undefined, localize('dovo.browser.builtIn', "The browser opens as a tab beside your files, with its DevTools; your logins stay. Cmd+click a link anywhere to open it there.")));
+		dom.append(body, dom.$('p', undefined, isMacintosh
+			? localize('dovo.browser.builtInMac', "The browser opens as a tab beside your files, with its DevTools; your logins stay. Cmd+click a link anywhere to open it there.")
+			: localize('dovo.browser.builtInOther', "The browser opens as a tab beside your files, with its DevTools; your logins stay. Ctrl+click a link anywhere to open it there.")));
 		const newTab = dom.append(body, dom.$<HTMLButtonElement>('button.dovo-browser-primary', { type: 'button' }, localize('dovo.browser.newTabButton', "New Browser Tab")));
 		this._bodyStore.add(dom.addDisposableListener(newTab, dom.EventType.CLICK, () => void this._browserService.newTab()));
 		if (this.isBodyVisible()) {

@@ -949,3 +949,37 @@
 	animation: mcp-rc-pulse 1.2s ease-in-out infinite;
 }
 @keyframes mcp-rc-pulse { 50% { color: #fbbf24; } }
+
+/* Files named in a message, and in what you're writing: a thumbnail (a PDF's first page, the
+	image itself) and the name. Clicking opens the file in a popup over the window. */
+.monaco-workbench .mcp-input-files { display: none; gap: 8px; padding: 8px 16px 4px; overflow-x: auto; overflow-y: hidden; flex: none; }
+.monaco-workbench .mcp-input-files.shown { display: flex; }
+.monaco-workbench .mcp-file-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.monaco-workbench .mcp-file-chip {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	width: 112px;
+	padding: 5px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+	color: var(--vscode-foreground);
+	font: inherit;
+	cursor: zoom-in;
+	transition: border-color .15s ease, transform .15s ease;
+}
+.monaco-workbench .mcp-file-chip:hover { border-color: rgba(245, 158, 11, .6); transform: translateY(-1px); }
+.monaco-workbench .mcp-file-thumb {
+	display: grid;
+	place-items: center;
+	height: 72px;
+	overflow: hidden;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--vscode-editor-background) 60%, #000);
+	color: var(--vscode-descriptionForeground);
+}
+.monaco-workbench .mcp-file-thumb .codicon { font-size: 26px; }
+.monaco-workbench .mcp-file-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.monaco-workbench .mcp-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; text-align: left; color: var(--vscode-descriptionForeground); }

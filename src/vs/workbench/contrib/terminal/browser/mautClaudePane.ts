@@ -31,7 +31,7 @@ import { IMautClaudeService, MautClaudeView } from './mautClaude.js';
 import type { ITerminalInstance } from './terminal.js';
 import { getFileResourcesFromDragEvent } from './terminalUri.js';
 import type { IXtermCore } from './xterm-private.js';
-import type { IBuffer, IBufferCell } from '@xterm/xterm';
+import type { IBuffer, IBufferCell, Terminal as XtermTerminal } from '@xterm/xterm';
 import { IScreenMenu, IScreenState, readScreen } from './mautClaudeScreen.js';
 import './media/mautClaudePane.css';
 
@@ -130,6 +130,9 @@ interface IClaudeSessionView {
  * live terminal for typing) or the full terminal. When Claude isn't running, it stays out of the
  * way and the terminal editor looks as it always did.
  */
+/** Contributed by the built-in `maut-claude-images` extension: a thumbnail picture of a file. */
+const fileThumbnailCommandId = '_maut.files.thumbnail';
+
 /** Each terminal's latest Remote Control session, kept after its link leaves the screen. */
 const remoteControlSessions = new WeakMap<ITerminalInstance, string>();
 
@@ -167,6 +170,12 @@ export class MautClaudePane extends Disposable {
 	private readonly _poll = this._register(new MutableDisposable<IntervalTimer>());
 	private readonly _refreshSoon: RunOnceScheduler;
 	private _instance: ITerminalInstance | undefined;
+	/** Above the input: a preview of each file whose path is in what you're writing. */
+	private readonly _inputFiles: HTMLElement;
+	private _inputFilesKey = '';
+	private readonly _inputFileDisposables = this._register(new DisposableStore());
+	/** Thumbnails by file path, made once by the extension. */
+	private readonly _thumbnails = new Map<string, Promise<string | undefined>>();
 	private _session: IClaudeSessionView | undefined;
 	private _renderedKey = '';
 	/** Claude's in-progress output, mirrored from its screen until the transcript has it. */
@@ -279,6 +288,8 @@ export class MautClaudePane extends Disposable {
 		this._column = dom.append(this._reader, dom.$('.mcp-column'));
 		this._root.insertBefore(this._reader, this._terminalHost);
 		this._root.insertBefore(this._header, this._reader);
+		this._inputFiles = dom.$('.mcp-input-files');
+		this._root.insertBefore(this._inputFiles, this._terminalHost);
 		this._liveNoteText = dom.$('span.mcp-live-note-text', undefined, defaultLiveNote());
 		this._liveNote = dom.$('.mcp-live-note', undefined, dom.$('i'), this._liveNoteText);
 		this._root.appendChild(this._liveNote);
@@ -991,6 +1002,9 @@ export class MautClaudePane extends Disposable {
 		this._setNotice(screen.notice ?? '', screen.footer ?? '');
 		this._updateLive(screen.liveTop);
 		this._showOverlays(screen);
+		if (screen.claude) {
+			this._updateInputFiles(raw, screen);
+		}
 		// The frame shows exactly the rows that matter, never more: the prompt box and its footer, or
 		// the one hint line under a question. A long prompt grows it, up to most of the height.
 		if (!screen.claude) {
@@ -1825,6 +1839,7 @@ export class MautClaudePane extends Disposable {
 			const bubble = dom.append(user, dom.$('.mcp-bubble'));
 			if (turn.prompt) {
 				bubble.appendChild(this._promptText(turn.prompt));
+				this._appendFileChips(bubble, turn.prompt, this._renderDisposables);
 			}
 			if (turn.images.length) {
 				const chips = dom.append(bubble, dom.$('.mcp-attachments'));
@@ -1856,6 +1871,7 @@ export class MautClaudePane extends Disposable {
 				const bubble = dom.append(user, dom.$('.mcp-bubble'));
 				if (item.text) {
 					bubble.appendChild(this._promptText(item.text));
+					this._appendFileChips(bubble, item.text, this._renderDisposables);
 				}
 				if (item.images.length) {
 					const chips = dom.append(bubble, dom.$('.mcp-attachments'));
@@ -2024,6 +2040,86 @@ export class MautClaudePane extends Disposable {
 		}
 		element.append(text.slice(at));
 		return element;
+	}
+
+	/** The files whose paths are in `text`, as they'd open: each only once. */
+	private _attachedFiles(text: string): URI[] {
+		const files = new Map<string, URI>();
+		for (const match of text.matchAll(attachedPathRegex)) {
+			const resource = attachedPathResource(match[0]);
+			if (resource) {
+				files.set(resource.toString(), resource);
+			}
+		}
+		return [...files.values()];
+	}
+
+	/** Thumbnail chips under a message for the files it names. */
+	private _appendFileChips(bubble: HTMLElement, text: string, store: DisposableStore): void {
+		const files = this._attachedFiles(text);
+		if (files.length) {
+			const chips = dom.append(bubble, dom.$('.mcp-attachments.mcp-file-chips'));
+			for (const resource of files) {
+				chips.appendChild(this._fileChip(resource, store));
+			}
+		}
+	}
+
+	/** What you're writing, read off Claude's input box: its rows without the box's borders. */
+	private _updateInputFiles(raw: XtermTerminal, screen: IScreenState): void {
+		const buffer = raw.buffer.active;
+		let text = '';
+		for (let row = screen.frame.from; row <= screen.frame.to; row++) {
+			const line = buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? '';
+			const content = line.replace(/^[\s\u2502>\u276f]+|[\s\u2502]+$/g, '');
+			// Claude wraps a long line itself: a row filling the box continues on the next one.
+			text += (text && line.trimEnd().length < raw.cols - 4 ? '\n' : '') + content;
+		}
+		const files = this._attachedFiles(text);
+		const key = files.map(file => file.toString()).join('|');
+		if (key === this._inputFilesKey) {
+			return;
+		}
+		this._inputFilesKey = key;
+		this._inputFileDisposables.clear();
+		dom.clearNode(this._inputFiles);
+		this._inputFiles.classList.toggle('shown', files.length > 0);
+		for (const resource of files) {
+			this._inputFiles.appendChild(this._fileChip(resource, this._inputFileDisposables));
+		}
+		this._relayout();
+	}
+
+	/** A file's chip: its thumbnail (a PDF's first page, the image) or icon, and its name. Opens it. */
+	private _fileChip(resource: URI, store: DisposableStore): HTMLElement {
+		const chip = dom.$<HTMLButtonElement>('button.mcp-file-chip', { type: 'button' });
+		const preview = dom.append(chip, dom.$('span.mcp-file-thumb'));
+		dom.append(preview, dom.$(`span${ThemeIcon.asCSSSelector(Codicon.file)}`));
+		dom.append(chip, dom.$('span.mcp-file-name', undefined, basename(resource.fsPath)));
+		chip.title = resource.fsPath;
+		const path = resource.fsPath;
+		let thumbnail = this._thumbnails.get(path);
+		if (!thumbnail) {
+			thumbnail = Promise.resolve(this._commandService.executeCommand<string | undefined>(fileThumbnailCommandId, path)).catch(() => undefined);
+			this._thumbnails.set(path, thumbnail);
+		}
+		void thumbnail.then(file => {
+			if (file) {
+				const image = dom.$<HTMLImageElement>('img');
+				image.alt = '';
+				loadImage(image, file, () => image.remove());
+				dom.clearNode(preview);
+				preview.appendChild(image);
+			}
+		});
+		store.add(dom.addDisposableListener(chip, dom.EventType.CLICK, e => {
+			e.stopPropagation();
+			e.preventDefault();
+			void this._editorService.openEditor({ resource, options: { pinned: true } }, MODAL_GROUP);
+		}));
+		// Keep the click from moving focus out of the input.
+		store.add(dom.addDisposableListener(chip, dom.EventType.MOUSE_DOWN, e => e.preventDefault()));
+		return chip;
 	}
 
 	private _imageChip(n: number, time?: number): HTMLElement {

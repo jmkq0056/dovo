@@ -916,3 +916,21 @@
 .monaco-workbench.vs .mcp-prose a:visited,
 .monaco-workbench.hc-light .mcp-prose a,
 .monaco-workbench.hc-light .mcp-prose a:visited { color: #b45309; text-decoration-color: rgba(180, 83, 9, .4); }
+
+/* An attached file's path in your message: still the path, but a link that opens the file. */
+.monaco-workbench .mcp-path-link {
+	display: inline;
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	color: #fbbf24;
+	text-align: left;
+	word-break: break-all;
+	text-decoration: underline;
+	text-decoration-color: rgba(251, 191, 36, .4);
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+.monaco-workbench .mcp-path-link:hover { color: #fcd34d; text-decoration-color: currentColor; }
+.monaco-workbench.vs .mcp-path-link { color: #b45309; }

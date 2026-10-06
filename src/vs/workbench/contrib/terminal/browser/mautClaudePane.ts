@@ -7,7 +7,7 @@ import { DataTransfers } from '../../../../base/browser/dnd.js';
 import * as dom from '../../../../base/browser/dom.js';
 import { renderMarkdown } from '../../../../base/browser/markdownRenderer.js';
 import { toAction } from '../../../../base/common/actions.js';
-import { IntervalTimer, RunOnceScheduler } from '../../../../base/common/async.js';
+import { IntervalTimer, RunOnceScheduler, timeout } from '../../../../base/common/async.js';
 import { MarkdownString } from '../../../../base/common/htmlContent.js';
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { FileAccess } from '../../../../base/common/network.js';
@@ -26,7 +26,7 @@ import { CodeDataTransfers, containsDragType } from '../../../../platform/dnd/br
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
-import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IEditorService, MODAL_GROUP } from '../../../services/editor/common/editorService.js';
 import { IMautClaudeService, MautClaudeView } from './mautClaude.js';
 import type { ITerminalInstance } from './terminal.js';
 import { getFileResourcesFromDragEvent } from './terminalUri.js';
@@ -130,6 +130,20 @@ interface IClaudeSessionView {
  * live terminal for typing) or the full terminal. When Claude isn't running, it stays out of the
  * way and the terminal editor looks as it always did.
  */
+/** A file path in your message: a file:// link, or an absolute path (spaces escaped) with an extension. */
+const attachedPathRegex = /file:\/\/[^\s'"]+|(?<=^|\s)(?:\/|[A-Za-z]:\\)(?:\\ |[^\s'"])+\.[A-Za-z0-9]{1,8}\b/g;
+
+function attachedPathResource(text: string): URI | undefined {
+	try {
+		if (text.startsWith('file://')) {
+			return URI.parse(text);
+		}
+		return URI.file(text.replace(/\\ /g, ' '));
+	} catch {
+		return undefined;
+	}
+}
+
 export class MautClaudePane extends Disposable {
 
 	private readonly _header: HTMLElement;
@@ -1474,6 +1488,9 @@ export class MautClaudePane extends Disposable {
 			['reader', localize('maut.claude.reader', "Reader"), undefined, Codicon.commentDiscussion],
 			['terminal', localize('maut.claude.terminal', "Terminal"), undefined, Codicon.terminal],
 		], this._instance ? this._claudeService.viewOf(this._instance) : 'reader', view => this._instance && this._claudeService.setView(this._instance, view)));
+		top.appendChild(this._iconButton(Codicon.linkExternal,
+			localize('maut.claude.remoteControl', "Open this session in the Claude app (Remote Control)"),
+			() => void this._openRemoteControl()));
 		const ide = this._claudeService.layoutMode === 'ide';
 		top.appendChild(this._iconButton(ide ? Codicon.screenFull : Codicon.layoutSidebarLeft,
 			ide ? localize('maut.claude.toFocus', "Focus layout: Claude takes the window (\u2318B)") : localize('maut.claude.toIde', "IDE layout: files beside Claude (\u2318B)"),
@@ -1502,6 +1519,53 @@ export class MautClaudePane extends Disposable {
 		dom.append(row, dom.$('span.mcp-grow'));
 		const start = dom.append(row, dom.$<HTMLButtonElement>('button.mcp-start-claude', { type: 'button' }, localize('maut.claude.startClaude', "Start Claude")));
 		this._headerDisposables.add(dom.addDisposableListener(start, dom.EventType.CLICK, () => this._startClaude()));
+	}
+
+	/**
+	 * The latest Remote Control link this Claude printed (`/remote-control` prints a claude.ai
+	 * session link), read from the terminal's history so the newest one always wins.
+	 */
+	private _remoteControlSession(): string | undefined {
+		const buffer = this._instance?.xterm?.raw.buffer.active;
+		if (!buffer) {
+			return undefined;
+		}
+		let text = '';
+		for (let row = Math.max(0, buffer.length - 5000); row < buffer.length; row++) {
+			const line = buffer.getLine(row);
+			if (line) {
+				// Soft-wrapped rows join up, so a link split across the width still matches.
+				text += (line.isWrapped ? '' : '\n') + line.translateToString(true);
+			}
+		}
+		let session: string | undefined;
+		for (const match of text.matchAll(/claude\.ai\/code\/(?<session>session_[A-Za-z0-9]+)/g)) {
+			session = match.groups?.session;
+		}
+		return session;
+	}
+
+	/** Opens the session in the Claude app; with Remote Control off, turns it on first. */
+	private async _openRemoteControl(): Promise<void> {
+		const instance = this._instance;
+		if (!instance) {
+			return;
+		}
+		let session = this._remoteControlSession();
+		if (!session) {
+			await instance.sendText('/remote-control', true);
+			for (let attempt = 0; attempt < 20 && !session; attempt++) {
+				await timeout(500);
+				session = this._remoteControlSession();
+			}
+		}
+		if (!session) {
+			return;
+		}
+		const opened = await this._openerService.open(URI.parse(`claude://claude.ai/code/${session}`), { openExternal: true });
+		if (!opened) {
+			await this._openerService.open(URI.parse(`https://claude.ai/code/${session}`), { openExternal: true, allowContributedOpeners: false });
+		}
 	}
 
 	private _iconButton(icon: ThemeIcon, label: string, run: () => void): HTMLElement {
@@ -1739,7 +1803,7 @@ export class MautClaudePane extends Disposable {
 			this._promptElements.push(user);
 			const bubble = dom.append(user, dom.$('.mcp-bubble'));
 			if (turn.prompt) {
-				dom.append(bubble, dom.$('.mcp-prompt', undefined, turn.prompt));
+				bubble.appendChild(this._promptText(turn.prompt));
 			}
 			if (turn.images.length) {
 				const chips = dom.append(bubble, dom.$('.mcp-attachments'));
@@ -1770,7 +1834,7 @@ export class MautClaudePane extends Disposable {
 				this._promptElements.push(user);
 				const bubble = dom.append(user, dom.$('.mcp-bubble'));
 				if (item.text) {
-					dom.append(bubble, dom.$('.mcp-prompt', undefined, item.text));
+					bubble.appendChild(this._promptText(item.text));
 				}
 				if (item.images.length) {
 					const chips = dom.append(bubble, dom.$('.mcp-attachments'));
@@ -1916,6 +1980,31 @@ export class MautClaudePane extends Disposable {
 	}
 
 	/** `[Image #n]` with its thumbnail; `time` picks the right one when Claude reused the number. */
+	/**
+	 * Your message as you wrote it, with every attached file path (a pasted path or file:// link)
+	 * kept as text but clickable: it opens the file in a popup over the window.
+	 */
+	private _promptText(text: string): HTMLElement {
+		const element = dom.$('.mcp-prompt');
+		let at = 0;
+		for (const match of text.matchAll(attachedPathRegex)) {
+			const resource = attachedPathResource(match[0]);
+			if (!resource) {
+				continue;
+			}
+			element.append(text.slice(at, match.index));
+			const link = dom.append(element, dom.$<HTMLButtonElement>('button.mcp-path-link', { type: 'button' }, match[0]));
+			link.title = localize('maut.claude.openAttached', "Open {0}", resource.fsPath);
+			this._renderDisposables.add(dom.addDisposableListener(link, dom.EventType.CLICK, e => {
+				e.stopPropagation();
+				void this._editorService.openEditor({ resource, options: { pinned: true } }, MODAL_GROUP);
+			}));
+			at = match.index + match[0].length;
+		}
+		element.append(text.slice(at));
+		return element;
+	}
+
 	private _imageChip(n: number, time?: number): HTMLElement {
 		const key = `${n}@${time ?? 'latest'}`;
 		const chip = dom.$('span.mcp-chip', undefined, `[Image #${n}]`);

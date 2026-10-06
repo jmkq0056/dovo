@@ -33,7 +33,7 @@ import { IsAuxiliaryWindowContext } from '../../../common/contextkeys.js';
 import { EditorExtensions, IEditorFactoryRegistry, IEditorSerializer } from '../../../common/editor.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
 import { Extensions as ViewExtensions, IViewContainersRegistry, IViewDescriptorService, IViewsRegistry, ViewContainerLocation } from '../../../common/views.js';
-import { IAuxiliaryEditorPart, IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
+import { GroupDirection, IAuxiliaryEditorPart, IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { BrowserEditorInput } from '../../browserView/common/browserEditorInput.js';
 import './media/dovoBrowserDock.css';
@@ -104,6 +104,11 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 			const existing = this._editorService.editors.find(editor => editor.typeId === BrowserEditorInput.ID);
 			if (existing) {
 				const holder = this._editorGroupsService.groups.find(group => group.contains(existing));
+				if (holder && holder.editors.some(editor => editor.typeId === terminalEditorTypeId)) {
+					// It ended up beside Claude's terminal: move it over to the files side.
+					holder.moveEditor(existing, this._filesGroup());
+					return;
+				}
 				await this._editorService.openEditor(existing, { pinned: true }, holder ?? this._filesGroup());
 				return;
 			}
@@ -125,7 +130,7 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 		if (this._editorGroupsService.getPart(group) !== main) {
 			// Back beside the files; the full-screen window closes once nothing is left in it.
 			const part = this._editorGroupsService.getPart(group);
-			group.moveEditor(editor, this._filesGroup() ?? main.activeGroup);
+			group.moveEditor(editor, this._filesGroup());
 			if (this._popup === part && part.groups.every(candidate => candidate.isEmpty)) {
 				this._popup.close();
 			}
@@ -142,10 +147,13 @@ class DovoBrowserService extends Disposable implements IDovoBrowserService {
 	}
 
 	/** Where browser tabs open: the main window's group that isn't Claude's terminal. */
-	private _filesGroup(): IEditorGroup | undefined {
+	private _filesGroup(): IEditorGroup {
 		const main = this._editorGroupsService.mainPart;
-		const isFiles = (group: IEditorGroup) => group.activeEditor?.typeId !== terminalEditorTypeId;
-		return isFiles(main.activeGroup) ? main.activeGroup : main.groups.find(isFiles) ?? main.activeGroup;
+		const isFiles = (group: IEditorGroup) => group.isEmpty || !group.editors.some(editor => editor.typeId === terminalEditorTypeId);
+		const existing = isFiles(main.activeGroup) ? main.activeGroup : main.groups.find(isFiles);
+		// Only Claude's group (Focus, nothing else open): the browser gets a group of its own on
+		// the right, beside Claude, never a tab in Claude's group.
+		return existing ?? main.addGroup(main.activeGroup, GroupDirection.RIGHT);
 	}
 }
 

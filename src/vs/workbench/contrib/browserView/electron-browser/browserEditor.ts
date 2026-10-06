@@ -34,7 +34,6 @@ import { Disposable, DisposableStore, MutableDisposable } from '../../../../base
 import { WorkbenchHoverDelegate } from '../../../../platform/hover/browser/hover.js';
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
 import { MenuWorkbenchToolBar } from '../../../../platform/actions/browser/toolbar.js';
-import { ChatContextKeys } from '../../chat/common/actions/chatContextKeys.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { encodeBase64, VSBuffer } from '../../../../base/common/buffer.js';
 import { SiteInfoWidget } from './siteInfoWidget.js';
@@ -170,7 +169,7 @@ class BrowserNavigationBar extends Disposable {
 		// URL input (hidden by default; shown when user clicks the display)
 		this._urlInput = $<HTMLInputElement>('input.browser-url-input');
 		this._urlInput.type = 'text';
-		this._urlInput.placeholder = localize('browser.urlPlaceholder', "Enter a URL");
+		this._urlInput.placeholder = localize('browser.searchPlaceholder', "Search Google or enter address");
 		this._urlInput.style.display = 'none';
 
 		// URL display — shows the URL when not editing; clickable to switch to input
@@ -309,7 +308,7 @@ class BrowserNavigationBar extends Disposable {
 			rest.textContent = url.slice(httpsPrefix.length);
 			this._urlDisplay.appendChild(rest);
 		} else {
-			this._urlDisplay.textContent = url || localize('browser.urlPlaceholder', "Enter a URL");
+			this._urlDisplay.textContent = url || localize('browser.searchPlaceholder', "Search Google or enter address");
 		}
 	}
 
@@ -318,6 +317,34 @@ class BrowserNavigationBar extends Disposable {
 		this._siteInfoWidget.setCertificateError(undefined);
 		this._updateDisplay();
 	}
+}
+
+/** The new tab page's shortcuts. */
+const newTabShortcuts: readonly { readonly label: string; readonly url: string; readonly color: string }[] = [
+	{ label: 'Google', url: 'https://www.google.com', color: 'linear-gradient(135deg, #4285f4, #34a853)' },
+	{ label: 'GitHub', url: 'https://github.com', color: 'linear-gradient(135deg, #6e7681, #24292f)' },
+	{ label: 'localhost:3000', url: 'http://localhost:3000', color: 'linear-gradient(135deg, #f59e0b, #ea580c)' },
+	{ label: 'MDN', url: 'https://developer.mozilla.org', color: 'linear-gradient(135deg, #8a5cf6, #3b82f6)' },
+	{ label: 'Stack Overflow', url: 'https://stackoverflow.com', color: 'linear-gradient(135deg, #f48024, #bc4b0c)' },
+	{ label: 'YouTube', url: 'https://www.youtube.com', color: 'linear-gradient(135deg, #ff3b3b, #b91c1c)' },
+];
+
+/**
+ * What was typed in the address bar, as an address: web addresses as they are (with https when
+ * no scheme was typed; http for localhost and IPs), and anything else searched on Google.
+ */
+function toAddress(text: string): string {
+	const value = text.trim();
+	if (/^(?:localhost|\d{1,3}(?:\.\d{1,3}){3}|\[[\da-f:]+\])(?::\d+)?(?:[/?#]|$)/i.test(value)) {
+		return `http://${value}`;
+	}
+	if (/^[a-z][a-z\d+.-]*:\/\//i.test(value) || /^(?:about|data|file|view-source|mailto|blob):/i.test(value)) {
+		return value;
+	}
+	if (!/\s/.test(value) && /^[^\s/?#]+\.[a-z]{2,}(?::\d+)?(?:[/?#].*)?$/i.test(value)) {
+		return `https://${value}`;
+	}
+	return `https://www.google.com/search?q=${encodeURIComponent(value)}`;
 }
 
 export class BrowserEditor extends EditorPane {
@@ -851,13 +878,7 @@ export class BrowserEditor extends EditorPane {
 		if (this._model) {
 			this.group.pinEditor(this.input); // pin editor on navigation
 
-			// Special case localhost URLs (e.g., "localhost:3000") to add http://
-			if (/^localhost(:|\/|$)/i.test(url)) {
-				url = 'http://' + url;
-			} else if (!URL.parse(url)?.protocol) {
-				// If no scheme provided, default to http (sites will generally upgrade to https)
-				url = 'http://' + url;
-			}
+			url = toAddress(url);
 
 			this.ensureBrowserFocus();
 			await this._model.loadURL(url);
@@ -909,7 +930,8 @@ export class BrowserEditor extends EditorPane {
 	 * Create the welcome container shown when no URL is loaded
 	 */
 	private createWelcomeContainer(): HTMLElement {
-		const container = $('.browser-welcome-container');
+		// A new tab page: a big search box and a few shortcuts, like a browser's own.
+		const container = $('.browser-welcome-container.dovo-new-tab');
 		const content = $('.browser-welcome-content');
 
 		const iconContainer = $('.browser-welcome-icon');
@@ -920,12 +942,38 @@ export class BrowserEditor extends EditorPane {
 		title.textContent = localize('browser.welcomeTitle', "Browser");
 		content.appendChild(title);
 
-		const subtitle = $('.browser-welcome-subtitle');
-		const chatEnabled = this.contextKeyService.getContextKeyValue<boolean>(ChatContextKeys.enabled.key);
-		subtitle.textContent = chatEnabled
-			? localize('browser.welcomeSubtitleChat', "Use Add Element to Chat to reference UI elements in chat prompts.")
-			: localize('browser.welcomeSubtitle', "Enter a URL above to get started.");
-		content.appendChild(subtitle);
+		const search = $('.dovo-new-tab-search');
+		search.appendChild(renderIcon(Codicon.search));
+		const searchInput = $<HTMLInputElement>('input.dovo-new-tab-input');
+		searchInput.type = 'text';
+		searchInput.spellcheck = false;
+		searchInput.placeholder = localize('browser.searchPlaceholder', "Search Google or enter address");
+		search.appendChild(searchInput);
+		content.appendChild(search);
+		this._register(addDisposableListener(searchInput, EventType.KEY_DOWN, (e: KeyboardEvent) => {
+			const text = searchInput.value.trim();
+			if (e.key === 'Enter' && text) {
+				searchInput.value = '';
+				void this.navigateToUrl(text);
+			}
+		}));
+
+		const shortcuts = $('.dovo-new-tab-shortcuts');
+		for (const shortcut of newTabShortcuts) {
+			const tile = $<HTMLButtonElement>('button.dovo-new-tab-shortcut');
+			tile.type = 'button';
+			const badge = $('span.dovo-new-tab-badge');
+			badge.textContent = shortcut.label.charAt(0);
+			badge.style.background = shortcut.color;
+			const label = $('span.dovo-new-tab-label');
+			label.textContent = shortcut.label;
+			tile.title = shortcut.url;
+			tile.appendChild(badge);
+			tile.appendChild(label);
+			this._register(addDisposableListener(tile, EventType.CLICK, () => void this.navigateToUrl(shortcut.url)));
+			shortcuts.appendChild(tile);
+		}
+		content.appendChild(shortcuts);
 
 		container.appendChild(content);
 		return container;

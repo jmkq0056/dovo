@@ -27,8 +27,10 @@ import './media/mautStartup.css';
 const statusCommandId = '_maut.startup.status';
 /** Contributed by the built-in `maut-claude-images` extension: installs Claude Code in a terminal. */
 const installCommandId = '_maut.claude.install';
-/** The splash's whole show, from appearing to gone, unless Claude can't start. */
-const splashDuration = 2_200;
+/** The shortest show: the word typed and settled. Then it waits for the layout to settle. */
+const splashDuration = 1_400;
+/** The longest wait for the layout, so the splash can never get stuck. */
+const splashLimit = 8_000;
 /** How long the fade out takes, within {@link splashDuration}. */
 const leaveDuration = 380;
 /** When the icon is in and the word starts typing. */
@@ -93,7 +95,7 @@ class MautStartupSplash extends Disposable implements IWorkbenchContribution {
 		@IWorkbenchLayoutService private readonly _layoutService: IWorkbenchLayoutService,
 		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IMautClaudeService claudeService: IMautClaudeService,
+		@IMautClaudeService private readonly _claudeService: IMautClaudeService,
 		@ICommandService private readonly _commandService: ICommandService,
 		@IThemeService private readonly _themeService: IThemeService,
 		@IStorageService storageService: IStorageService,
@@ -106,7 +108,7 @@ class MautStartupSplash extends Disposable implements IWorkbenchContribution {
 		}
 		const folder = workspaceContextService.getWorkbenchState() !== WorkbenchState.EMPTY;
 		const autoLaunch = configurationService.getValue<boolean>('maut.autoLaunchClsp') !== false;
-		if (!folder || !autoLaunch || configurationService.getValue<boolean>('maut.startup.splash') === false || claudeService.hasClaude || alreadyShown()) {
+		if (!folder || !autoLaunch || configurationService.getValue<boolean>('maut.startup.splash') === false || _claudeService.hasClaude || alreadyShown()) {
 			return;
 		}
 		this._show();
@@ -171,8 +173,20 @@ class MautStartupSplash extends Disposable implements IWorkbenchContribution {
 			this._later(typeStart + (word.length + 1) * typeStep, () => splash.classList.add('typed'));
 			this._later(typeStart + (word.length + 2) * typeStep, () => splash.classList.add('settled'));
 		}
-		// Done in splashDuration, Claude ready or not; only a failure keeps it up.
-		this._later(splashDuration - leaveDuration, () => this._hide());
+		// Up until the window has finished arranging itself around Claude, so nothing is seen
+		// jumping into place; never shorter than the typing, never longer than splashLimit.
+		this._later(splashDuration - leaveDuration, () => {
+			if (this._claudeService.layoutSettled) {
+				this._hide();
+				return;
+			}
+			const settled = this._claudeService.onDidSettleLayout(() => {
+				settled.dispose();
+				this._hide();
+			});
+			this._timers.add(settled);
+		});
+		this._later(splashLimit, () => this._hide());
 	}
 
 	private _onStatus(state: StartupState, message?: string): void {

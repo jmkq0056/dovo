@@ -35,6 +35,10 @@ export interface IMautClaudeService {
 	readonly working: boolean;
 	/** True while a Claude runs in this window. */
 	readonly hasClaude: boolean;
+	/** True once the window's opening layout (Claude placed, parts restored) has stopped moving. */
+	readonly layoutSettled: boolean;
+	/** Fired once, when {@link layoutSettled} becomes true; the splash waits for it. */
+	readonly onDidSettleLayout: Event<void>;
 
 	isClaude(instance: ITerminalInstance): boolean;
 	setClaude(instance: ITerminalInstance, running: boolean): void;
@@ -46,6 +50,8 @@ export interface IMautClaudeService {
 	requestToggleHidden(): void;
 	setHidden(hidden: boolean): void;
 	setWorking(instance: ITerminalInstance, working: boolean): void;
+	/** Called by the layout contribution when the opening layout has settled. */
+	settleLayout(): void;
 }
 
 class MautClaudeService extends Disposable implements IMautClaudeService {
@@ -59,6 +65,10 @@ class MautClaudeService extends Disposable implements IMautClaudeService {
 	private readonly _onDidRequestToggleHidden = this._register(new Emitter<void>());
 	readonly onDidRequestToggleHidden = this._onDidRequestToggleHidden.event;
 
+	private readonly _onDidSettleLayout = this._register(new Emitter<void>());
+	readonly onDidSettleLayout = this._onDidSettleLayout.event;
+	private _layoutSettled = false;
+
 	private readonly _running = new Set<ITerminalInstance>();
 	private readonly _working = new Set<ITerminalInstance>();
 	private _hidden = false;
@@ -69,6 +79,14 @@ class MautClaudeService extends Disposable implements IMautClaudeService {
 	get hidden(): boolean { return this._hidden; }
 	get working(): boolean { return this._working.size > 0; }
 	get hasClaude(): boolean { return this._running.size > 0; }
+	get layoutSettled(): boolean { return this._layoutSettled; }
+
+	settleLayout(): void {
+		if (!this._layoutSettled) {
+			this._layoutSettled = true;
+			this._onDidSettleLayout.fire();
+		}
+	}
 
 	isClaude(instance: ITerminalInstance): boolean {
 		return this._running.has(instance);

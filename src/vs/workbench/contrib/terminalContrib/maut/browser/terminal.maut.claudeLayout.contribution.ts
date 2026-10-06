@@ -7,7 +7,7 @@ import * as dom from '../../../../../base/browser/dom.js';
 import { mainWindow } from '../../../../../base/browser/window.js';
 import { disposableTimeout, RunOnceScheduler, timeout } from '../../../../../base/common/async.js';
 import { KeyCode, KeyMod } from '../../../../../base/common/keyCodes.js';
-import { Disposable, DisposableMap, DisposableStore } from '../../../../../base/common/lifecycle.js';
+import { Disposable, DisposableMap, DisposableStore, MutableDisposable, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { localize, localize2 } from '../../../../../nls.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../../platform/configuration/common/configurationRegistry.js';
@@ -22,6 +22,8 @@ import { TerminalLocation } from '../../../../../platform/terminal/common/termin
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../../common/contributions.js';
 import { GroupDirection, GroupsOrder, IEditorGroup, IEditorGroupsService } from '../../../../services/editor/common/editorGroupsService.js';
 import { IWorkbenchLayoutService, Parts } from '../../../../services/layout/browser/layoutService.js';
+import { IPaneCompositePartService } from '../../../../services/panecomposite/browser/panecomposite.js';
+import { ViewContainerLocation } from '../../../../common/views.js';
 import { IMautClaudeService, MautClaudeLayoutMode } from '../../../terminal/browser/mautClaude.js';
 import { ITerminalInstance, ITerminalService } from '../../../terminal/browser/terminal.js';
 import { TerminalEditorInput } from '../../../terminal/browser/terminalEditorInput.js';
@@ -33,6 +35,12 @@ const claudeCommandRegex = /^\s*(?:\S*\/)?(?:claude|clsp)(?:\s|$)/;
 /** One-off runs of claude that print and exit (no session to show): `claude -p ...`, `claude --version`, `claude mcp list`. */
 const claudeOneOffRegex = /^\s*(?:\S*\/)?claude\s+(?:-p\b|--print\b|-v\b|--version\b|-h\b|--help\b|update\b|mcp\b|config\b|doctor\b|install\b|setup-token\b|migrate-installer\b)/;
 /** Per window: the layout Claude was in, its width in IDE mode, and whether it was hidden. */
+/** The browser's activity bar entry (contrib/mautcode) and the Explorer. */
+const browserContainerId = 'workbench.view.dovoBrowser';
+const explorerContainerId = 'workbench.view.explorer';
+/** The layout veil's fade in and out, as in claudeLayout.css. */
+const veilInDuration = 110;
+const veilOutDuration = 260;
 const modeKey = 'maut.claude.layout.mode';
 const widthKey = 'maut.claude.layout.ideWidth';
 /** In IDE mode the file tree is pinned (the side bar shows) or not (the slim rail and the finder instead). */
@@ -91,6 +99,8 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 	 * window opens the workbench is still restoring parts, which would otherwise flip Focus to IDE.
 	 */
 	private _settleUntil = 0;
+	/** True while the window is still restoring its parts (and a while after): see `_settleUntil`. */
+	private _opening = true;
 	/** Groups this class created empty for the IDE layout, removed again when no longer needed. */
 	private readonly _createdGroups = new Set<IEditorGroup>();
 	private _hidden = false;
@@ -99,6 +109,11 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 	private readonly _strip: HTMLElement;
 	private readonly _stripStatus: HTMLElement;
 	private readonly _saveWidth = this._register(new RunOnceScheduler(() => this._rememberWidth(), 400));
+	/** The opening layout counts as settled once nothing has moved for a moment (see `_noteMovement`). */
+	private readonly _settle = this._register(new RunOnceScheduler(() => this._finishOpening(), 650));
+	/** The cover over the workbench while the layout changes, so panes never visibly jump. */
+	private _veil: HTMLElement | undefined;
+	private readonly _veilRemoval = this._register(new MutableDisposable());
 	/** A new group (a terminal or tab opened beside) is folded back in shortly after it appears. */
 	private readonly _arrangeSoon = this._register(new RunOnceScheduler(() => this._sessions.length ? this._arrange() : this._keepTwoColumns(), 300));
 
@@ -109,6 +124,7 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IMautClaudeService private readonly _claudeService: IMautClaudeService,
 		@IStorageService private readonly _storageService: IStorageService,
+		@IPaneCompositePartService private readonly _paneCompositeService: IPaneCompositePartService,
 	) {
 		super();
 		this._strip = dom.$<HTMLButtonElement>('button.maut-claude-strip', { type: 'button' });
@@ -122,6 +138,7 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 		this._register(this._claudeService.onDidChange(() => this._strip.classList.toggle('working', this._claudeService.working)));
 		// Remember the width you give Claude in IDE mode.
 		this._register(this._editorGroupsService.mainPart.onDidLayout(() => {
+			this._noteMovement();
 			if (this._mode === 'ide' && !this._hidden && !this._applying && this._sessions.length) {
 				this._keepMinimumWidth();
 				this._saveWidth.schedule();
@@ -132,7 +149,8 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 		}
 		this._register(this._terminalService.onDidCreateInstance(instance => this._watch(instance)));
 		// Never a third column: whatever opens in a group of its own joins the files (or Claude's).
-		this._register(this._editorGroupsService.onDidAddGroup(() => {
+		this._register(this._editorGroupsService.mainPart.onDidAddGroup(() => {
+			this._noteMovement();
 			if (!this._applying && !this._hidden) {
 				this._arrangeSoon.schedule();
 			}
@@ -146,8 +164,38 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 		// allow-any-unicode-next-line
 		// ⌘B and the Explorer icon toggle the side bar. In Focus that means "go to IDE, with the tree";
 		// in IDE it pins or unpins the tree, and you stay in IDE.
+		// The splash covers the window until its layout has settled; if Claude never starts here
+		// (it isn't installed, or auto launch is off), it settles anyway.
+		void this._layoutService.whenRestored.then(() => this._register(disposableTimeout(() => this._finishOpening(), 6000)));
+		// The browser's activity bar icon only opens the browser tab; it isn't a side bar to keep open.
+		this._register(this._paneCompositeService.onDidPaneCompositeOpen(e => {
+			if (e.viewContainerLocation === ViewContainerLocation.Sidebar && e.composite.getId() === browserContainerId && this._sessions.length && !this._applying) {
+				void this._applying$(async () => {
+					if (this._mode === 'ide' && this._treePinned) {
+						await this._paneCompositeService.openPaneComposite(explorerContainerId, ViewContainerLocation.Sidebar);
+					} else {
+						this._layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
+					}
+				});
+			}
+		}));
 		this._register(this._layoutService.onDidChangePartVisibility(e => {
-			if (e.partId !== Parts.SIDEBAR_PART || this._applying || !this._sessions.length || Date.now() <= this._settleUntil) {
+			this._noteMovement();
+			if (e.partId !== Parts.SIDEBAR_PART || this._applying || !this._sessions.length) {
+				return;
+			}
+			// The side bar a window had last time comes back late, after Claude started: that is
+			// the window restoring, not you asking for IDE. Keep the layout Claude opened in.
+			if (this._opening) {
+				if (e.visible) {
+					this._arrangeSoon.schedule();
+				}
+				return;
+			}
+			if (Date.now() <= this._settleUntil) {
+				return;
+			}
+			if (e.visible && this._paneCompositeService.getActivePaneComposite(ViewContainerLocation.Sidebar)?.getId() === browserContainerId) {
 				return;
 			}
 			this._setTreePinned(e.visible);
@@ -209,11 +257,16 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 		}
 		this._sessions.push(instance);
 		this._claudeService.setClaude(instance, true);
-		const group = await this._placeInEditorArea(instance);
-		if (group && this._sessions.includes(instance)) {
-			await this._arrange();
+		await this._veiled(async () => {
+			const group = await this._placeInEditorArea(instance);
+			if (group && this._sessions.includes(instance)) {
+				await this._arrange();
+			}
+		});
+		if (this._sessions.includes(instance)) {
 			instance.focus();
 		}
+		this._noteMovement();
 	}
 
 	private async _end(instance: ITerminalInstance): Promise<void> {
@@ -223,7 +276,7 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 		}
 		this._sessions.splice(index, 1);
 		this._claudeService.setClaude(instance, false);
-		await this._applying$(async () => {
+		await this._veiled(() => this._applying$(async () => {
 			const group = this._groupOf(instance);
 			if (group) {
 				this._unmaximize(group);
@@ -244,7 +297,7 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 			this._restore = undefined;
 			this._layoutService.setPartHidden(false, Parts.PANEL_PART);
 			this._layoutService.setPartHidden(!restore?.sidebarVisible, Parts.SIDEBAR_PART);
-		});
+		}));
 		if (!instance.isDisposed && !this._sessions.length) {
 			instance.focus();
 		}
@@ -257,7 +310,7 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 		this._mode = mode;
 		this._claudeService.setLayoutMode(mode);
 		this._storageService.store(modeKey, mode, StorageScope.WORKSPACE, StorageTarget.USER);
-		await this._arrange();
+		await this._veiled(() => this._arrange());
 		this._sessions.at(-1)?.focus();
 	}
 
@@ -267,7 +320,7 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 		}
 		this._hidden = hidden;
 		this._claudeService.setHidden(hidden);
-		await this._arrange();
+		await this._veiled(() => this._arrange());
 		if (!hidden) {
 			this._sessions.at(-1)?.focus();
 		}
@@ -463,16 +516,18 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 
 	/** Without a running Claude: still two columns at most, the agent tab's group kept as one of them. */
 	private async _keepTwoColumns(): Promise<void> {
-		if (this._applying || this._editorGroupsService.count <= 2) {
+		const main = this._editorGroupsService.mainPart;
+		if (this._applying || main.count <= 2) {
 			return;
 		}
-		const groups = this._editorGroupsService.getGroups(GroupsOrder.GRID_APPEARANCE);
+		const groups = main.getGroups(GroupsOrder.GRID_APPEARANCE);
 		const agent = groups.find(group => group.editors.some(editor => editor instanceof TerminalEditorInput && /^Agent\b/.test(editor.getName()))) ?? groups[0];
 		await this._applying$(async () => this._mergeIntoTwoGroups(agent));
 	}
 
 	private _otherGroups(claude: IEditorGroup): IEditorGroup[] {
-		return this._editorGroupsService.getGroups(GroupsOrder.MOST_RECENTLY_ACTIVE).filter(group => group !== claude);
+		// Only the main window: a group popped out into a window of its own stays there.
+		return this._editorGroupsService.mainPart.getGroups(GroupsOrder.MOST_RECENTLY_ACTIVE).filter(group => group !== claude);
 	}
 
 	/**
@@ -504,6 +559,53 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 	private _unmaximize(group: IEditorGroup): void {
 		if (this._editorGroupsService.getPart(group).hasMaximizedGroup()) {
 			this._editorGroupsService.toggleMaximizeGroup(group);
+		}
+	}
+
+	/** While the window opens, every move pushes "settled" back a little. */
+	private _noteMovement(): void {
+		if (this._opening && this._sessions.length) {
+			this._settle.schedule();
+		}
+	}
+
+	private _finishOpening(): void {
+		if (this._opening) {
+			this._opening = false;
+			this._settle.cancel();
+			this._claudeService.settleLayout();
+		}
+	}
+
+	/**
+	 * Runs a layout change behind a short fade, so groups moving and parts appearing are never seen
+	 * mid-way. While the window opens the splash covers everything already.
+	 */
+	private async _veiled(change: () => Promise<void>): Promise<void> {
+		const container = this._layoutService.mainContainer;
+		if (this._opening || this._veil || mainWindow.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			return change();
+		}
+		const veil = this._veil = dom.append(container, dom.$('.dovo-layout-veil'));
+		dom.append(veil, dom.$('.dovo-layout-veil-glow'));
+		const top = this._layoutService.getContainer(mainWindow, Parts.TITLEBAR_PART)?.getBoundingClientRect().bottom ?? 0;
+		veil.style.top = `${Math.max(0, Math.round(top))}px`;
+		try {
+			// Fade in, then change underneath, then let the new layout paint before fading out.
+			void veil.offsetWidth;
+			veil.classList.add('in');
+			await timeout(veilInDuration);
+			await change();
+			await timeout(120);
+		} finally {
+			veil.classList.remove('in');
+			veil.classList.add('out');
+			this._veil = undefined;
+			const timer = mainWindow.setTimeout(() => veil.remove(), veilOutDuration);
+			this._veilRemoval.value = toDisposable(() => {
+				mainWindow.clearTimeout(timer);
+				veil.remove();
+			});
 		}
 	}
 

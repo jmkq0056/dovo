@@ -3,65 +3,171 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-/* The browser tab's body: the real browser window covers it; this shows only until it does.
-	In Dovo's Ember colours: a soft amber glow, an amber badge, amber actions. */
-.monaco-workbench .dovo-browser-body {
-	height: 100%;
-	display: grid;
-	place-items: center;
-	background:
-		radial-gradient(60% 55% at 50% 45%, rgba(245, 158, 11, .10), transparent 70%),
-		var(--vscode-editor-background);
-	cursor: pointer;
-	outline: none;
-}
-.monaco-workbench .dovo-browser-center,
+/* The side bar's browser view: a line of help and a button. */
 .monaco-workbench .dovo-browser-view {
 	display: flex;
 	flex-direction: column;
-	align-items: center;
-	gap: 12px;
-	max-width: 440px;
-	padding: 28px;
-	text-align: center;
+	gap: 10px;
+	padding: 12px 16px;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--vscode-descriptionForeground);
 }
-.monaco-workbench .dovo-browser-center .dovo-browser-icon {
+.monaco-workbench .dovo-browser-view p { margin: 0; }
+.monaco-workbench .dovo-browser-view .dovo-browser-primary {
+	align-self: flex-start;
+	padding: 6px 14px;
+	border: 0;
+	border-radius: 8px;
+	background: linear-gradient(135deg, #ff9640, #ff3750 55%, #9059ff);
+	color: #fff;
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+}
+.monaco-workbench .dovo-browser-view .dovo-browser-primary:hover { filter: brightness(1.08); }
+
+/* The browser tab, in the spirit of Firefox: a toolbar a shade apart from the page, a rounded
+	address bar that lights up with Firefox's focus ring, and a new tab page with a big search box. */
+.monaco-workbench .browser-root .browser-navbar {
+	padding: 7px 10px;
+	gap: 6px;
+	background: color-mix(in srgb, var(--vscode-editor-background) 86%, #8f8f9d);
+	border-bottom: 1px solid color-mix(in srgb, var(--vscode-editor-background) 70%, #000);
+}
+.monaco-workbench .browser-root .browser-nav-toolbar .action-label,
+.monaco-workbench .browser-root .browser-actions-toolbar .action-label {
+	width: 28px;
+	height: 28px;
+	border-radius: 6px;
+	display: grid;
+	place-items: center;
+}
+.monaco-workbench .browser-root .browser-url-container {
+	height: 32px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-editor-background) 70%, #000);
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .04);
+	transition: box-shadow .15s ease, background .15s ease;
+}
+.monaco-workbench .browser-root .browser-url-container:hover { background: color-mix(in srgb, var(--vscode-editor-background) 60%, #000); }
+.monaco-workbench .browser-root .browser-url-container:has(.browser-url-input:focus) {
+	border-color: transparent;
+	background: color-mix(in srgb, var(--vscode-editor-background) 55%, #000);
+	box-shadow: 0 0 0 2px #00ddff, 0 0 0 5px rgba(0, 221, 255, .18);
+}
+.monaco-workbench .browser-root .browser-url-input,
+.monaco-workbench .browser-root .browser-url-display { padding: 0 10px; font-size: 13px; }
+
+/* New tab page. */
+.monaco-workbench .browser-root .dovo-new-tab {
+	background:
+		radial-gradient(70% 55% at 50% 0%, rgba(144, 89, 255, .12), transparent 70%),
+		radial-gradient(60% 50% at 50% 100%, rgba(255, 150, 64, .08), transparent 70%),
+		var(--vscode-editor-background);
+}
+.monaco-workbench .browser-root .dovo-new-tab .browser-welcome-content {
+	width: min(640px, 100%);
+	gap: 0;
+	padding: 24px;
+	animation: dovo-new-tab-in .35s ease-out both;
+}
+@keyframes dovo-new-tab-in { from { opacity: 0; transform: translateY(8px); } }
+.monaco-workbench .browser-root .dovo-new-tab .browser-welcome-icon {
 	display: grid;
 	place-items: center;
 	width: 72px;
 	height: 72px;
-	margin-bottom: 6px;
-	border-radius: 18px;
-	background: linear-gradient(145deg, #fbbf24, #ea580c);
-	box-shadow: 0 14px 34px -14px rgba(234, 88, 12, .65), inset 0 1px 0 rgba(255, 255, 255, .35);
-	color: #1a1208;
-	font-size: 36px !important;
+	min-height: 0;
+	border-radius: 50%;
+	background: conic-gradient(from 200deg, #ffbd4f, #ff9640, #ff3750, #9059ff, #592acb, #ffbd4f);
+	box-shadow: 0 16px 40px -16px rgba(255, 55, 80, .7);
 }
-.monaco-workbench .dovo-browser-title { font-size: 17px; font-weight: 650; letter-spacing: -.01em; color: var(--vscode-foreground); }
-.monaco-workbench .dovo-browser-detail { font-size: 13px; line-height: 1.55; color: var(--vscode-descriptionForeground); }
-.monaco-workbench .dovo-browser-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
-.monaco-workbench .dovo-browser-actions button {
-	padding: 6px 14px;
-	border-radius: 8px;
-	border: 1px solid rgba(245, 158, 11, .35);
-	background: rgba(245, 158, 11, .08);
+.monaco-workbench .browser-root .dovo-new-tab .browser-welcome-icon .codicon {
+	margin: 0;
+	font-size: 38px;
+	color: #fff;
+}
+.monaco-workbench .browser-root .dovo-new-tab .browser-welcome-title {
+	margin: 14px 0 22px;
+	font-size: 22px;
+	font-weight: 700;
+	letter-spacing: -.02em;
+}
+.monaco-workbench .browser-root .dovo-new-tab-search {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	height: 50px;
+	padding: 0 16px;
+	box-sizing: border-box;
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--vscode-editor-background) 75%, #fff);
+	box-shadow: 0 2px 14px rgba(0, 0, 0, .3), inset 0 0 0 1px rgba(255, 255, 255, .06);
+	color: var(--vscode-descriptionForeground);
+	transition: box-shadow .15s ease;
+}
+.monaco-workbench .browser-root .dovo-new-tab-search:focus-within { box-shadow: 0 0 0 2px #00ddff, 0 0 0 6px rgba(0, 221, 255, .16), 0 2px 14px rgba(0, 0, 0, .3); }
+.monaco-workbench .browser-root .dovo-new-tab-search .codicon { font-size: 18px; }
+.monaco-workbench .browser-root .dovo-new-tab-input {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	outline: none !important;
+	background: transparent;
 	color: var(--vscode-foreground);
 	font: inherit;
-	font-size: 12.5px;
-	font-weight: 500;
-	cursor: pointer;
-	transition: background .15s ease, border-color .15s ease;
+	font-size: 15px;
 }
-.monaco-workbench .dovo-browser-actions button:hover { background: rgba(245, 158, 11, .16); border-color: rgba(245, 158, 11, .65); }
-.monaco-workbench .dovo-browser-actions button.primary { background: #f59e0b; border-color: #f59e0b; color: #1a1208; font-weight: 600; }
-.monaco-workbench .dovo-browser-actions button.primary:hover { background: #fbbf24; border-color: #fbbf24; }
+.monaco-workbench .browser-root .dovo-new-tab-shortcuts {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+	gap: 12px;
+	width: 100%;
+	margin-top: 28px;
+}
+.monaco-workbench .browser-root .dovo-new-tab-shortcut {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 6px 10px;
+	border: 0;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+	transition: background .15s ease, transform .15s ease;
+}
+.monaco-workbench .browser-root .dovo-new-tab-shortcut:hover { background: rgba(128, 128, 140, .16); transform: translateY(-1px); }
+.monaco-workbench .browser-root .dovo-new-tab-badge {
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	border-radius: 12px;
+	color: #fff;
+	font-size: 19px;
+	font-weight: 700;
+	box-shadow: 0 6px 16px -8px rgba(0, 0, 0, .6);
+}
+.monaco-workbench .browser-root .dovo-new-tab-label {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--vscode-descriptionForeground);
+}
 
-/* The side bar view: compact, left aligned, same accents. */
-.monaco-workbench .dovo-browser-view { align-items: stretch; text-align: left; padding: 12px 16px; max-width: none; gap: 8px; }
-.monaco-workbench .dovo-browser-view .dovo-browser-icon { display: none; }
-.monaco-workbench .dovo-browser-view .dovo-browser-title { font-size: 13px; }
-.monaco-workbench .dovo-browser-view .dovo-browser-detail { font-size: 12px; }
-.monaco-workbench .dovo-browser-view .dovo-browser-actions { justify-content: flex-start; }
-
-.monaco-workbench.vs .dovo-browser-actions button.primary,
-.monaco-workbench.hc-light .dovo-browser-actions button.primary { background: #ea580c; border-color: #ea580c; color: #fff; }
+/* Light themes: Firefox's light toolbar and blue focus ring. */
+.monaco-workbench.vs .browser-root .browser-navbar,
+.monaco-workbench.hc-light .browser-root .browser-navbar { background: #f0f0f4; border-bottom-color: #e0e0e6; }
+.monaco-workbench.vs .browser-root .browser-url-container,
+.monaco-workbench.hc-light .browser-root .browser-url-container { background: #fff; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08); }
+.monaco-workbench.vs .browser-root .browser-url-container:has(.browser-url-input:focus),
+.monaco-workbench.vs .browser-root .dovo-new-tab-search:focus-within { box-shadow: 0 0 0 2px #0061e0, 0 0 0 5px rgba(0, 97, 224, .16); }
+.monaco-workbench.vs .browser-root .dovo-new-tab-search { background: #fff; box-shadow: 0 2px 12px rgba(0, 0, 0, .1), inset 0 0 0 1px rgba(0, 0, 0, .06); }

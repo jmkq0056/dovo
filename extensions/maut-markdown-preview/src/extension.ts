@@ -14,6 +14,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import MarkdownIt from 'markdown-it';
+import anchor from 'markdown-it-anchor';
+import taskLists from 'markdown-it-task-lists';
 
 interface Heading {
 	level: number;
@@ -31,25 +34,24 @@ const previews = new Map<string, PreviewState>();
 function uriKey(uri: vscode.Uri): string { return uri.toString(); }
 
 async function buildMarkdownIt() {
-	const MarkdownIt = (await import('markdown-it')).default;
-	const anchor = (await import('markdown-it-anchor')).default;
-	// markdown-it-task-lists has no @types; cast at import.
-	const taskLists = ((await import('markdown-it-task-lists' as string)) as { default: unknown }).default;
 	const md = MarkdownIt({
 		html: true,
 		linkify: true,
 		typographer: true,
 		breaks: false,
 	});
-	md.use(anchor as any, {
+	md.use(anchor, {
 		slugify: slugify,
-		permalink: (anchor as any).permalink?.linkInsideHeader?.({
+		permalink: anchor.permalink.linkInsideHeader({
 			symbol: '#',
 			placement: 'before',
 			ariaHidden: true,
 		}),
 	});
-	md.use(taskLists as any, { enabled: false, label: true });
+	md.use(taskLists, { enabled: false, label: true });
+	// A table wider than the pane scrolls sideways in a box of its own, instead of being cut off.
+	md.renderer.rules.table_open = () => '<div class="table-wrap"><table>\n';
+	md.renderer.rules.table_close = () => '</table></div>\n';
 	return md;
 }
 
@@ -86,7 +88,7 @@ function renderToc(headings: Heading[]): string {
 }
 
 function escapeHtml(s: string): string {
-	return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+	return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }[c]!));
 }
 
 function themeKindToClass(): string {
@@ -148,8 +150,8 @@ function wrap(webview: vscode.Webview, themeClass: string, title: string, toc: s
 }
 html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--fg); }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'SF Pro Text', system-ui, sans-serif; font-size: 15px; line-height: 1.7; }
-.layout { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
-@media (max-width: 800px) { .layout { grid-template-columns: 1fr; } .toc { display: none; } }
+.layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100vh; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } .toc { display: none; } }
 .toc { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--toc-bg); border-right: 1px solid var(--border); padding: 24px 0 24px 16px; }
 .toc-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--subtle); margin: 0 0 10px 12px; font-weight: 600; }
 .toc-empty { color: var(--subtle); font-size: 13px; padding: 0 16px; }
@@ -157,8 +159,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'SF 
 .toc-link:hover { color: var(--accent-hover); }
 .toc-link.active { color: var(--accent); border-left-color: var(--accent); background: var(--toc-hover); }
 .toc-link.level-1 { font-weight: 600; }
-.content-wrap { padding: 56px 8px; overflow-x: hidden; }
-.content { max-width: 760px; margin: 0 auto; padding: 0 32px; }
+.content-wrap { padding: 56px 8px; min-width: 0; }
+.content { max-width: 760px; margin: 0 auto; padding: 0 32px; min-width: 0; }
+@media (max-width: 600px) { .content { padding: 0 16px; } .content-wrap { padding-top: 32px; } }
 .file-name { font-family: ui-monospace, 'JetBrains Mono', SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--subtle); margin: 0 0 12px 0; }
 h1, h2, h3, h4, h5, h6 { font-weight: 700; line-height: 1.25; margin-top: 36px; margin-bottom: 16px; scroll-margin-top: 24px; color: var(--fg); }
 h1 { font-size: 2.2em; color: var(--accent); border-bottom: 2px solid var(--border); padding-bottom: 10px; margin-top: 0; }
@@ -175,8 +178,11 @@ code { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monos
 pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; overflow-x: auto; margin: 16px 0; font-size: 13px; line-height: 1.55; }
 pre code, pre code.hljs { background: transparent; padding: 0; font-size: 13px; }
 blockquote { border-left: 4px solid var(--accent); padding: 0 16px; margin: 16px 0; color: var(--muted); font-style: italic; }
-table { border-collapse: collapse; margin: 16px 0; width: 100%; font-size: 14px; }
-th, td { border: 1px solid var(--border); padding: 8px 14px; text-align: left; }
+.table-wrap { overflow-x: auto; margin: 16px 0; border-radius: 6px; -webkit-overflow-scrolling: touch; }
+table { border-collapse: collapse; margin: 0; width: 100%; font-size: 14px; }
+th, td { border: 1px solid var(--border); padding: 8px 14px; text-align: left; vertical-align: top; }
+/* Long links and words wrap inside their cell, so most tables fit the pane as they are. */
+td { overflow-wrap: anywhere; min-width: 4em; }
 th { background: var(--toc-bg); font-weight: 600; }
 img { max-width: 100%; height: auto; border-radius: 6px; margin: 16px 0; }
 hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
@@ -269,7 +275,7 @@ async function openPreview(uri: vscode.Uri): Promise<void> {
 	for (const group of vscode.window.tabGroups.all) {
 		for (const tab of group.tabs) {
 			const input = tab.input as { uri?: vscode.Uri } | undefined;
-			if (input?.uri?.toString() === uri.toString() && !(tab.input as any)?.viewType?.includes?.('webview')) {
+			if (input?.uri?.toString() === uri.toString() && !(tab.input instanceof vscode.TabInputWebview)) {
 				try { await vscode.window.tabGroups.close(tab); } catch { /* noop */ }
 			}
 		}
@@ -286,7 +292,7 @@ async function toggleSourcePreview(): Promise<void> {
 	const input = activeTab?.input as { viewType?: string } | undefined;
 	if (input?.viewType === 'mainThreadWebview-maut.markdownPreview') {
 		// find the URI from previews map
-		const entry = Array.from(previews.entries()).find(([, st]) => st.panel === (activeTab as any)._input);
+		const entry = Array.from(previews.entries()).find(([, st]) => st.panel.active);
 		if (entry) {
 			const [, st] = entry;
 			st.panel.dispose();

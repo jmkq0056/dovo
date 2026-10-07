@@ -1398,6 +1398,7 @@ export class MautClaudePane extends Disposable {
 							actionHandler: link => this._openLink(link),
 						}));
 						rendered.element.classList.add('mcp-prose');
+						this._linkPaths(rendered.element, this._activityDisposables);
 						content.appendChild(rendered.element);
 					} else if (item.kind === 'step') {
 						const step = dom.append(content, dom.$('.mcp-step'));
@@ -1888,6 +1889,7 @@ export class MautClaudePane extends Disposable {
 					actionHandler: link => this._openLink(link),
 				}));
 				rendered.element.classList.add('mcp-prose');
+				this._linkPaths(rendered.element, this._renderDisposables);
 				body.appendChild(rendered.element);
 			} else {
 				body.appendChild(this._renderEdit(item));
@@ -2021,6 +2023,45 @@ export class MautClaudePane extends Disposable {
 	 * Your message as you wrote it, with every attached file path (a pasted path or file:// link)
 	 * kept as text but clickable: it opens the file in a popup over the window.
 	 */
+	/**
+	 * File paths in Claude's text (plain or in inline code) become links that open the file in a
+	 * popup over the window, like the paths in your own messages. Code blocks and links stay as
+	 * they are.
+	 */
+	private _linkPaths(element: HTMLElement, store: DisposableStore): void {
+		const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+		const nodes: Text[] = [];
+		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+			const parent = node.parentElement;
+			if (parent && !parent.closest('a, pre') && attachedPathRegex.test(node.textContent ?? '')) {
+				nodes.push(node as Text);
+			}
+			attachedPathRegex.lastIndex = 0;
+		}
+		for (const node of nodes) {
+			const text = node.data;
+			const fragment = element.ownerDocument.createDocumentFragment();
+			let at = 0;
+			for (const match of text.matchAll(attachedPathRegex)) {
+				const resource = attachedPathResource(match[0]);
+				if (!resource) {
+					continue;
+				}
+				fragment.append(text.slice(at, match.index));
+				const link = dom.$<HTMLButtonElement>('button.mcp-path-link', { type: 'button' }, match[0]);
+				link.title = localize('maut.claude.openAttached', "Open {0}", resource.fsPath);
+				store.add(dom.addDisposableListener(link, dom.EventType.CLICK, e => {
+					e.stopPropagation();
+					void this._editorService.openEditor({ resource, options: { pinned: true } }, MODAL_GROUP);
+				}));
+				fragment.append(link);
+				at = match.index + match[0].length;
+			}
+			fragment.append(text.slice(at));
+			node.replaceWith(fragment);
+		}
+	}
+
 	private _promptText(text: string): HTMLElement {
 		const element = dom.$('.mcp-prompt');
 		let at = 0;

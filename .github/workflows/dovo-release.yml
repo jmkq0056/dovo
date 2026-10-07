@@ -88,7 +88,10 @@ jobs:
             Dovo-Setup-x64.exe
             Dovo-win-x64.zip
 
+  # The Mac DMG is built and uploaded from a Mac (scripts/release-macos.sh); run this job by
+  # hand (workflow_dispatch) only when no Mac is at hand. A tag builds Windows only.
   mac-arm64:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-14
     timeout-minutes: 240
     steps:

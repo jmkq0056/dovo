@@ -27,6 +27,7 @@ import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IEditorService, MODAL_GROUP } from '../../../services/editor/common/editorService.js';
+import { GroupDirection, GroupsOrder, IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { IMautClaudeService, MautClaudeView } from './mautClaude.js';
 import type { ITerminalInstance } from './terminal.js';
 import { getFileResourcesFromDragEvent } from './terminalUri.js';
@@ -132,6 +133,10 @@ interface IClaudeSessionView {
  */
 /** Contributed by the built-in `maut-claude-images` extension: a thumbnail picture of a file. */
 const fileThumbnailCommandId = '_maut.files.thumbnail';
+
+/** Files that open in a popup to glance at; everything else opens beside Claude, in the files group. */
+const popupExtensionRegex = /\.(?:pdf|png|jpe?g|gif|webp|heic|bmp|svg|ico|tiff?|avif|mp4|mov|webm)$/i;
+const terminalEditorTypeId = 'workbench.editors.terminal';
 
 /** Each terminal's latest Remote Control session, kept after its link leaves the screen. */
 const remoteControlSessions = new WeakMap<ITerminalInstance, string>();
@@ -280,6 +285,7 @@ export class MautClaudePane extends Disposable {
 		@IOpenerService private readonly _openerService: IOpenerService,
 		@IClipboardService private readonly _clipboardService: IClipboardService,
 		@IContextMenuService private readonly _contextMenuService: IContextMenuService,
+		@IEditorGroupsService private readonly _editorGroupsService: IEditorGroupsService,
 	) {
 		super();
 		this._root.classList.add('maut-claude-host');
@@ -2024,6 +2030,22 @@ export class MautClaudePane extends Disposable {
 	 * kept as text but clickable: it opens the file in a popup over the window.
 	 */
 	/**
+	 * Opens a file someone named: a picture or a PDF in a popup over the window, to glance at;
+	 * code and every other file in the files group (on the right in Focus, the left in IDE),
+	 * never as a tab beside Claude.
+	 */
+	private async _openResource(resource: URI): Promise<void> {
+		if (popupExtensionRegex.test(resource.path)) {
+			await this._editorService.openEditor({ resource, options: { pinned: true } }, MODAL_GROUP);
+			return;
+		}
+		const main = this._editorGroupsService.mainPart;
+		const isFiles = (group: IEditorGroup) => !group.editors.some(editor => editor.typeId === terminalEditorTypeId);
+		const files = isFiles(main.activeGroup) ? main.activeGroup : main.getGroups(GroupsOrder.MOST_RECENTLY_ACTIVE).find(isFiles);
+		await this._editorService.openEditor({ resource, options: { pinned: true } }, files ?? main.addGroup(main.activeGroup, GroupDirection.RIGHT));
+	}
+
+	/**
 	 * File paths in Claude's text (plain or in inline code) become links that open the file in a
 	 * popup over the window, like the paths in your own messages. Code blocks and links stay as
 	 * they are.
@@ -2052,7 +2074,7 @@ export class MautClaudePane extends Disposable {
 				link.title = localize('maut.claude.openAttached', "Open {0}", resource.fsPath);
 				store.add(dom.addDisposableListener(link, dom.EventType.CLICK, e => {
 					e.stopPropagation();
-					void this._editorService.openEditor({ resource, options: { pinned: true } }, MODAL_GROUP);
+					void this._openResource(resource);
 				}));
 				fragment.append(link);
 				at = match.index + match[0].length;
@@ -2075,7 +2097,7 @@ export class MautClaudePane extends Disposable {
 			link.title = localize('maut.claude.openAttached', "Open {0}", resource.fsPath);
 			this._renderDisposables.add(dom.addDisposableListener(link, dom.EventType.CLICK, e => {
 				e.stopPropagation();
-				void this._editorService.openEditor({ resource, options: { pinned: true } }, MODAL_GROUP);
+				void this._openResource(resource);
 			}));
 			at = match.index + match[0].length;
 		}
@@ -2163,7 +2185,7 @@ export class MautClaudePane extends Disposable {
 		store.add(dom.addDisposableListener(chip, dom.EventType.CLICK, e => {
 			e.stopPropagation();
 			e.preventDefault();
-			void this._editorService.openEditor({ resource, options: { pinned: true } }, MODAL_GROUP);
+			void this._openResource(resource);
 		}));
 		// Keep the click from moving focus out of the input.
 		store.add(dom.addDisposableListener(chip, dom.EventType.MOUSE_DOWN, e => e.preventDefault()));
@@ -2290,7 +2312,7 @@ export class MautClaudePane extends Disposable {
 			}
 			resource = URI.joinPath(base, file);
 		}
-		this._editorService.openEditor({ resource, options: { pinned: false } });
+		await this._openResource(resource);
 	}
 }
 

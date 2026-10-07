@@ -271,6 +271,9 @@ export class MautClaudePane extends Disposable {
 
 	/** Set on mouse down: the click that follows is a Cmd+click. */
 	private _linkToDefaultBrowser = false;
+	/** Where the Reader was scrolled, and when you last scrolled it by hand. */
+	private _lastScrollTop = 0;
+	private _handScrollAt = 0;
 
 	constructor(
 		private readonly _root: HTMLElement,
@@ -324,7 +327,15 @@ export class MautClaudePane extends Disposable {
 				this._promptNavHide.value = toDisposable(() => dom.getWindow(this._root).clearTimeout(handle));
 			}));
 		}
+		// Scrolling by hand: the wheel, a drag of the bar, the keyboard.
+		for (const type of ['wheel', dom.EventType.POINTER_DOWN, dom.EventType.KEY_DOWN, 'touchstart']) {
+			this._register(dom.addDisposableListener(this._reader, type, () => this._handScrollAt = Date.now(), { passive: true }));
+		}
 		this._register(dom.addDisposableListener(this._reader, 'scroll', () => {
+			if (!this._reader.clientHeight || this._restoreAfterReset()) {
+				return;
+			}
+			this._lastScrollTop = this._reader.scrollTop;
 			if (!this._autoScrolling) {
 				this._followBottom = this._isAtBottom();
 				this._jumpToLatest.classList.toggle('visible', !this._followBottom);
@@ -335,7 +346,10 @@ export class MautClaudePane extends Disposable {
 		this._register(dom.addDisposableListener(this._jumpToLatest, dom.EventType.CLICK, () => this._scrollToEnd(true)));
 		// Anything that grows the conversation (new turns, live output, images loading) keeps the
 		// latest in view while the Reader follows.
-		const resizeObserver = this._register(new dom.DisposableResizeObserver('mautClaudeReader', () => this._scrollToEnd(), dom.getWindow(this._root)));
+		const resizeObserver = this._register(new dom.DisposableResizeObserver('mautClaudeReader', () => {
+			this._restoreAfterReset();
+			this._scrollToEnd();
+		}, dom.getWindow(this._root)));
 		this._register(resizeObserver.observe(this._column));
 		this._register(resizeObserver.observe(this._reader));
 		this._register(dom.addDisposableListener(this._promptNav, 'focusout', e => {
@@ -840,6 +854,22 @@ export class MautClaudePane extends Disposable {
 	}
 
 	/** Show the latest, instantly: a smooth scroll would read as "you scrolled up" mid-way. */
+	/**
+	 * Moving Claude's group (the first file opening beside it, a layout change) re-attaches the
+	 * Reader, which puts it back at the very top. That isn't you scrolling: return to where it
+	 * was, or to the latest while it was following. Returns whether it did.
+	 */
+	private _restoreAfterReset(): boolean {
+		const reset = this._reader.scrollTop === 0 && this._lastScrollTop > 0 && Date.now() - this._handScrollAt > 800;
+		if (!reset || !this._reader.clientHeight) {
+			return false;
+		}
+		this._autoScrolling = true;
+		this._reader.scrollTo({ top: this._followBottom ? this._reader.scrollHeight : this._lastScrollTop, behavior: 'instant' });
+		dom.getWindow(this._root).requestAnimationFrame(() => this._autoScrolling = false);
+		return true;
+	}
+
 	private _scrollToEnd(force = false): void {
 		if (force) {
 			this._followBottom = true;

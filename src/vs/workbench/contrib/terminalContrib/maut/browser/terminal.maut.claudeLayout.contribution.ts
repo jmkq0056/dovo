@@ -22,6 +22,8 @@ import { TerminalLocation } from '../../../../../platform/terminal/common/termin
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../../common/contributions.js';
 import { GroupDirection, GroupsOrder, IEditorGroup, IEditorGroupsService } from '../../../../services/editor/common/editorGroupsService.js';
 import { IWorkbenchLayoutService, Parts } from '../../../../services/layout/browser/layoutService.js';
+import { IEditorService } from '../../../../services/editor/common/editorService.js';
+import { GroupModelChangeKind } from '../../../../common/editor.js';
 import { IPaneCompositePartService } from '../../../../services/panecomposite/browser/panecomposite.js';
 import { ViewContainerLocation } from '../../../../common/views.js';
 import { IMautClaudeService, MautClaudeLayoutMode } from '../../../terminal/browser/mautClaude.js';
@@ -125,6 +127,7 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 		@IMautClaudeService private readonly _claudeService: IMautClaudeService,
 		@IStorageService private readonly _storageService: IStorageService,
 		@IPaneCompositePartService private readonly _paneCompositeService: IPaneCompositePartService,
+		@IEditorService private readonly _editorService: IEditorService,
 	) {
 		super();
 		this._strip = dom.$<HTMLButtonElement>('button.maut-claude-strip', { type: 'button' });
@@ -154,6 +157,29 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 			if (!this._applying && !this._hidden) {
 				this._arrangeSoon.schedule();
 			}
+		}));
+		// Files never join Claude's group: a file, image, PDF or browser tab that opens there (a link
+		// in the Reader, a path, nothing open on the files side yet) moves over to the files side.
+		this._register(this._editorService.onDidEditorsChange(e => {
+			const editor = e.event.editor;
+			const claude = this._claudeGroup();
+			if (e.event.kind !== GroupModelChangeKind.EDITOR_OPEN || !editor || editor instanceof TerminalEditorInput || !claude || claude.id !== e.groupId || this._hidden) {
+				return;
+			}
+			// After the open has finished, or the move would race it.
+			setTimeout(() => {
+				if (!claude.contains(editor)) {
+					return;
+				}
+				void this._applying$(async () => {
+					const files = this._otherGroups(claude).find(group => !group.editors.some(other => other instanceof TerminalEditorInput))
+						?? this._editorGroupsService.addGroup(claude, GroupDirection.RIGHT);
+					const wasLocked = claude.isLocked;
+					claude.lock(false);
+					claude.moveEditor(editor, files);
+					claude.lock(wasLocked);
+				}).then(() => this._arrange());
+			}, 0);
 		}));
 		// A window can also come back with three columns from last time.
 		this._arrangeSoon.schedule();

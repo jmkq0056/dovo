@@ -260,7 +260,12 @@ export class BrowserOverlayManager extends Disposable implements IBrowserOverlay
 			}
 			const overlayRect = this.getRect(overlay.element);
 			const overlapCenter = getOverlappingRectangleCenterPoint(elementRect, overlayRect);
-			if (overlapCenter) {
+			if (overlapCenter && overlay.type === BrowserOverlayType.Dialog) {
+				// Dovo: a dialog-like overlay (a modal editor, the splash) blocks the whole window, but
+				// what it shows can be a webview (a PDF, an image) drawn in a layer of its own outside
+				// the overlay's element, which the point check below would miss.
+				overlappingOverlays.push({ type: overlay.type, rect: overlayRect });
+			} else if (overlapCenter) {
 				// z-index check. If the overlay isn't the topmost element, ignore it
 				// (the overlay either doesn't cover the element, or is also covered by another overlay).
 				const clientX = overlapCenter.x - this.targetWindow.scrollX;

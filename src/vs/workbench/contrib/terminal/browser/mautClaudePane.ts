@@ -2069,11 +2069,15 @@ export class MautClaudePane extends Disposable {
 	private _updateInputFiles(raw: XtermTerminal, screen: IScreenState): void {
 		const buffer = raw.buffer.active;
 		let text = '';
+		let previousFull = false;
 		for (let row = screen.frame.from; row <= screen.frame.to; row++) {
 			const line = buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? '';
 			const content = line.replace(/^[\s\u2502>\u276f]+|[\s\u2502]+$/g, '');
-			// Claude wraps a long line itself: a row filling the box continues on the next one.
-			text += (text && line.trimEnd().length < raw.cols - 4 ? '\n' : '') + content;
+			// Claude wraps a long line itself: only a row that filled the box continues on the next
+			// one (a path cut mid-way); any other row break separates, so "[Image #1]" on one row and
+			// a path on the next stay two words.
+			text += (text ? (previousFull ? '' : '\n') : '') + content;
+			previousFull = line.replace(/[\s\u2502]+$/, '').length >= raw.cols - 6;
 		}
 		const files = this._attachedFiles(text);
 		// The previews float just above the input, over the conversation: never in the input's

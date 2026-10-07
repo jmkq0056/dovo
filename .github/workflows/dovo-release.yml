@@ -82,7 +82,7 @@ jobs:
             Dovo-win-x64.zip
 
       - if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             Dovo-Setup-x64.exe
@@ -118,6 +118,6 @@ jobs:
           hdiutil create -volname "Dovo" -srcfolder "Dovo.app" -ov -format UDZO "${GITHUB_WORKSPACE}/Dovo-arm64.dmg"
 
       - if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: Dovo-arm64.dmg

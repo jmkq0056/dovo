@@ -1015,3 +1015,18 @@
 .monaco-workbench .mcp-changed-removed { color: var(--vscode-terminal-ansiRed, #ee97a9); }
 .monaco-workbench .mcp-changed-count + .mcp-changed-new,
 .monaco-workbench .mcp-changed-count + .mcp-changed-diff { margin-left: 0; }
+
+/* An attached picture above the input: its thumbnail and number, like the file previews. */
+.monaco-workbench .mcp-input-files .mcp-chip {
+	pointer-events: auto;
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 3px 8px 3px 3px;
+	border-radius: 10px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	background: var(--vscode-editor-background);
+	font-size: 11.5px;
+}
+.monaco-workbench .mcp-input-files .mcp-chip img { width: 30px; height: 30px; object-fit: cover; border-radius: 5px; }

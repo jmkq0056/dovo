@@ -2214,17 +2214,26 @@ export class MautClaudePane extends Disposable {
 			previousFull = line.replace(/[\s\u2502]+$/, '').length >= raw.cols - 6;
 		}
 		const files = this._attachedFiles(text);
+		// Pictures you attached show in the input as "[Image #27]": preview those too.
+		const images = [...new Set([...text.matchAll(/\[Image #(?<n>\d+)\]/g)].map(match => Number(match.groups?.n)))];
 		// The previews float just above the input, over the conversation: never in the input's
-		// way, so the input keeps its place and size however many files there are.
-		this._inputFiles.style.bottom = `${Math.max(0, this._root.clientHeight - this._terminalHost.offsetTop)}px`;
-		const key = files.map(file => file.toString()).join('|');
+		// way, so the input keeps its place and size however many files there are. Measured on
+		// screen: the input's offsetTop counts from another ancestor, which put them under it.
+		const rootRect = this._root.getBoundingClientRect();
+		const inputTop = this._terminalHost.getBoundingClientRect().top;
+		this._inputFiles.style.bottom = `${Math.max(0, Math.round(rootRect.bottom - inputTop))}px`;
+		const key = JSON.stringify([images, files.map(file => file.toString())]);
 		if (key === this._inputFilesKey) {
 			return;
 		}
 		this._inputFilesKey = key;
 		this._inputFileDisposables.clear();
 		dom.clearNode(this._inputFiles);
-		this._inputFiles.classList.toggle('shown', files.length > 0);
+		this._inputFiles.classList.toggle('shown', files.length > 0 || images.length > 0);
+		for (const n of images) {
+			// Now as the time: the picture you pasted last under that number, not an older one.
+			this._inputFiles.appendChild(this._imageChip(n, Date.now()));
+		}
 		for (const resource of files) {
 			this._inputFiles.appendChild(this._fileChip(resource, this._inputFileDisposables));
 		}

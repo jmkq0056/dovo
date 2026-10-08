@@ -134,6 +134,9 @@ interface IClaudeSessionView {
 /** Contributed by the built-in `maut-claude-images` extension: a thumbnail picture of a file. */
 const fileThumbnailCommandId = '_maut.files.thumbnail';
 
+/** A relative file path in inline code: folders and a file name with an extension, no spaces. */
+const relativePathRegex = /^(?:\.{1,2}\/)?[\w@.-]+(?:\/[\w@.-]+)+\.[A-Za-z0-9]{1,8}$/;
+
 /** Files that open in a popup to glance at; everything else opens beside Claude, in the files group. */
 const popupExtensionRegex = /\.(?:pdf|png|jpe?g|gif|webp|heic|bmp|svg|ico|tiff?|avif|mp4|mov|webm)$/i;
 const terminalEditorTypeId = 'workbench.editors.terminal';
@@ -718,8 +721,14 @@ export class MautClaudePane extends Disposable {
 	 */
 	private _renderLiveLines(container: HTMLElement, lines: readonly ILiveLine[]): boolean {
 		let changed = false;
+		// Each picture once: your message's "[Image #12]" shows on Claude's screen more than once
+		// (the echo, the line under it), but it gets one thumbnail, on its first line.
+		const seen = new Set<number>();
 		lines.forEach((line, index) => {
-			const key = JSON.stringify(line);
+			const text = line.runs.map(run => run.text).join('');
+			const images = [...text.matchAll(/\[Image #(?<n>\d+)\]/g)].map(match => Number(match.groups?.n)).filter(n => !seen.has(n));
+			images.forEach(n => seen.add(n));
+			const key = JSON.stringify([line, images]);
 			const existing = container.children.item(index) as HTMLElement | null;
 			if (existing?.dataset.key === key) {
 				return;
@@ -736,11 +745,9 @@ export class MautClaudePane extends Disposable {
 					span.style.cssText = run.style;
 				}
 			}
-			const text = line.runs.map(run => run.text).join('');
-			const images = [...text.matchAll(/\[Image #(?<n>\d+)\]/g)].map(match => Number(match.groups?.n));
 			if (images.length) {
 				const row = dom.append(element, dom.$('.mcp-live-images'));
-				for (const n of images) {
+				for (const n of new Set(images)) {
 					row.appendChild(this._imageChip(n));
 				}
 			}
@@ -2054,11 +2061,6 @@ export class MautClaudePane extends Disposable {
 		return card;
 	}
 
-	/** `[Image #n]` with its thumbnail; `time` picks the right one when Claude reused the number. */
-	/**
-	 * Your message as you wrote it, with every attached file path (a pasted path or file:// link)
-	 * kept as text but clickable: it opens the file in a popup over the window.
-	 */
 	/**
 	 * Opens a file someone named: a picture or a PDF in a popup over the window, to glance at;
 	 * code and every other file in the files group (on the right in Focus, the left in IDE),
@@ -2076,37 +2078,49 @@ export class MautClaudePane extends Disposable {
 	}
 
 	/**
-	 * File paths in Claude's text (plain or in inline code) become links that open the file in a
-	 * popup over the window, like the paths in your own messages. Code blocks and links stay as
-	 * they are.
+	 * File paths in Claude's text become links that open the file, like the paths in your own
+	 * messages: absolute paths anywhere (code blocks included), and relative ones that make up a
+	 * whole piece of inline code. Links stay as they are.
 	 */
 	private _linkPaths(element: HTMLElement, store: DisposableStore): void {
+		const link = (label: string, title: string, open: () => void) => {
+			const button = dom.$<HTMLButtonElement>('button.mcp-path-link', { type: 'button' }, label);
+			button.title = localize('maut.claude.openAttached', "Open {0}", title);
+			store.add(dom.addDisposableListener(button, dom.EventType.CLICK, e => {
+				e.stopPropagation();
+				open();
+			}));
+			return button;
+		};
 		const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
 		const nodes: Text[] = [];
 		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-			const parent = node.parentElement;
-			if (parent && !parent.closest('a, pre') && attachedPathRegex.test(node.textContent ?? '')) {
+			if (node.parentElement && !node.parentElement.closest('a')) {
 				nodes.push(node as Text);
 			}
-			attachedPathRegex.lastIndex = 0;
 		}
 		for (const node of nodes) {
 			const text = node.data;
+			// Inline code that is a whole relative path (`docs/brief/plan.pdf`): from Claude's folder.
+			const inlineCode = node.parentElement?.tagName === 'CODE' && !node.parentElement.closest('pre');
+			const relative = text.trim();
+			if (inlineCode && relativePathRegex.test(relative)) {
+				node.replaceWith(link(text, relative, () => void this._openFile(relative)));
+				continue;
+			}
+			// Absolute paths and file:// links anywhere, code blocks included.
+			const matches = [...text.matchAll(attachedPathRegex)];
+			if (!matches.length) {
+				continue;
+			}
 			const fragment = element.ownerDocument.createDocumentFragment();
 			let at = 0;
-			for (const match of text.matchAll(attachedPathRegex)) {
+			for (const match of matches) {
 				const resource = attachedPathResource(match[0]);
 				if (!resource) {
 					continue;
 				}
-				fragment.append(text.slice(at, match.index));
-				const link = dom.$<HTMLButtonElement>('button.mcp-path-link', { type: 'button' }, match[0]);
-				link.title = localize('maut.claude.openAttached', "Open {0}", resource.fsPath);
-				store.add(dom.addDisposableListener(link, dom.EventType.CLICK, e => {
-					e.stopPropagation();
-					void this._openResource(resource);
-				}));
-				fragment.append(link);
+				fragment.append(text.slice(at, match.index), link(match[0], resource.fsPath, () => void this._openResource(resource)));
 				at = match.index + match[0].length;
 			}
 			fragment.append(text.slice(at));
@@ -2114,6 +2128,10 @@ export class MautClaudePane extends Disposable {
 		}
 	}
 
+	/**
+	 * Your message as you wrote it, with every attached file path (a pasted path or file:// link)
+	 * kept as text but clickable: it opens the file in a popup over the window.
+	 */
 	private _promptText(text: string): HTMLElement {
 		const element = dom.$('.mcp-prompt');
 		let at = 0;
@@ -2222,6 +2240,7 @@ export class MautClaudePane extends Disposable {
 		return chip;
 	}
 
+	/** `[Image #n]` with its thumbnail; `time` picks the right one when Claude reused the number. */
 	private _imageChip(n: number, time?: number): HTMLElement {
 		const key = `${n}@${time ?? 'latest'}`;
 		const chip = dom.$('span.mcp-chip', undefined, `[Image #${n}]`);

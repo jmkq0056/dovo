@@ -60,7 +60,7 @@
         "priority": "builtin",
         "selector": [
           {
-            "filenamePattern": "*.{mp3,wav,ogg,oga}"
+            "filenamePattern": "*.{mp3,wav,ogg,oga,m4a,m4b,aac,flac,opus,weba,aif,aiff,aifc,caf,wma,amr,ac3,mka,alac,ape,wv}"
           }
         ]
       },
@@ -70,7 +70,7 @@
         "priority": "builtin",
         "selector": [
           {
-            "filenamePattern": "*.{mp4,webm}"
+            "filenamePattern": "*.{mp4,m4v,webm,mov,ogv,mkv,avi,wmv,flv,3gp,3g2,mpg,mpeg,mts,m2ts,vob,asf}"
           }
         ]
       }

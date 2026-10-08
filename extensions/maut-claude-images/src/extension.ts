@@ -19,6 +19,7 @@ import { claudeCommand, registerClaudeLaunch } from './claudeLaunch';
 import { ClaudeSessionReader } from './claudeSession';
 import { fileThumbnail } from './fileThumbnail';
 import { clipboardFilePaths, prepareImages } from './imagePrep';
+import { playableMedia } from './mediaConvert';
 
 // Use the full claude flag rather than the user's `clsp` alias so the app works on machines
 // where the alias isn't defined.
@@ -430,6 +431,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		// Images handed to Claude: paths checked, HEIC converted to JPEG; and the files copied in Finder.
 		vscode.commands.registerCommand('_maut.files.thumbnail', (file: string) => typeof file === 'string' ? fileThumbnail(file) : undefined),
 		vscode.commands.registerCommand('_maut.images.prepare', (paths: string[]) => prepareImages(Array.isArray(paths) ? paths : [])),
+		vscode.commands.registerCommand('_maut.media.playable', (file: string, kind: 'audio' | 'video') => typeof file === 'string' ? playableMedia(file, kind === 'video' ? 'video' : 'audio') : undefined),
 		vscode.commands.registerCommand('_maut.images.clipboardFiles', () => clipboardFilePaths()),
 		vscode.commands.registerCommand('_maut.claudeImages.captureClipboard', (shellPid: number | undefined, index: number) => imageResolver.captureClipboard(shellPid, index)),
 		// The conversation of the Claude session in a terminal, for the workbench's Reader view.

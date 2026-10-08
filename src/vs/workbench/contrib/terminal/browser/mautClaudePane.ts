@@ -138,7 +138,7 @@ const fileThumbnailCommandId = '_maut.files.thumbnail';
 const relativePathRegex = /^(?:\.{1,2}\/)?[\w@.-]+(?:\/[\w@.-]+)+\.[A-Za-z0-9]{1,8}$/;
 
 /** Files that open in a popup to glance at; everything else opens beside Claude, in the files group. */
-const popupExtensionRegex = /\.(?:pdf|png|jpe?g|gif|webp|heic|bmp|svg|ico|tiff?|avif|mp4|mov|webm)$/i;
+const popupExtensionRegex = /\.(?:pdf|png|jpe?g|gif|webp|heic|bmp|svg|ico|tiff?|avif|mp3|wav|ogg|oga|m4a|m4b|aac|flac|opus|weba|aiff?|aifc|caf|wma|amr|mp4|m4v|mov|webm|ogv|mkv|avi|wmv|flv|3gp|mpe?g)$/i;
 const terminalEditorTypeId = 'workbench.editors.terminal';
 
 /** Each terminal's latest Remote Control session, kept after its link leaves the screen. */

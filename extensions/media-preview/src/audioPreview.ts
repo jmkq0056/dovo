@@ -8,6 +8,7 @@ import { BinarySizeStatusBarEntry } from './binarySizeStatusBarEntry';
 import { MediaPreview, isGitLfsPointer, reopenAsText } from './mediaPreview';
 import { escapeAttribute } from './util/dom';
 import { generateUuid } from './util/uuid';
+import { playableResource } from './playable';
 
 class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider {
 
@@ -98,6 +99,7 @@ class AudioPreview extends MediaPreview {
 		if (await isGitLfsPointer(resource)) {
 			return null;
 		}
+		resource = await playableResource(webviewEditor, resource, 'audio');
 
 		// Avoid adding cache busting if there is already a query string
 		if (resource.query) {

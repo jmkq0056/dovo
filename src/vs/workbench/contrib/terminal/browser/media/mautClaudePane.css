@@ -1008,3 +1008,10 @@
 .monaco-workbench .mcp-input-files .mcp-file-thumb { width: 30px; height: 30px; flex: none; border-radius: 5px; }
 .monaco-workbench .mcp-input-files .mcp-file-thumb .codicon { font-size: 16px; }
 .monaco-workbench .mcp-input-files .mcp-file-name { font-size: 11.5px; color: var(--vscode-foreground); }
+
+/* Lines added and removed beside each changed file, like a diff's summary. */
+.monaco-workbench .mcp-changed-count { margin-left: auto; display: flex; gap: 6px; font: 12px var(--mcp-mono); font-variant-numeric: tabular-nums; }
+.monaco-workbench .mcp-changed-added { color: var(--mcp-ok); }
+.monaco-workbench .mcp-changed-removed { color: var(--vscode-terminal-ansiRed, #ee97a9); }
+.monaco-workbench .mcp-changed-count + .mcp-changed-new,
+.monaco-workbench .mcp-changed-count + .mcp-changed-diff { margin-left: 0; }

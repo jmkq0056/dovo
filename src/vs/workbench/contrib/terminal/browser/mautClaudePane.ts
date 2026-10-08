@@ -1942,7 +1942,7 @@ export class MautClaudePane extends Disposable {
 		// The steps Claude is on right now stay open, so you see each command as it runs.
 		flushSteps(live);
 		if (changedFiles.length) {
-			body.appendChild(this._renderChangedFiles(changedFiles));
+			body.appendChild(this._renderChangedFiles(changedFiles, turn));
 		}
 		if (live) {
 			dom.append(body, dom.$('.mcp-working', undefined, localize('maut.claude.workingLine', "Working…")));
@@ -1962,7 +1962,19 @@ export class MautClaudePane extends Disposable {
 	}
 
 	/** Files Claude changed in a turn, however it changed them (its shell commands included). */
-	private _renderChangedFiles(files: readonly IChangedFile[]): HTMLElement {
+	private _renderChangedFiles(files: readonly IChangedFile[], turn: IClaudeTurn): HTMLElement {
+		// Lines added and removed per file, from the turn's edits (a file changed only by a shell
+		// command has none to count).
+		const counts = new Map<string, { added: number; removed: number }>();
+		for (const item of turn.items) {
+			if (item.kind === 'edit') {
+				const count = counts.get(item.file) ?? { added: 0, removed: 0 };
+				count.added += item.added;
+				count.removed += item.removed;
+				counts.set(item.file, count);
+			}
+		}
+		const countOf = (file: IChangedFile) => counts.get(file.path) ?? [...counts].find(([path]) => path.endsWith(`/${file.label}`) || file.path.endsWith(path))?.[1];
 		const box = dom.$('.mcp-changed');
 		dom.append(box, dom.$('.mcp-changed-head', undefined, files.length === 1 ? localize('maut.claude.changedOne', "Changed 1 file") : localize('maut.claude.changedMany', "Changed {0} files", files.length)));
 		for (const file of files.slice(0, 30)) {
@@ -1970,6 +1982,16 @@ export class MautClaudePane extends Disposable {
 			const name = dom.append(row, dom.$('button.mcp-changed-file', { type: 'button' }, file.label));
 			name.dataset.file = file.path;
 			this._renderDisposables.add(this._hoverService.setupDelayedHover(name, { content: localize('maut.claude.openFile', "Open {0}", file.label) }));
+			const count = countOf(file);
+			if (count && (count.added || count.removed)) {
+				const figures = dom.append(row, dom.$('span.mcp-changed-count'));
+				if (count.added) {
+					dom.append(figures, dom.$('span.mcp-changed-added', undefined, `+${count.added}`));
+				}
+				if (count.removed) {
+					dom.append(figures, dom.$('span.mcp-changed-removed', undefined, `\u2212${count.removed}`));
+				}
+			}
 			if (file.isNew) {
 				dom.append(row, dom.$('span.mcp-changed-new', undefined, localize('maut.claude.newFile', "new")));
 			} else {

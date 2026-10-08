@@ -619,10 +619,11 @@ export class MautClaudePane extends Disposable {
 			state.rows.pop();
 		}
 		let block = state.block.join('\n').trim();
-		// Already in the transcript? Then the Reader shows it properly.
-		const first = block.split('\n')[0].replace(/^\u23fa\s*/, '').replace(/\s+/g, ' ').trim().slice(0, 40);
-		const last = this._session?.turns.at(-1)?.items.at(-1);
-		if (first && last?.kind === 'text' && last.text.replace(/\s+/g, ' ').startsWith(first)) {
+		// Already in the transcript? Then the Reader shows it properly. The transcript has Markdown
+		// (**bold**, `code`) where the screen shows it formatted: compare both without it.
+		const first = plainText(block.split('\n')[0].replace(/^\u23fa\s*/, '')).slice(0, 40);
+		const said = (this._session?.turns.at(-1)?.items ?? []).filter(item => item.kind === 'text').map(item => plainText(item.text)).join(' ');
+		if (first && said.includes(first)) {
 			block = '';
 		}
 		const lines = block ? readRichLines(buffer, state.rows, raw.cols) : [];
@@ -2363,6 +2364,11 @@ export class MautClaudePane extends Disposable {
 		}
 		await this._openResource(resource);
 	}
+}
+
+/** Text as the terminal shows it: Markdown's symbols gone, every run of white space one space. */
+function plainText(text: string): string {
+	return text.replace(/\[(?<label>[^\]]*)\]\([^)]*\)/g, '$<label>').replace(/[*_`#>~]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 /** What Claude wrote in a turn, as Markdown: its prose, without the tool steps. */

@@ -978,13 +978,16 @@ export class MautClaudePane extends Disposable {
 		host.margin = `${composerMarginTop}px auto 0`;
 		host.padding = `${composerPaddingY}px ${composerPaddingX}px`;
 		this._liveNote.style.width = `${composerWidth}px`;
-		// Menus and questions sit right above the input, as wide as it.
-		for (const overlay of [this._menuPop, this._askCard]) {
-			overlay.style.width = `${composerWidth}px`;
-			overlay.style.bottom = `${composer + liveNoteHeight + 6}px`;
-			// Never taller than the room between the header and the input; it scrolls inside instead.
-			overlay.style.maxHeight = `${Math.max(0, readerHeight - 12)}px`;
-		}
+		// Menus sit right above the input, as wide as it.
+		this._menuPop.style.width = `${composerWidth}px`;
+		this._menuPop.style.bottom = `${composer + liveNoteHeight + 6}px`;
+		// Never taller than the room between the header and the input; it scrolls inside instead.
+		this._menuPop.style.maxHeight = `${Math.max(0, readerHeight - 12)}px`;
+		// A question takes the whole conversation area, from under the header to just above the
+		// input (still there for "type something else"), so it can't be missed or misread.
+		this._askCard.style.top = `${this._headerHeight + 12}px`;
+		this._askCard.style.bottom = `${composer + composerMarginTop + liveNoteHeight + 10}px`;
+		this._askCard.style.width = `${Math.min(dimension.width - 32, 880)}px`;
 		// Which slice of Claude's screen the frame shows: its bottom rows unless told otherwise.
 		this._terminalHost.style.setProperty('--mcp-shift', `${Math.round(this._composerShift * cell)}px`);
 		// Border (1px each side) and padding come out of the terminal's own width.
@@ -1138,7 +1141,8 @@ export class MautClaudePane extends Disposable {
 		}
 		dom.clearNode(this._askCard);
 		if (dialog) {
-			dom.append(this._askCard, dom.$('.mcp-ask-question', undefined, dom.$('i'), dom.$('span', undefined, dialog.question)));
+			dom.append(this._askCard, dom.$('.mcp-ask-label', undefined, dom.$('i'), dom.$('span', undefined, localize('maut.claude.asks', "Claude asks"))));
+			dom.append(this._askCard, dom.$('.mcp-ask-question', undefined, dialog.question));
 			if (dialog.details.length) {
 				dom.append(this._askCard, dom.$('pre.mcp-ask-details', undefined, dialog.details.join('\n')));
 			}

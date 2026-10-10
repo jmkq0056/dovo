@@ -720,25 +720,43 @@
 .monaco-workbench .mcp-menu-detail { min-width: 0; color: var(--mcp-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .monaco-workbench .mcp-menu-item.selected .mcp-menu-detail { color: rgba(255, 255, 255, .85); }
 
-/* A question from Claude: the question, what it's about, and its options as buttons. */
-.monaco-workbench .mcp-ask { border-color: color-mix(in srgb, var(--mcp-live) 60%, transparent); padding: 12px 14px; gap: 8px; overflow-y: auto; }
-.monaco-workbench .mcp-ask-question { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 13.5px; }
-.monaco-workbench .mcp-ask-question > i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--mcp-live); }
+/* A question from Claude: a large sheet over the conversation, with the question in big type,
+	what it's about in a readable box, and each answer as a large numbered button. */
+.monaco-workbench .mcp-ask {
+	border-color: color-mix(in srgb, var(--mcp-live) 55%, transparent);
+	border-radius: 18px;
+	padding: 22px 26px;
+	gap: 14px;
+	overflow-y: auto;
+	box-shadow: 0 24px 60px rgba(0, 0, 0, .5);
+	animation: mcp-ask-in .18s ease-out;
+}
+@keyframes mcp-ask-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+/* The conversation fades back behind the question; the input stays as it is, for "type something else". */
+.monaco-workbench .maut-claude-host.mcp-asking > .mcp-reader { opacity: .25; filter: blur(1px); transition: opacity .18s ease, filter .18s ease; pointer-events: none; }
+.monaco-workbench .mcp-ask-label { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--mcp-live); }
+.monaco-workbench .mcp-ask-label > i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--mcp-live); animation: maut-strip-pulse 1.4s ease-in-out infinite; }
+.monaco-workbench .mcp-ask-question { font-size: 20px; font-weight: 700; line-height: 1.35; letter-spacing: -.01em; color: var(--vscode-foreground); overflow-wrap: anywhere; }
 .monaco-workbench .mcp-ask-details {
-	margin: 0; padding: 8px 10px; max-height: 180px; overflow: auto; box-sizing: border-box;
-	border: 1px solid var(--mcp-line); border-radius: 8px; background: var(--mcp-surface);
-	font: 12px/1.5 var(--mcp-mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--vscode-foreground);
+	flex: 0 1 auto; margin: 0; padding: 12px 14px; min-height: 0; overflow: auto; box-sizing: border-box;
+	border: 1px solid var(--mcp-line); border-radius: 10px; background: var(--mcp-surface);
+	font: 13px/1.6 var(--mcp-mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--vscode-foreground);
 }
-.monaco-workbench .mcp-ask-options { display: flex; flex-direction: column; gap: 6px; }
+.monaco-workbench .mcp-ask-options { flex: none; display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
 .monaco-workbench .mcp-ask-option {
-	display: flex; align-items: flex-start; gap: 9px; width: 100%; box-sizing: border-box;
-	padding: 7px 11px; border-radius: 8px; border: 1px solid var(--mcp-line-strong);
-	background: none; color: var(--vscode-foreground); text-align: left; cursor: pointer; font: inherit; line-height: 1.45;
+	display: flex; align-items: center; gap: 14px; width: 100%; min-height: 52px; box-sizing: border-box;
+	padding: 10px 16px; border-radius: 12px; border: 1px solid var(--mcp-line-strong);
+	background: var(--mcp-surface); color: var(--vscode-foreground); text-align: left; cursor: pointer;
+	font: 500 15px/1.4 var(--mcp-sans); transition: background .12s ease, border-color .12s ease;
 }
-.monaco-workbench .mcp-ask-option:hover { background: var(--mcp-surface-2); }
-.monaco-workbench .mcp-ask-option.selected { border-color: var(--mcp-accent); background: color-mix(in srgb, var(--mcp-accent) 16%, transparent); }
-.monaco-workbench .mcp-ask-option kbd { flex: none; min-width: 18px; text-align: center; font: 600 11px var(--mcp-sans); border: 1px solid var(--mcp-line-strong); border-bottom-width: 2px; border-radius: 5px; padding: 0 4px; }
-.monaco-workbench .mcp-ask-hint { color: var(--mcp-muted); font-size: 11.5px; }
+.monaco-workbench .mcp-ask-option:hover { background: var(--mcp-surface-2); border-color: color-mix(in srgb, var(--mcp-accent) 60%, transparent); }
+.monaco-workbench .mcp-ask-option.selected { border-color: var(--mcp-accent); background: color-mix(in srgb, var(--mcp-accent) 18%, transparent); font-weight: 600; }
+.monaco-workbench .mcp-ask-option kbd {
+	flex: none; display: grid; place-items: center; width: 28px; height: 28px; box-sizing: border-box;
+	font: 700 14px var(--mcp-sans); border: 1px solid var(--mcp-line-strong); border-bottom-width: 2px; border-radius: 7px;
+}
+.monaco-workbench .mcp-ask-option.selected kbd { border-color: var(--mcp-accent); color: var(--mcp-accent); }
+.monaco-workbench .mcp-ask-hint { color: var(--mcp-muted); font-size: 12.5px; }
 
 /* The frame shows exact rows of Claude's screen; its padding must not reveal the rows around them. */
 .monaco-workbench .maut-claude-host > .terminal-overflow-guard.mcp-composer::before,

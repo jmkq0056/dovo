@@ -44,7 +44,10 @@ export interface IScreenState {
 	readonly footer?: string;
 }
 
-const ruleRegex = /^\s*[\u2500\u2501]{8,}\s*$/;
+// A horizontal rule: a run of line characters, which may carry a label (Claude writes a renamed
+// session's name into the prompt box's top rule, like "---- StreetSmash v5 -"). The label holds
+// no box-drawing characters, so a table's border (with its crossings) isn't one.
+const ruleRegex = /^\s*(?:[\u2500\u2501]{8,}|[\u2500\u2501]{3,}\s[^\u2500-\u257f]{1,80}\s[\u2500\u2501]+|[\u2500\u2501]+\s[^\u2500-\u257f]{1,80}\s[\u2500\u2501]{3,}|[\u2500\u2501]{8,}\s[^\u2500-\u257f]{1,80})\s*$/;
 // A command (with an optional "(alias)") or a file (+ path), then its description however it's
 // spaced: in a narrow terminal a long command runs right into its description.
 const menuItemRegex = /^\s{1,4}(?:\u276f\s*)?(?<name>\/[\w:.-]+(?:\s\([^)]*\))?|\+\s\S+)(?:\s*(?<detail>\S.*))?$/;

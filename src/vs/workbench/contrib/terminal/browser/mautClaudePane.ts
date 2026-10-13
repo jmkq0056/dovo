@@ -5,6 +5,7 @@
 
 import { DataTransfers } from '../../../../base/browser/dnd.js';
 import * as dom from '../../../../base/browser/dom.js';
+import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
 import { renderMarkdown } from '../../../../base/browser/markdownRenderer.js';
 import { toAction } from '../../../../base/common/actions.js';
 import { IntervalTimer, RunOnceScheduler, timeout } from '../../../../base/common/async.js';
@@ -182,6 +183,11 @@ export class MautClaudePane extends Disposable {
 	/** Above the input: a preview of each file whose path is in what you're writing. */
 	private readonly _inputFiles: HTMLElement;
 	private _inputFilesKey = '';
+	/** What you pasted, by Claude's "[Pasted text #n]" number, and the numbers already looked up. */
+	private readonly _pastes = new Map<number, string>();
+	private readonly _pasteReads = new Set<number>();
+	/** The popup showing a whole text (a paste), while open. */
+	private readonly _textSheet = this._register(new MutableDisposable<DisposableStore>());
 	private readonly _inputFileDisposables = this._register(new DisposableStore());
 	/** Thumbnails by file path, made once by the extension. */
 	private readonly _thumbnails = new Map<string, Promise<string | undefined>>();
@@ -2391,20 +2397,29 @@ export class MautClaudePane extends Disposable {
 		const files = this._attachedFiles(text);
 		// Pictures you attached show in the input as "[Image #27]": preview those too.
 		const images = [...new Set([...text.matchAll(/\[Image #(?<n>\d+)\]/g)].map(match => Number(match.groups?.n)))];
+		// Text you pasted shows as "[Pasted text #95 +3 lines]": keep what it was, to show it.
+		const pastes = [...text.matchAll(/\[Pasted text #(?<n>\d+)(?: \+(?<more>\d+) lines?)?\]/g)].map(match => ({ n: Number(match.groups?.n), lines: Number(match.groups?.more ?? 0) + 1 }));
+		for (const paste of pastes) {
+			this._capturePaste(paste.n, paste.lines);
+		}
 		// The previews float just above the input, over the conversation: never in the input's
 		// way, so the input keeps its place and size however many files there are. Measured on
 		// screen: the input's offsetTop counts from another ancestor, which put them under it.
 		const rootRect = this._root.getBoundingClientRect();
 		const inputTop = this._terminalHost.getBoundingClientRect().top;
 		this._inputFiles.style.bottom = `${Math.max(0, Math.round(rootRect.bottom - inputTop))}px`;
-		const key = JSON.stringify([images, files.map(file => file.toString())]);
+		const known = pastes.filter(paste => this._pastes.has(paste.n));
+		const key = JSON.stringify([images, files.map(file => file.toString()), known.map(paste => paste.n)]);
 		if (key === this._inputFilesKey) {
 			return;
 		}
 		this._inputFilesKey = key;
 		this._inputFileDisposables.clear();
 		dom.clearNode(this._inputFiles);
-		this._inputFiles.classList.toggle('shown', files.length > 0 || images.length > 0);
+		this._inputFiles.classList.toggle('shown', files.length > 0 || images.length > 0 || known.length > 0);
+		for (const paste of known) {
+			this._inputFiles.appendChild(this._pasteChip(paste.n, this._pastes.get(paste.n)!, this._inputFileDisposables));
+		}
 		for (const n of images) {
 			// Now as the time: the picture you pasted last under that number, not an older one.
 			this._inputFiles.appendChild(this._imageChip(n, Date.now()));
@@ -2413,6 +2428,68 @@ export class MautClaudePane extends Disposable {
 			this._inputFiles.appendChild(this._fileChip(resource, this._inputFileDisposables));
 		}
 		this._relayout();
+	}
+
+	/**
+	 * Claude shows a paste only as "[Pasted text #95 +3 lines]" and keeps the text to itself until
+	 * you send. The text is on the clipboard the moment the marker first appears: keep it under that
+	 * number when its line count matches, so it can be shown.
+	 */
+	private _capturePaste(n: number, lines: number): void {
+		if (this._pastes.has(n) || this._pasteReads.has(n)) {
+			return;
+		}
+		this._pasteReads.add(n);
+		void this._clipboardService.readText().then(text => {
+			const count = text.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n').length;
+			if (text && Math.abs(count - lines) <= 1) {
+				this._pastes.set(n, text);
+				this._inputFilesKey = '';
+				this._measureComposer();
+			}
+		});
+	}
+
+	/** A paste's chip: its first lines on hover, the whole text in a popup on click. */
+	private _pasteChip(n: number, text: string, store: DisposableStore): HTMLElement {
+		const lines = text.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n');
+		const chip = dom.$<HTMLButtonElement>('button.mcp-paste-chip', { type: 'button' });
+		dom.append(chip, dom.$(`span${ThemeIcon.asCSSSelector(Codicon.note)}`));
+		dom.append(chip, dom.$('span.mcp-paste-name', undefined, localize('maut.claude.pastedText', "Pasted text #{0}", n)));
+		dom.append(chip, dom.$('span.mcp-paste-count', undefined, lines.length === 1 ? localize('maut.claude.oneLine', "1 line") : localize('maut.claude.lines', "{0} lines", lines.length)));
+		store.add(this._hoverService.setupDelayedHover(chip, () => {
+			const preview = dom.$('pre.mcp-paste-preview', undefined, lines.slice(0, 12).join('\n') + (lines.length > 12 ? `\n\u2026` : ''));
+			return { content: preview, position: { hoverPosition: HoverPosition.ABOVE } };
+		}));
+		store.add(dom.addDisposableListener(chip, dom.EventType.CLICK, () => this._showText(localize('maut.claude.pastedText', "Pasted text #{0}", n), text)));
+		return chip;
+	}
+
+	/** A text in a large popup over the Reader, to read whole and copy. Esc or Close closes it. */
+	private _showText(title: string, text: string): void {
+		this._textSheet.clear();
+		const store = new DisposableStore();
+		const sheet = dom.append(this._root, dom.$('.mcp-text-sheet'));
+		store.add(toDisposable(() => sheet.remove()));
+		const head = dom.append(sheet, dom.$('.mcp-activity-head'));
+		dom.append(head, dom.$('span.mcp-activity-title', undefined, title));
+		dom.append(head, dom.$('span.mcp-grow'));
+		const copy = dom.append(head, dom.$<HTMLButtonElement>('button', { type: 'button' }, localize('maut.claude.copy', "Copy")));
+		const close = dom.append(head, dom.$<HTMLButtonElement>('button', { type: 'button' }, localize('maut.claude.closeEsc', "Close (Esc)")));
+		dom.append(sheet, dom.$('pre.mcp-text-sheet-body', undefined, text));
+		store.add(dom.addDisposableListener(copy, dom.EventType.CLICK, () => {
+			this._clipboardService.writeText(text);
+			copy.textContent = localize('maut.claude.copied', "Copied");
+		}));
+		store.add(dom.addDisposableListener(close, dom.EventType.CLICK, () => this._textSheet.clear()));
+		store.add(dom.addDisposableListener(dom.getWindow(this._root), dom.EventType.KEY_DOWN, e => {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				e.stopPropagation();
+				this._textSheet.clear();
+			}
+		}, true));
+		this._textSheet.value = store;
 	}
 
 	/** A file's chip: its thumbnail (a PDF's first page, the image) or icon, and its name. Opens it. */

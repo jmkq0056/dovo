@@ -1116,3 +1116,29 @@
 .monaco-workbench .mcp-code-copy:hover { color: var(--vscode-foreground); }
 .monaco-workbench .mcp-code-copy.copied { opacity: 1; color: var(--mcp-ok); border-color: var(--mcp-ok); }
 @media (hover: none) { .monaco-workbench .mcp-code-copy { opacity: 1; } }
+
+/* A paste above the input: what Claude only shows as "[Pasted text #n +k lines]". */
+.monaco-workbench .mcp-paste-chip {
+	pointer-events: auto; flex: none; display: flex; align-items: center; gap: 7px;
+	height: 38px; padding: 0 10px; box-sizing: border-box;
+	border-radius: 10px; border: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	background: var(--vscode-editor-background); color: var(--vscode-foreground);
+	font: 12px var(--mcp-sans); cursor: zoom-in;
+}
+.monaco-workbench .mcp-paste-chip:hover { border-color: color-mix(in srgb, var(--mcp-accent) 60%, transparent); }
+.monaco-workbench .mcp-paste-count { color: var(--mcp-muted); }
+.monaco-workbench .mcp-paste-preview { margin: 0; max-width: 520px; max-height: 260px; overflow: hidden; font: 12px/1.5 var(--mcp-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* A whole text in a popup over the Reader. */
+.monaco-workbench .mcp-text-sheet {
+	position: absolute; z-index: 70; top: 84px; bottom: 12px; left: 50%; transform: translateX(-50%);
+	width: min(920px, calc(100% - 32px)); display: flex; flex-direction: column; overflow: hidden;
+	border: 1px solid var(--mcp-line-strong); border-radius: 18px;
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+	box-shadow: 0 24px 70px rgba(0, 0, 0, .55); animation: mcp-ask-in .18s ease-out;
+}
+.monaco-workbench .mcp-text-sheet .mcp-activity-head button {
+	padding: 3px 10px; border-radius: 6px; cursor: pointer; border: 1px solid var(--mcp-line); background: none; color: var(--mcp-muted); font: 12px var(--mcp-sans);
+}
+.monaco-workbench .mcp-text-sheet .mcp-activity-head button:hover { color: var(--vscode-foreground); border-color: var(--mcp-line-strong); }
+.monaco-workbench .mcp-text-sheet-body { flex: 1; min-height: 0; margin: 0; padding: 16px 20px; overflow: auto; font: 13px/1.6 var(--mcp-mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--vscode-foreground); user-select: text; }

@@ -167,6 +167,13 @@ export function readScreen(raw: IScreen): IScreenState {
 		}
 		// Wrapped lines above the first item belong to nothing (a notice, say): the menu starts at its first item.
 		menuTop = merged.length ? merged[0].row : promptTop;
+		// Claude opens its menu only for what's being typed: / at the start for commands, @ for files.
+		// Without that, a row that merely looks like an item (a tip, a notice) is not a menu.
+		const typed = Array.from({ length: Math.max(0, rules[0] - promptTop - 1) }, (_, index) => text(promptTop + 1 + index)).join('\n').replace(/^[\s\u2502>\u276f]+/, '');
+		const isFileMenu = merged.some(item => item.file);
+		if (merged.length && !(isFileMenu ? typed.includes('@') : typed.startsWith('/'))) {
+			merged.length = 0;
+		}
 		let menu: IScreenMenu | undefined;
 		if (merged.length) {
 			// The highlighted row is the one drawn differently from the rest.
@@ -185,7 +192,7 @@ export function readScreen(raw: IScreen): IScreenState {
 			styles.forEach(value => counts.set(value, (counts.get(value) ?? 0) + 1));
 			const odd = merged.length > 1 ? styles.findIndex(value => counts.get(value) === 1) : 0;
 			menu = {
-				kind: merged.some(item => item.file) ? 'file' : 'command',
+				kind: isFileMenu ? 'file' : 'command',
 				items: merged.map((item, index) => ({ name: item.name, detail: item.detail, selected: index === odd })),
 			};
 		} else {

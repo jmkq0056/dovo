@@ -29,6 +29,7 @@ interface IPairingInfo {
 	readonly port: number;
 	readonly hosts: readonly string[];
 	readonly sharing: boolean;
+	readonly host: boolean;
 	readonly tailscale: boolean;
 	readonly url: string;
 	readonly modules: readonly string[];
@@ -112,7 +113,7 @@ class DovoRemotePairing extends Disposable implements IWorkbenchContribution {
 		const panel = dom.append(container, dom.$('.dovo-pair'));
 		const head = dom.append(panel, dom.$('.dovo-pair-head'));
 		dom.append(head, dom.$('b', undefined, localize('dovo.remote.title', "Control This Mac from Your iPhone")));
-		dom.append(head, dom.$('span', undefined, localize('dovo.remote.subtitle', "Scan once with the Dovo Remote app or the Camera app. The phone asks for this Mac's password the first time and remembers it.")));
+		dom.append(head, dom.$('span', undefined, localize('dovo.remote.subtitle', "Scan once with the Dovo Remote app or the Camera app. Keep this code private: it lets a phone control this Mac.")));
 		const code = dom.append(panel, dom.$('.dovo-pair-code'));
 		const canvas = dom.append(code, dom.$<HTMLCanvasElement>('canvas'));
 		const name = dom.append(panel, dom.$('.dovo-pair-name'));
@@ -148,18 +149,23 @@ class DovoRemotePairing extends Disposable implements IWorkbenchContribution {
 			return;
 		}
 		drawCode(canvas, info.modules);
-		canvas.classList.toggle('dimmed', !info.sharing);
+		canvas.classList.toggle('dimmed', !info.host && !info.sharing);
 		canvas.setAttribute('aria-label', localize('dovo.remote.codeLabel', "Pairing code for {0}", info.name));
 
 		dom.clearNode(name);
 		dom.append(name, dom.$('b', undefined, info.name));
-		dom.append(name, dom.$('span', undefined, localize('dovo.remote.signIn', "Signs in as {0}", info.user)));
+		if (!info.host) {
+			dom.append(name, dom.$('span', undefined, localize('dovo.remote.signIn', "Signs in as {0}", info.user)));
+		}
 
 		dom.clearNode(status);
-		status.classList.toggle('off', !info.sharing);
-		if (info.sharing) {
+		status.classList.toggle('off', !info.host && !info.sharing);
+		if (info.host) {
 			dom.append(status, dom.$(`span${ThemeIcon.asCSSSelector(Codicon.check)}`));
-			dom.append(status, dom.$('span', undefined, localize('dovo.remote.sharingOn', "Screen Sharing is on")));
+			dom.append(status, dom.$('span', undefined, localize('dovo.remote.hostOn', "Dovo Remote Host is running: fast streaming, no password")));
+		} else if (info.sharing) {
+			dom.append(status, dom.$(`span${ThemeIcon.asCSSSelector(Codicon.check)}`));
+			dom.append(status, dom.$('span', undefined, localize('dovo.remote.sharingOn', "Screen Sharing is on. Dovo Remote Host isn't running, so the phone uses the slower Screen Sharing.")));
 		} else {
 			dom.append(status, dom.$(`span${ThemeIcon.asCSSSelector(Codicon.warning)}`));
 			dom.append(status, dom.$('span', undefined, localize('dovo.remote.sharingOff', "Screen Sharing is off. Turn it on, then scan.")));

@@ -3,16 +3,20 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// Pairing Dovo Remote, the iPhone app that controls this Mac over macOS Screen Sharing. The
-// title bar's QR button shows a code that holds everything the phone needs to find this Mac:
-// its name, the account to sign in as, and every address it can be reached at (Tailscale first,
-// then the local network). The password is never in the code; the phone asks for it once.
+// Pairing Dovo Remote, the iPhone app that controls this Mac. The title bar's QR button shows a
+// code that holds everything the phone needs to find this Mac: its name, the account to sign in
+// as, and every address it can be reached at (Tailscale first, then the local network). When
+// dovo-remote-host is installed the code also carries its secret token, and the phone streams
+// from it (hardware video, direct input) instead of macOS Screen Sharing; the code is shown only
+// on this Mac's own screen. Without the host the phone falls back to Screen Sharing and asks for
+// the account password once.
 
 import { execFile } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as net from 'net';
 import * as os from 'os';
+import * as path from 'path';
 import qrcode from 'qrcode-generator';
 import * as vscode from 'vscode';
 
@@ -25,6 +29,8 @@ interface IPairingInfo {
 	readonly hosts: readonly string[];
 	/** Whether Screen Sharing answers on this Mac right now. */
 	readonly sharing: boolean;
+	/** Whether Dovo's own remote host (faster video streaming) answers right now. */
+	readonly host: boolean;
 	readonly tailscale: boolean;
 	readonly url: string;
 	/** The QR code, one string per row, '1' for a dark module. */
@@ -32,6 +38,8 @@ interface IPairingInfo {
 }
 
 const SCREEN_SHARING_PORT = 5900;
+/** Written by dovo-remote-host on its first run: the secret the phone proves itself with, and its port. */
+const HOST_CONFIG = path.join(os.homedir(), '.dovo', 'remote-host.json');
 const ID_KEY = 'dovo.remote.pairingId';
 const TAILSCALE = ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', '/opt/homebrew/bin/tailscale', '/usr/local/bin/tailscale'];
 
@@ -41,10 +49,20 @@ function run(command: string, args: string[]): Promise<string | undefined> {
 	});
 }
 
-/** Whether something accepts connections on the Screen Sharing port. */
-function sharingOn(): Promise<boolean> {
+/** The remote host's token and port, when it has been installed. */
+async function hostConfig(): Promise<{ token: string; port: number } | undefined> {
+	try {
+		const config = JSON.parse(await fs.promises.readFile(HOST_CONFIG, 'utf8')) as { token?: string; port?: number };
+		return config.token ? { token: config.token, port: config.port ?? 5961 } : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** Whether something accepts connections on `port` on this Mac. */
+function listening(port: number): Promise<boolean> {
 	return new Promise(resolve => {
-		const socket = net.connect({ host: '127.0.0.1', port: SCREEN_SHARING_PORT });
+		const socket = net.connect({ host: '127.0.0.1', port });
 		const done = (on: boolean) => {
 			socket.destroy();
 			resolve(on);
@@ -90,11 +108,13 @@ async function pairingInfo(context: vscode.ExtensionContext): Promise<IPairingIn
 		id = crypto.randomUUID();
 		await context.globalState.update(ID_KEY, id);
 	}
-	const [computerName, localHostName, tailscale, sharing] = await Promise.all([
+	const config = await hostConfig();
+	const [computerName, localHostName, tailscale, sharing, host] = await Promise.all([
 		run('/usr/sbin/scutil', ['--get', 'ComputerName']),
 		run('/usr/sbin/scutil', ['--get', 'LocalHostName']),
 		tailscaleHosts(),
-		sharingOn(),
+		listening(SCREEN_SHARING_PORT),
+		config ? listening(config.port) : Promise.resolve(false),
 	]);
 	const interfaces = Object.entries(os.networkInterfaces()).flatMap(([name, entries]) => (entries ?? []).map(entry => ({ name, ...entry })));
 	const tailscaleAddresses = interfaces.filter(entry => entry.family === 'IPv4' && isTailscaleAddress(entry.address)).map(entry => entry.address);
@@ -110,6 +130,7 @@ async function pairingInfo(context: vscode.ExtensionContext): Promise<IPairingIn
 		`user=${encodeURIComponent(user)}`,
 		`port=${SCREEN_SHARING_PORT}`,
 		`hosts=${hosts.map(encodeURIComponent).join(',')}`,
+		...(config ? [`token=${config.token}`, `hp=${config.port}`] : []),
 	].join('&');
 	const url = `dovo-remote://pair?${query}`;
 	const qr = qrcode(0, 'M');
@@ -123,7 +144,7 @@ async function pairingInfo(context: vscode.ExtensionContext): Promise<IPairingIn
 		}
 		modules.push(line);
 	}
-	return { supported: true, name, user, port: SCREEN_SHARING_PORT, hosts, sharing, tailscale: tailscale.length > 0 || tailscaleAddresses.length > 0, url, modules };
+	return { supported: true, name, user, port: SCREEN_SHARING_PORT, hosts, sharing, host, tailscale: tailscale.length > 0 || tailscaleAddresses.length > 0, url, modules };
 }
 
 /** Registers the commands the workbench's pairing panel uses. */
@@ -131,7 +152,7 @@ export function registerRemotePairing(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('_dovo.remote.pairing', async (): Promise<IPairingInfo> => {
 			if (process.platform !== 'darwin') {
-				return { supported: false, name: os.hostname(), user: '', port: SCREEN_SHARING_PORT, hosts: [], sharing: false, tailscale: false, url: '', modules: [] };
+				return { supported: false, name: os.hostname(), user: '', port: SCREEN_SHARING_PORT, hosts: [], sharing: false, host: false, tailscale: false, url: '', modules: [] };
 			}
 			return pairingInfo(context);
 		}),

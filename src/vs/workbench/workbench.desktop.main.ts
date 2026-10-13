@@ -28,6 +28,7 @@ import './contrib/mautcode/electron-browser/dovoBrowserDock.js';
 
 // Dovo: CPU, memory and thermal state beside the search bar
 import './contrib/mautcode/electron-browser/dovoSystemMonitor.js';
+import './contrib/mautcode/electron-browser/dovoRemotePairing.js';
 
 //#endregion
 

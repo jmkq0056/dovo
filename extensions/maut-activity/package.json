@@ -13,7 +13,9 @@
 		"onStartupFinished"
 	],
 	"capabilities": {
-		"untrustedWorkspaces": { "supported": true },
+		"untrustedWorkspaces": {
+			"supported": true
+		},
 		"virtualWorkspaces": false
 	},
 	"devDependencies": {
@@ -120,5 +122,8 @@
 				}
 			]
 		}
+	},
+	"dependencies": {
+		"qrcode-generator": "^1.4.4"
 	}
 }

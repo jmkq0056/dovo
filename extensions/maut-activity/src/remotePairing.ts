@@ -96,9 +96,10 @@ async function pairingInfo(context: vscode.ExtensionContext): Promise<IPairingIn
 		tailscaleHosts(),
 		sharingOn(),
 	]);
-	const interfaces = Object.values(os.networkInterfaces()).flat().filter(entry => !!entry);
+	const interfaces = Object.entries(os.networkInterfaces()).flatMap(([name, entries]) => (entries ?? []).map(entry => ({ name, ...entry })));
 	const tailscaleAddresses = interfaces.filter(entry => entry.family === 'IPv4' && isTailscaleAddress(entry.address)).map(entry => entry.address);
-	const lan = interfaces.filter(entry => entry.family === 'IPv4' && !entry.internal && !entry.address.startsWith('169.254.') && !isTailscaleAddress(entry.address)).map(entry => entry.address);
+	// Wi-Fi and Ethernet only (en0, en1, ...): bridges for virtual machines and containers aren't reachable from the phone.
+	const lan = interfaces.filter(entry => entry.family === 'IPv4' && /^en\d+$/.test(entry.name) && !entry.internal && !entry.address.startsWith('169.254.') && !isTailscaleAddress(entry.address)).map(entry => entry.address);
 	const hosts = [...new Set([...tailscale, ...tailscaleAddresses, ...lan, ...(localHostName ? [`${localHostName}.local`] : [])])];
 	const name = computerName || os.hostname();
 	const user = os.userInfo().username;

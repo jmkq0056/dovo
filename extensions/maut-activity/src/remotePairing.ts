@@ -50,13 +50,37 @@ function run(command: string, args: string[]): Promise<string | undefined> {
 }
 
 /** The remote host's token and port, when it has been installed. */
-async function hostConfig(): Promise<{ token: string; port: number } | undefined> {
+async function hostConfig(): Promise<{ token: string; port: number; pairingId?: string } | undefined> {
 	try {
-		const config = JSON.parse(await fs.promises.readFile(HOST_CONFIG, 'utf8')) as { token?: string; port?: number };
-		return config.token ? { token: config.token, port: config.port ?? 5961 } : undefined;
+		const config = JSON.parse(await fs.promises.readFile(HOST_CONFIG, 'utf8')) as { token?: string; port?: number; pairingId?: string };
+		return config.token ? { token: config.token, port: config.port ?? 5961, pairingId: config.pairingId } : undefined;
 	} catch {
 		return undefined;
 	}
+}
+
+/**
+ * The Mac's id in the code. The host's own pairing window shows a code too; both must name the
+ * same Mac, or the phone would list it twice. So the id lives in the host's file when there is one.
+ */
+async function pairingId(context: vscode.ExtensionContext, config: { pairingId?: string } | undefined): Promise<string> {
+	if (config?.pairingId) {
+		return config.pairingId;
+	}
+	let id = context.globalState.get<string>(ID_KEY);
+	if (!id) {
+		id = crypto.randomUUID();
+		await context.globalState.update(ID_KEY, id);
+	}
+	if (config) {
+		try {
+			const raw = JSON.parse(await fs.promises.readFile(HOST_CONFIG, 'utf8')) as Record<string, unknown>;
+			await fs.promises.writeFile(HOST_CONFIG, JSON.stringify({ ...raw, pairingId: id }, undefined, 2), { mode: 0o600 });
+		} catch {
+			// The host rewrites its file on its own; the code still works with this session's id.
+		}
+	}
+	return id;
 }
 
 /** Whether something accepts connections on `port` on this Mac. */
@@ -103,12 +127,8 @@ function isTailscaleAddress(address: string): boolean {
 }
 
 async function pairingInfo(context: vscode.ExtensionContext): Promise<IPairingInfo> {
-	let id = context.globalState.get<string>(ID_KEY);
-	if (!id) {
-		id = crypto.randomUUID();
-		await context.globalState.update(ID_KEY, id);
-	}
 	const config = await hostConfig();
+	const id = await pairingId(context, config);
 	const [computerName, localHostName, tailscale, sharing, host] = await Promise.all([
 		run('/usr/sbin/scutil', ['--get', 'ComputerName']),
 		run('/usr/sbin/scutil', ['--get', 'LocalHostName']),

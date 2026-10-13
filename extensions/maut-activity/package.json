@@ -9,6 +9,10 @@
 		"vscode": "^1.121.0"
 	},
 	"main": "./out/extension",
+	"enabledApiProposals": [
+		"terminalDataWriteEvent",
+		"terminalDimensions"
+	],
 	"activationEvents": [
 		"onStartupFinished"
 	],
@@ -22,6 +26,16 @@
 		"@types/node": "22.x"
 	},
 	"contributes": {
+		"configuration": {
+			"title": "Dovo Remote",
+			"properties": {
+				"dovo.remote.shareTerminals": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Show Dovo's terminals, Claude panes included, in Dovo Remote on your iPhone so you can read and type in them there. Needs Dovo Remote Host on this Mac. The terminals still end when Dovo quits; only terminals started in tmux keep running after that."
+				}
+			}
+		},
 		"viewsContainers": {
 			"activitybar": [
 				{

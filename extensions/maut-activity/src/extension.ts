@@ -13,6 +13,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { registerRemotePairing } from './remotePairing';
 import { registerSystemStats } from './systemStats';
+import { registerTerminalShare } from './terminalShare';
 
 const CLAUDE_HOME = path.join(os.homedir(), '.claude');
 const PROJECTS_ROOT = path.join(CLAUDE_HOME, 'projects');
@@ -451,6 +452,7 @@ async function redoFile(filePath: string, watcher: SessionWatcher): Promise<void
 export function activate(context: vscode.ExtensionContext): void {
 	registerSystemStats(context);
 	registerRemotePairing(context);
+	registerTerminalShare(context);
 	const watcher = new SessionWatcher();
 	const provider = new ActivityProvider(watcher);
 	context.subscriptions.push(vscode.window.registerTreeDataProvider('maut.activity', provider));

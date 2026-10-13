@@ -1533,6 +1533,7 @@ export class MautClaudePane extends Disposable {
 						}));
 						rendered.element.classList.add('mcp-prose');
 						this._linkPaths(rendered.element, this._activityDisposables);
+						this._addCodeCopy(rendered.element, this._activityDisposables);
 						content.appendChild(rendered.element);
 					} else if (item.kind === 'step') {
 						const step = dom.append(content, dom.$('.mcp-step'));
@@ -2083,6 +2084,7 @@ export class MautClaudePane extends Disposable {
 				}));
 				rendered.element.classList.add('mcp-prose');
 				this._linkPaths(rendered.element, this._renderDisposables);
+				this._addCodeCopy(rendered.element, this._renderDisposables);
 				body.appendChild(rendered.element);
 			} else {
 				body.appendChild(this._renderEdit(item));
@@ -2247,6 +2249,30 @@ export class MautClaudePane extends Disposable {
 		const isFiles = (group: IEditorGroup) => !group.editors.some(editor => editor.typeId === terminalEditorTypeId);
 		const files = isFiles(main.activeGroup) ? main.activeGroup : main.getGroups(GroupsOrder.MOST_RECENTLY_ACTIVE).find(isFiles);
 		await this._editorService.openEditor({ resource, options: { pinned: true } }, files ?? main.addGroup(main.activeGroup, GroupDirection.RIGHT));
+	}
+
+	/** A Copy button on each code block in Claude's text: copies that block, nothing else. */
+	private _addCodeCopy(element: HTMLElement, store: DisposableStore): void {
+		const label = localize('maut.claude.copyCode', "Copy Code");
+		// eslint-disable-next-line no-restricted-syntax
+		for (const pre of element.querySelectorAll('pre')) {
+			const button = dom.$<HTMLButtonElement>(`button.mcp-code-copy${ThemeIcon.asCSSSelector(Codicon.copy)}`, { type: 'button' });
+			button.setAttribute('aria-label', label);
+			store.add(this._hoverService.setupDelayedHover(button, { content: label }));
+			store.add(dom.addDisposableListener(button, dom.EventType.CLICK, e => {
+				e.stopPropagation();
+				// eslint-disable-next-line no-restricted-syntax
+				const code = pre.querySelector('code') ?? pre;
+				this._clipboardService.writeText((code.textContent ?? '').replace(/\n$/, ''));
+				button.classList.add('copied');
+				const targetWindow = dom.getWindow(button);
+				const timer = targetWindow.setTimeout(() => button.classList.remove('copied'), 1400);
+				store.add(toDisposable(() => targetWindow.clearTimeout(timer)));
+			}));
+			const wrap = dom.$('.mcp-code-wrap');
+			pre.replaceWith(wrap);
+			wrap.append(pre, button);
+		}
 	}
 
 	/**

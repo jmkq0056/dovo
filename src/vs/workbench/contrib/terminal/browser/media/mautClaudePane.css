@@ -1101,3 +1101,18 @@
 	.monaco-workbench .mcp-activity-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 32%) minmax(0, 1fr); }
 	.monaco-workbench .mcp-activity-list { border-right: 0; border-bottom: 1px solid var(--mcp-line); }
 }
+
+/* Copy on a code block: in its corner, shown on hover (and always on touch), copies just the block. */
+.monaco-workbench .mcp-code-wrap { position: relative; }
+.monaco-workbench .mcp-code-copy {
+	position: absolute; top: 8px; right: 8px;
+	width: 30px; height: 30px; display: grid; place-items: center;
+	border: 1px solid var(--mcp-line-strong); border-radius: 8px;
+	background: var(--mcp-surface-2); color: var(--mcp-muted);
+	cursor: pointer; opacity: 0; transition: opacity .12s ease, color .12s ease;
+}
+.monaco-workbench .mcp-code-wrap:hover .mcp-code-copy,
+.monaco-workbench .mcp-code-copy:focus-visible { opacity: 1; }
+.monaco-workbench .mcp-code-copy:hover { color: var(--vscode-foreground); }
+.monaco-workbench .mcp-code-copy.copied { opacity: 1; color: var(--mcp-ok); border-color: var(--mcp-ok); }
+@media (hover: none) { .monaco-workbench .mcp-code-copy { opacity: 1; } }

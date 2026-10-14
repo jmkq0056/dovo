@@ -52,6 +52,13 @@ const ruleRegex = /^\s*(?:[\u2500\u2501]{8,}|[\u2500\u2501]{3,}\s[^\u2500-\u257f
 // spaced: in a narrow terminal a long command runs right into its description.
 const menuItemRegex = /^\s{1,4}(?:\u276f\s*)?(?<name>\/[\w:.-]+(?:\s\([^)]*\))?|\+\s\S+)(?:\s*(?<detail>\S.*))?$/;
 const optionRegex = /^\s*(?<mark>\u276f)?\s*(?<key>\d)\.\s+(?<text>\S.*)$/;
+// A plain horizontal rule inside a question (box drawing, dashes or dotted).
+const separatorRegex = /^\s*[\u2500-\u2504\u2508\u254c-]{3,}\s*$/;
+
+/** A line of a question's paragraph: text, perhaps behind a left bar; not a header (a checkbox tab), a rule or an option. */
+function isQuestionLine(line: string): boolean {
+	return !!line.trim() && !separatorRegex.test(line) && !ruleRegex.test(line) && !/^\s*[\u2610\u2611\u2612\u2714\u2190\u2192]/.test(line) && !optionRegex.test(line);
+}
 
 /**
  * What's at the bottom of Claude's screen, so the Reader can show it properly: the prompt box
@@ -105,6 +112,9 @@ export function readScreen(raw: IScreen): IScreenState {
 				first = row;
 			} else if (/^\s{4,}\S/.test(line)) {
 				wrapped.unshift(line.trim());
+			} else if (separatorRegex.test(line)) {
+				// A rule between the options and the last one ("Chat about this"): still the same list.
+				wrapped = [];
 			} else if (line.trim() && options.length) {
 				break;
 			} else if (!line.trim()) {
@@ -112,11 +122,17 @@ export function readScreen(raw: IScreen): IScreenState {
 			}
 		}
 		if (options.length && first > 0) {
-			// The question is the line right above the options; what's above it, up to the rule, is detail.
-			let questionRow = first - 1;
-			while (questionRow > 0 && !text(questionRow).trim()) {
+			// The question is the paragraph right above the options (a long one wraps, and Claude may
+			// draw a bar down its left side); what's above it, up to the rule, is detail.
+			let questionEnd = first - 1;
+			while (questionEnd > 0 && !text(questionEnd).trim()) {
+				questionEnd--;
+			}
+			let questionRow = questionEnd;
+			while (questionRow > 0 && questionEnd - questionRow < 8 && isQuestionLine(text(questionRow - 1))) {
 				questionRow--;
 			}
+			const question = Array.from({ length: questionEnd - questionRow + 1 }, (_, index) => text(questionRow + index).replace(/^\s*\u2502?\s*/, '').trim()).join(' ');
 			let top = questionRow;
 			while (top > 0 && !ruleRegex.test(text(top - 1)) && questionRow - top < 24) {
 				top--;
@@ -133,7 +149,7 @@ export function readScreen(raw: IScreen): IScreenState {
 				claude: true,
 				frame: { from: frameRow, to: frameRow },
 				liveTop: Math.max(0, top - 1),
-				dialog: { question: text(questionRow).trim(), details: details.slice(0, 16), options, hint: hintRow <= last ? text(hintRow).trim() : '' },
+				dialog: { question, details: details.slice(0, 16), options, hint: hintRow <= last ? text(hintRow).trim() : '' },
 			};
 		}
 	}
@@ -167,6 +183,13 @@ export function readScreen(raw: IScreen): IScreenState {
 		}
 		// Wrapped lines above the first item belong to nothing (a notice, say): the menu starts at its first item.
 		menuTop = merged.length ? merged[0].row : promptTop;
+		// Claude opens its menu only for what's being typed: / at the start for commands, @ for files.
+		// Without that, a row that merely looks like an item (a tip, a notice) is not a menu.
+		const typed = Array.from({ length: Math.max(0, rules[0] - promptTop - 1) }, (_, index) => text(promptTop + 1 + index)).join('\n').replace(/^[\s\u2502>\u276f]+/, '');
+		const isFileMenu = merged.some(item => item.file);
+		if (merged.length && !(isFileMenu ? typed.includes('@') : typed.startsWith('/'))) {
+			merged.length = 0;
+		}
 		let menu: IScreenMenu | undefined;
 		if (merged.length) {
 			// The highlighted row is the one drawn differently from the rest.
@@ -185,7 +208,7 @@ export function readScreen(raw: IScreen): IScreenState {
 			styles.forEach(value => counts.set(value, (counts.get(value) ?? 0) + 1));
 			const odd = merged.length > 1 ? styles.findIndex(value => counts.get(value) === 1) : 0;
 			menu = {
-				kind: merged.some(item => item.file) ? 'file' : 'command',
+				kind: isFileMenu ? 'file' : 'command',
 				items: merged.map((item, index) => ({ name: item.name, detail: item.detail, selected: index === odd })),
 			};
 		} else {

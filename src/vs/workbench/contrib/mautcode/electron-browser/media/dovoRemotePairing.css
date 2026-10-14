@@ -1,0 +1,70 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* The title bar's QR button, beside the system monitor. */
+.monaco-workbench .dovo-pair-button {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 22px;
+	margin: 0 4px 0 0;
+	border-radius: 6px;
+	color: var(--vscode-descriptionForeground);
+	cursor: pointer;
+	-webkit-app-region: no-drag;
+}
+.monaco-workbench .dovo-pair-button:hover,
+.monaco-workbench .dovo-pair-button.active { background: var(--vscode-toolbar-hoverBackground); color: var(--vscode-foreground); }
+.monaco-workbench .dovo-pair-button svg { width: 14px; height: 14px; }
+.monaco-workbench .dovo-pair-button svg .fill { fill: currentColor; }
+.monaco-workbench .dovo-pair-button svg .stroke { fill: none; stroke: currentColor; stroke-width: 1.2; }
+
+/* The panel: the code, the Mac it pairs with, and whether the phone will get in. */
+.dovo-pair {
+	width: 300px;
+	padding: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, .25));
+	border-radius: 12px;
+	background: var(--vscode-editorWidget-background);
+	color: var(--vscode-foreground);
+	box-shadow: 0 12px 40px rgba(0, 0, 0, .35);
+	font-size: 12px;
+	line-height: 1.45;
+}
+.dovo-pair-head { display: flex; flex-direction: column; gap: 4px; }
+.dovo-pair-head b { font-size: 14px; }
+.dovo-pair-head span { color: var(--vscode-descriptionForeground); }
+.dovo-pair-code { display: grid; place-items: center; }
+.dovo-pair-code canvas { border-radius: 10px; transition: opacity .2s ease; }
+.dovo-pair-code canvas.dimmed { opacity: .35; }
+.dovo-pair-name { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.dovo-pair-name b { font-size: 13px; }
+.dovo-pair-name span { color: var(--vscode-descriptionForeground); }
+.dovo-pair-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--vscode-descriptionForeground); }
+.dovo-pair-status .codicon { font-size: 14px; color: var(--vscode-foreground); }
+.dovo-pair-status.off .codicon { color: #f59e0b; }
+.dovo-pair-status.off { color: var(--vscode-foreground); }
+.dovo-pair-status button {
+	margin-left: 20px;
+	padding: 4px 10px;
+	border: 0;
+	border-radius: 6px;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+.dovo-pair-status button:hover { background: var(--vscode-button-hoverBackground); }
+.dovo-pair-hosts {
+	padding-top: 10px;
+	border-top: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, .2));
+	font-family: var(--monaco-monospace-font);
+	font-size: 10.5px;
+	color: var(--vscode-descriptionForeground);
+	word-break: break-all;
+}

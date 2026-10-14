@@ -245,3 +245,22 @@ export function readScreen(raw: IScreen): IScreenState {
 	}
 	return { claude: rules.length > 0, frame: { from: top, to: last }, liveTop: top };
 }
+
+/** Whether Claude is working, as its screen shows it: the footer's "esc to interrupt", or its spinner line. */
+export function isWorkingOnScreen(raw: IScreen): boolean {
+	const buffer = raw.buffer.active;
+	const line = (row: number) => buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? '';
+	// The footer says "esc to interrupt" while Claude works; a narrow pane cuts it short.
+	for (let row = raw.rows - 1; row >= Math.max(0, raw.rows - 4); row--) {
+		if (/esc to (?:i|\u2026)/.test(line(row))) {
+			return true;
+		}
+	}
+	// Or its spinner line, "\u273b Booping\u2026 (1m 12s \u00b7 ...)", is on screen above the prompt.
+	for (let row = raw.rows - 1; row >= Math.max(0, raw.rows - 30); row--) {
+		if (/^\S\s\S[^()]*\u2026\s*\(\d/.test(line(row))) {
+			return true;
+		}
+	}
+	return false;
+}

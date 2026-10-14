@@ -35,7 +35,7 @@ import type { ITerminalInstance } from './terminal.js';
 import { getFileResourcesFromDragEvent } from './terminalUri.js';
 import type { IXtermCore } from './xterm-private.js';
 import type { IBuffer, IBufferCell, Terminal as XtermTerminal } from '@xterm/xterm';
-import { IScreenMenu, IScreenState, readScreen } from './mautClaudeScreen.js';
+import { IScreenMenu, IScreenState, isWorkingOnScreen, readScreen } from './mautClaudeScreen.js';
 import './media/mautClaudePane.css';
 
 /** Contributed by the built-in `maut-claude-images` extension: the conversation in a terminal. */
@@ -558,24 +558,7 @@ export class MautClaudePane extends Disposable {
 			return true;
 		}
 		const raw = this._instance?.xterm?.raw;
-		if (!raw) {
-			return false;
-		}
-		const buffer = raw.buffer.active;
-		const line = (row: number) => buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? '';
-		// The footer says "esc to interrupt" while Claude works; a narrow pane cuts it short.
-		for (let row = raw.rows - 1; row >= Math.max(0, raw.rows - 4); row--) {
-			if (/esc to (?:i|\u2026)/.test(line(row))) {
-				return true;
-			}
-		}
-		// Or its spinner line, "\u273b Booping\u2026 (1m 12s \u00b7 ...)", is on screen above the prompt.
-		for (let row = raw.rows - 1; row >= Math.max(0, raw.rows - 30); row--) {
-			if (/^\S\s\S[^()]*\u2026\s*\(\d/.test(line(row))) {
-				return true;
-			}
-		}
-		return false;
+		return !!raw && isWorkingOnScreen(raw);
 	}
 
 	/**

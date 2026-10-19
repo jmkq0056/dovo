@@ -44,7 +44,10 @@ export interface IMautClaudeService {
 	setClaude(instance: ITerminalInstance, running: boolean): void;
 	requestLayoutMode(mode: MautClaudeLayoutMode): void;
 	setLayoutMode(mode: MautClaudeLayoutMode): void;
-	/** Reader or Terminal, chosen per terminal: switching one never changes another. New ones start in the Reader. */
+	/**
+	 * Reader or Terminal, chosen per terminal: switching one never changes another. Each Claude run
+	 * starts in the Reader; Terminal, once picked, holds until that Claude exits.
+	 */
 	viewOf(instance: ITerminalInstance): MautClaudeView;
 	setView(instance: ITerminalInstance, view: MautClaudeView): void;
 	requestToggleHidden(): void;
@@ -101,6 +104,8 @@ class MautClaudeService extends Disposable implements IMautClaudeService {
 		} else {
 			this._running.delete(instance);
 			this._working.delete(instance);
+			// Terminal holds for that Claude run only: the next Claude in this terminal opens in the Reader.
+			this._views.delete(instance);
 		}
 		this._onDidChange.fire();
 	}

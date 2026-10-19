@@ -5,10 +5,11 @@
 
 import * as dom from '../../../../../base/browser/dom.js';
 import { mainWindow } from '../../../../../base/browser/window.js';
-import { disposableTimeout, RunOnceScheduler, timeout } from '../../../../../base/common/async.js';
+import { disposableTimeout, IntervalTimer, RunOnceScheduler, timeout } from '../../../../../base/common/async.js';
 import { KeyCode, KeyMod } from '../../../../../base/common/keyCodes.js';
 import { Disposable, DisposableMap, DisposableStore, MutableDisposable, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { localize, localize2 } from '../../../../../nls.js';
+import { CommandsRegistry, ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../../platform/configuration/common/configurationRegistry.js';
 import { Action2, registerAction2 } from '../../../../../platform/actions/common/actions.js';
@@ -29,13 +30,16 @@ import { ViewContainerLocation } from '../../../../common/views.js';
 import { IMautClaudeService, MautClaudeLayoutMode } from '../../../terminal/browser/mautClaude.js';
 import { ITerminalInstance, ITerminalService } from '../../../terminal/browser/terminal.js';
 import { TerminalEditorInput } from '../../../terminal/browser/terminalEditorInput.js';
+import { claudeCommandRegex, claudeOneOffRegex, IShellDescendant, MautClaudePresence, runsClaude, titleShowsClaude } from '../../../terminal/common/mautClaudeDetection.js';
 import './media/claudeLayout.css';
 
 const enabledSetting = 'maut.claudeLayout.enabled';
-/** `claude`, `clsp`, or Claude started by its path (`~/.local/bin/claude --continue`). */
-const claudeCommandRegex = /^\s*(?:\S*\/)?(?:claude|clsp)(?:\s|$)/;
-/** One-off runs of claude that print and exit (no session to show): `claude -p ...`, `claude --version`, `claude mcp list`. */
-const claudeOneOffRegex = /^\s*(?:\S*\/)?claude\s+(?:-p\b|--print\b|-v\b|--version\b|-h\b|--help\b|update\b|mcp\b|config\b|doctor\b|install\b|setup-token\b|migrate-installer\b)/;
+/** The extension's look at the process table: the processes under each terminal's shell. */
+const shellDescendantsCommandId = '_maut.claude.shellDescendants';
+/** The shells (by pid) of this window's terminals that run Claude, for Dovo Remote (maut-activity). */
+const terminalsRunningClaudeCommandId = '_maut.claude.terminalsRunningClaude';
+/** How often the process table is read again: Claude starting or quitting changes nothing else Dovo hears of. */
+const processCheckInterval = 3000;
 /** Per window: the layout Claude was in, its width in IDE mode, and whether it was hidden. */
 /** The browser's activity bar entry (contrib/mautcode) and the Explorer. */
 const browserContainerId = 'workbench.view.dovoBrowser';
@@ -90,6 +94,10 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 	static readonly ID = 'workbench.contrib.maut.claudeLayout';
 
 	private readonly _watchers = this._register(new DisposableMap<ITerminalInstance, DisposableStore>());
+	/** Whether Claude runs in each terminal, from its processes, shell integration and title. */
+	private readonly _presence = new Map<ITerminalInstance, MautClaudePresence>();
+	private readonly _checkSoon = this._register(new RunOnceScheduler(() => this._checkProcesses(), 300));
+	private _checking = false;
 	/** Terminals currently running Claude, in the order they started. */
 	private readonly _sessions: ITerminalInstance[] = [];
 	private _mode: MautClaudeLayoutMode = 'focus';
@@ -128,8 +136,14 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 		@IStorageService private readonly _storageService: IStorageService,
 		@IPaneCompositePartService private readonly _paneCompositeService: IPaneCompositePartService,
 		@IEditorService private readonly _editorService: IEditorService,
+		@ICommandService private readonly _commandService: ICommandService,
 	) {
 		super();
+		const processCheck = this._register(new IntervalTimer());
+		processCheck.cancelAndSet(() => this._checkProcesses(), processCheckInterval);
+		this._register(CommandsRegistry.registerCommand(terminalsRunningClaudeCommandId, () => [...this._presence]
+			.filter(([instance, presence]) => presence.running && !instance.isDisposed && instance.processId)
+			.map(([instance]) => instance.processId)));
 		this._strip = dom.$<HTMLButtonElement>('button.maut-claude-strip', { type: 'button' });
 		dom.append(this._strip, dom.$('span.mcp-avatar'));
 		this._stripStatus = dom.append(this._strip, dom.$('span.maut-claude-strip-status'));
@@ -239,16 +253,24 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 			return;
 		}
 		const store = new DisposableStore();
+		const presence = new MautClaudePresence();
+		this._presence.set(instance, presence);
+		// Shell integration hears `claude` start and finish first; the process table confirms it
+		// (or finds a Claude it never saw start: a restored terminal, `cd x && claude`, an alias).
 		const attach = (detection: ICommandDetectionCapability) => {
 			store.add(detection.onCommandExecuted(command => {
 				if (claudeCommandRegex.test(command.command) && !claudeOneOffRegex.test(command.command)) {
-					this._start(instance);
+					presence.commandStarted(Date.now());
+					this._apply(instance);
 				}
+				this._checkSoon.schedule();
 			}));
 			store.add(detection.onCommandFinished(command => {
 				if (claudeCommandRegex.test(command.command)) {
-					this._end(instance);
+					presence.commandFinished();
+					this._apply(instance);
 				}
+				this._checkSoon.schedule();
 			}));
 		};
 		const detection = instance.capabilities.get(TerminalCapability.CommandDetection);
@@ -256,11 +278,61 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 			attach(detection);
 		}
 		store.add(instance.capabilities.onDidAddCommandDetectionCapability(attach));
+		// Claude's title, or its process name (a version), changing: look again now.
+		store.add(instance.onTitleChanged(() => this._checkSoon.schedule()));
+		store.add(instance.onProcessIdReady(() => this._checkSoon.schedule()));
 		store.add(instance.onDisposed(() => {
 			this._watchers.deleteAndDispose(instance);
+			this._presence.delete(instance);
 			this._end(instance);
 		}));
 		this._watchers.set(instance, store);
+		this._checkSoon.schedule();
+	}
+
+	/**
+	 * Reads the processes under every terminal's shell and updates whether each runs Claude. Remote
+	 * terminals' processes aren't on this machine's table: those go by shell integration and title.
+	 */
+	private async _checkProcesses(): Promise<void> {
+		const instances = this._terminalService.instances.filter(instance => !instance.isDisposed && this._presence.has(instance));
+		if (this._checking || !instances.length) {
+			return;
+		}
+		this._checking = true;
+		try {
+			const local = instances.filter(instance => instance.processId && !instance.remoteAuthority);
+			let descendants: Record<number, IShellDescendant[]> | undefined;
+			if (local.length) {
+				try {
+					descendants = await this._commandService.executeCommand<Record<number, IShellDescendant[]>>(shellDescendantsCommandId, local.map(instance => instance.processId));
+				} catch {
+					// The extension isn't up (yet): shell integration and the title decide meanwhile.
+					descendants = undefined;
+				}
+			}
+			const now = Date.now();
+			for (const instance of instances) {
+				const presence = this._presence.get(instance);
+				if (!presence || instance.isDisposed) {
+					continue;
+				}
+				const own = instance.processId && !instance.remoteAuthority ? descendants?.[instance.processId] : undefined;
+				presence.observe(own ? runsClaude(own) : undefined, titleShowsClaude(instance.sequence, instance.processName), now);
+				this._apply(instance);
+			}
+		} finally {
+			this._checking = false;
+		}
+	}
+
+	/** Shows Claude's pane while Claude runs in `instance`, and gives the terminal back once it has gone. */
+	private _apply(instance: ITerminalInstance): void {
+		if (this._presence.get(instance)?.running) {
+			void this._start(instance);
+		} else {
+			void this._end(instance);
+		}
 	}
 
 	private async _start(instance: ITerminalInstance): Promise<void> {
@@ -534,7 +606,7 @@ class MautClaudeLayout extends Disposable implements IWorkbenchContribution {
 			// helpers a shell keeps (git status daemons and the like) don't count.
 			const detection = instance.capabilities.get(TerminalCapability.CommandDetection);
 			const running = detection ? !!detection.executingCommand : instance.hasChildProcesses;
-			if (restored && !this._claudeService.isClaude(instance) && !running) {
+			if (restored && !this._claudeService.isClaude(instance) && !this._presence.get(instance)?.running && !running) {
 				instance.dispose();
 			}
 		}

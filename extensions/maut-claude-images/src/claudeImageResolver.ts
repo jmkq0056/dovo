@@ -349,24 +349,77 @@ export function readSessionRecords(): ISessionRecord[] {
 	return records;
 }
 
-function readParentPids(): Promise<Map<number, number>> {
+/** One process on the process table: its parent and its command line (argv joined by spaces). */
+interface IProcessEntry {
+	readonly ppid: number;
+	readonly commandLine: string;
+}
+
+/** A process under a terminal's shell, for the workbench to judge whether it is Claude Code. */
+export interface IShellDescendant {
+	readonly commandLine: string;
+	/** Claude Code keeps `~/.claude/sessions/<pid>.json` while it runs: this process has one. */
+	readonly session: boolean;
+}
+
+function readProcessTable(): Promise<Map<number, IProcessEntry> | undefined> {
 	const [command, args] = process.platform === 'win32'
-		? ['powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId)" }']]
-		: ['ps', ['-A', '-o', 'pid=,ppid=']];
+		? ['powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId) $($_.CommandLine)" }']]
+		: ['ps', ['-axo', 'pid=,ppid=,args=']];
 	return new Promise(resolve => {
-		execFile(command, args, { windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
-			const parents = new Map<number, number>();
-			if (!error) {
-				for (const line of stdout.split('\n')) {
-					const [pid, ppid] = line.trim().split(/\s+/).map(Number);
-					if (pid) {
-						parents.set(pid, ppid);
-					}
+		execFile(command, args, { windowsHide: true, maxBuffer: 16 * 1024 * 1024, timeout: 5000 }, (error, stdout) => {
+			if (error) {
+				resolve(undefined);
+				return;
+			}
+			const table = new Map<number, IProcessEntry>();
+			for (const line of stdout.split('\n')) {
+				const match = /^\s*(?<pid>\d+)\s+(?<ppid>\d+)\s?(?<commandLine>.*)$/.exec(line);
+				if (match?.groups) {
+					table.set(Number(match.groups.pid), { ppid: Number(match.groups.ppid), commandLine: match.groups.commandLine.trim() });
 				}
 			}
-			resolve(parents);
+			resolve(table);
 		});
 	});
+}
+
+/**
+ * Every process under each of these shells (children, their children, ...), by shell pid. Undefined
+ * when the process table can't be read, so the caller knows it doesn't know.
+ */
+export async function shellDescendants(shellPids: readonly number[]): Promise<Record<number, IShellDescendant[]> | undefined> {
+	const table = await readProcessTable();
+	if (!table) {
+		return undefined;
+	}
+	const children = new Map<number, number[]>();
+	for (const [pid, entry] of table) {
+		const siblings = children.get(entry.ppid);
+		if (siblings) {
+			siblings.push(pid);
+		} else {
+			children.set(entry.ppid, [pid]);
+		}
+	}
+	const sessions = new Set(readSessionRecords().map(record => record.pid));
+	const result: Record<number, IShellDescendant[]> = {};
+	for (const shellPid of shellPids) {
+		const found: IShellDescendant[] = [];
+		const queue = [...children.get(shellPid) ?? []];
+		const seen = new Set<number>([shellPid]);
+		while (queue.length && found.length < 256) {
+			const pid = queue.shift()!;
+			if (seen.has(pid)) {
+				continue;
+			}
+			seen.add(pid);
+			found.push({ commandLine: table.get(pid)?.commandLine ?? '', session: sessions.has(pid) });
+			queue.push(...children.get(pid) ?? []);
+		}
+		result[shellPid] = found;
+	}
+	return result;
 }
 
 export async function findSessionId(shellPid: number | undefined): Promise<string | undefined> {
@@ -374,7 +427,8 @@ export async function findSessionId(shellPid: number | undefined): Promise<strin
 	if (!records.length) {
 		return undefined;
 	}
-	const parents = await readParentPids();
+	const table = await readProcessTable() ?? new Map<number, IProcessEntry>();
+	const parents = new Map([...table].map(([pid, entry]) => [pid, entry.ppid]));
 	const alive = records.filter(r => parents.has(r.pid));
 	if (shellPid !== undefined) {
 		for (const record of alive) {

@@ -10,7 +10,6 @@
 // and a state (running, idle, needs you). The terminals still belong to Dovo: they end when Dovo
 // quits. Only tmux keeps a terminal alive after that.
 
-import { execFile } from 'child_process';
 import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
@@ -54,8 +53,18 @@ function plainLines(text: string): string[] {
 	return text.replace(ansiRegex, '').split(/\r?\n/).map(line => line.split('\r').pop() ?? '').map(line => line.trimEnd()).filter(line => line.trim());
 }
 
-function childCommands(pid: number): Promise<string> {
-	return new Promise(resolve => execFile('/usr/bin/pgrep', ['-lP', String(pid)], { timeout: 2000 }, (_error, stdout) => resolve(stdout ?? '')));
+/**
+ * The shells of this window's terminals that run Claude Code, as the workbench judges it (by the
+ * processes under each shell: Claude's native binary is named after its version, "2.1.303", so its
+ * process name never says "claude"). Empty when the workbench can't say.
+ */
+async function shellsRunningClaude(): Promise<Set<number>> {
+	try {
+		const pids = await vscode.commands.executeCommand<number[]>('_maut.claude.terminalsRunningClaude');
+		return new Set(Array.isArray(pids) ? pids : []);
+	} catch {
+		return new Set();
+	}
 }
 
 class TerminalShare implements vscode.Disposable {
@@ -166,11 +175,11 @@ class TerminalShare implements vscode.Disposable {
 
 	/** Re-checks what runs in each terminal and sends what changed. */
 	private async refresh(): Promise<void> {
+		const claude = await shellsRunningClaude();
 		for (const shared of this.terminals.values()) {
 			const pid = await shared.terminal.processId;
 			if (pid) {
-				const children = await childCommands(pid);
-				shared.kind = /\bclaude\b/i.test(children) || /claude|agent/i.test(shared.terminal.name) ? 'claude' : 'shell';
+				shared.kind = claude.has(pid) || /claude|agent/i.test(shared.terminal.name) ? 'claude' : 'shell';
 			}
 			const update = this.describe(shared, 'update');
 			const key = JSON.stringify({ ...update, lastActive: 0 });

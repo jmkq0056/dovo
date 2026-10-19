@@ -14,7 +14,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ClaudeImageResolver, findSessionId, readSessionRecords } from './claudeImageResolver';
+import { ClaudeImageResolver, findSessionId, readSessionRecords, shellDescendants } from './claudeImageResolver';
 import { claudeCommand, registerClaudeLaunch } from './claudeLaunch';
 import { ClaudeSessionReader } from './claudeSession';
 import { fileThumbnail } from './fileThumbnail';
@@ -436,6 +436,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('_maut.claudeImages.captureClipboard', (shellPid: number | undefined, index: number) => imageResolver.captureClipboard(shellPid, index)),
 		// The conversation of the Claude session in a terminal, for the workbench's Reader view.
 		vscode.commands.registerCommand('_maut.claude.session', (shellPid: number | undefined) => sessionReader.read(shellPid)),
+		// The processes under terminals' shells, for the workbench to tell which run Claude Code.
+		vscode.commands.registerCommand('_maut.claude.shellDescendants', (shellPids: number[]) => shellDescendants(Array.isArray(shellPids) ? shellPids.filter(pid => typeof pid === 'number') : [])),
 		vscode.commands.registerCommand('_maut.claude.agent', (shellPid: number | undefined, agentId: string) => sessionReader.readAgent(shellPid, agentId)),
 		vscode.commands.registerCommand('_maut.claude.install', () => installClaude()),
 		vscode.commands.registerCommand('_maut.claude.check', () => claudeStatus()),

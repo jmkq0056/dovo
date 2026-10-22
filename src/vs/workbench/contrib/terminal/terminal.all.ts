@@ -26,6 +26,8 @@ import '../terminalContrib/inlineHint/browser/terminal.initialHint.contribution.
 import '../terminalContrib/links/browser/terminal.links.contribution.js';
 import '../terminalContrib/maut/browser/terminal.maut.claudeImages.contribution.js';
 import '../terminalContrib/maut/browser/terminal.maut.claudeLayout.contribution.js';
+import '../terminalContrib/maut/browser/terminal.maut.remoteControl.contribution.js';
+import '../terminalContrib/maut/browser/terminal.maut.remoteShare.contribution.js';
 import '../terminalContrib/notification/browser/terminal.notification.contribution.js';
 import '../terminalContrib/zoom/browser/terminal.zoom.contribution.js';
 import '../terminalContrib/stickyScroll/browser/terminal.stickyScroll.contribution.js';

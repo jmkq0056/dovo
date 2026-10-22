@@ -33,6 +33,9 @@ interface IPairingInfo {
 	readonly tailscale: boolean;
 	readonly url: string;
 	readonly modules: readonly string[];
+	/** The 8-digit code a tablet types instead of scanning, while dovo-remote-host runs. */
+	readonly typedCode?: string;
+	readonly typedCodeExpires?: number;
 }
 
 const ACTION_ID = 'dovo.remote.pair';
@@ -112,11 +115,12 @@ class DovoRemotePairing extends Disposable implements IWorkbenchContribution {
 		const store = new DisposableStore();
 		const panel = dom.append(container, dom.$('.dovo-pair'));
 		const head = dom.append(panel, dom.$('.dovo-pair-head'));
-		dom.append(head, dom.$('b', undefined, localize('dovo.remote.title', "Control This Mac from Your iPhone")));
+		dom.append(head, dom.$('b', undefined, localize('dovo.remote.title', "Control This Mac from Your iPhone or Tablet")));
 		dom.append(head, dom.$('span', undefined, localize('dovo.remote.subtitle', "Scan once with the Dovo Remote app or the Camera app. Keep this code private: it lets a phone control this Mac.")));
 		const code = dom.append(panel, dom.$('.dovo-pair-code'));
 		const canvas = dom.append(code, dom.$<HTMLCanvasElement>('canvas'));
 		const name = dom.append(panel, dom.$('.dovo-pair-name'));
+		const typed = dom.append(panel, dom.$('.dovo-pair-typed'));
 		const status = dom.append(panel, dom.$('.dovo-pair-status'));
 		const reach = dom.append(panel, dom.$('.dovo-pair-status'));
 		const hosts = dom.append(panel, dom.$('.dovo-pair-hosts'));
@@ -132,7 +136,7 @@ class DovoRemotePairing extends Disposable implements IWorkbenchContribution {
 				return;
 			}
 			last = key;
-			this._render(info, { canvas, name, status, reach, hosts, store });
+			this._render(info, { canvas, name, typed, status, reach, hosts, store });
 		};
 		void refresh();
 		const timer = store.add(new IntervalTimer());
@@ -140,8 +144,8 @@ class DovoRemotePairing extends Disposable implements IWorkbenchContribution {
 		return store;
 	}
 
-	private _render(info: IPairingInfo, parts: { canvas: HTMLCanvasElement; name: HTMLElement; status: HTMLElement; reach: HTMLElement; hosts: HTMLElement; store: DisposableStore }): void {
-		const { canvas, name, status, reach, hosts, store } = parts;
+	private _render(info: IPairingInfo, parts: { canvas: HTMLCanvasElement; name: HTMLElement; typed: HTMLElement; status: HTMLElement; reach: HTMLElement; hosts: HTMLElement; store: DisposableStore }): void {
+		const { canvas, name, typed, status, reach, hosts, store } = parts;
 		if (!info.supported) {
 			dom.clearNode(name);
 			name.textContent = localize('dovo.remote.macOnly', "Dovo Remote uses macOS Screen Sharing, so it works with Macs only.");
@@ -151,6 +155,13 @@ class DovoRemotePairing extends Disposable implements IWorkbenchContribution {
 		drawCode(canvas, info.modules);
 		canvas.classList.toggle('dimmed', !info.host && !info.sharing);
 		canvas.setAttribute('aria-label', localize('dovo.remote.codeLabel', "Pairing code for {0}", info.name));
+
+		dom.clearNode(typed);
+		typed.style.display = info.typedCode ? '' : 'none';
+		if (info.typedCode) {
+			dom.append(typed, dom.$('span', undefined, localize('dovo.remote.typeCode', "No camera? Type this code in Dovo Remote on your tablet:")));
+			dom.append(typed, dom.$('b', undefined, `${info.typedCode.slice(0, 4)} ${info.typedCode.slice(4)}`));
+		}
 
 		dom.clearNode(name);
 		dom.append(name, dom.$('b', undefined, info.name));

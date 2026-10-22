@@ -35,11 +35,17 @@ interface IPairingInfo {
 	readonly url: string;
 	/** The QR code, one string per row, '1' for a dark module. */
 	readonly modules: readonly string[];
+	/** The 8-digit code a tablet types instead of scanning (dovo-remote-host's current one), while the host runs. */
+	readonly typedCode?: string;
+	/** When `typedCode` stops working, in seconds since 1970. */
+	readonly typedCodeExpires?: number;
 }
 
 const SCREEN_SHARING_PORT = 5900;
 /** Written by dovo-remote-host on its first run: the secret the phone proves itself with, and its port. */
 const HOST_CONFIG = path.join(os.homedir(), '.dovo', 'remote-host.json');
+/** dovo-remote-host keeps its current pairing code here (always one, replaced every 10 minutes and after use). */
+const PAIRING_CODE = path.join(os.homedir(), '.dovo', 'remote-pairing-code.json');
 const ID_KEY = 'dovo.remote.pairingId';
 const TAILSCALE = ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', '/opt/homebrew/bin/tailscale', '/usr/local/bin/tailscale'];
 
@@ -47,6 +53,19 @@ function run(command: string, args: string[]): Promise<string | undefined> {
 	return new Promise(resolve => {
 		execFile(command, args, { timeout: 3000 }, (error, stdout) => resolve(error ? undefined : stdout.trim()));
 	});
+}
+
+/** The host's current pairing code, unless it is about to expire. */
+async function typedCode(): Promise<{ code: string; expires: number } | undefined> {
+	try {
+		const file = JSON.parse(await fs.promises.readFile(PAIRING_CODE, 'utf8')) as { code?: string; expires?: number };
+		if (typeof file.code === 'string' && /^\d{8}$/.test(file.code) && typeof file.expires === 'number' && file.expires * 1000 > Date.now() + 30_000) {
+			return { code: file.code, expires: file.expires };
+		}
+	} catch {
+		// No host, or an older one without pairing codes.
+	}
+	return undefined;
 }
 
 /** The remote host's token and port, when it has been installed. */
@@ -164,7 +183,8 @@ async function pairingInfo(context: vscode.ExtensionContext): Promise<IPairingIn
 		}
 		modules.push(line);
 	}
-	return { supported: true, name, user, port: SCREEN_SHARING_PORT, hosts, sharing, host, tailscale: tailscale.length > 0 || tailscaleAddresses.length > 0, url, modules };
+	const typed = host ? await typedCode() : undefined;
+	return { supported: true, name, user, port: SCREEN_SHARING_PORT, hosts, sharing, host, tailscale: tailscale.length > 0 || tailscaleAddresses.length > 0, url, modules, typedCode: typed?.code, typedCodeExpires: typed?.expires };
 }
 
 /** Registers the commands the workbench's pairing panel uses. */

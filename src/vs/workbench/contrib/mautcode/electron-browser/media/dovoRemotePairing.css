@@ -68,3 +68,23 @@
 	color: var(--vscode-descriptionForeground);
 	word-break: break-all;
 }
+
+.dovo-pair-typed {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	text-align: center;
+}
+
+.dovo-pair-typed span {
+	opacity: 0.75;
+}
+
+.dovo-pair-typed b {
+	font-family: var(--monaco-monospace-font);
+	font-size: 22px;
+	letter-spacing: 2px;
+	user-select: text;
+	-webkit-user-select: text;
+}
